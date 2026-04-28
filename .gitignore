@@ -1,9 +1,0 @@
-# Firmware
-etc-firmware/.pio
-etc-firmware/.vscode/.browse.c_cpp.db*
-etc-firmware/.vscode/c_cpp_properties.json
-etc-firmware/.vscode/launch.json
-etc-firmware/.vscode/ipch
-
-# Console
-etc-console/node_modules
