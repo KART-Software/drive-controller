@@ -1,8 +1,6 @@
 #ifndef _CONSTANTS_H_
 #define _CONSTANTS_H_
 
-#include <Arduino.h>
-
 //////////////////////
 /// IST Controller ///
 //////////////////////
@@ -14,7 +12,6 @@
 ////////////////////
 
 #define ADC_CS_PIN 10
-#define ADC_NUM_CH 7
 #define APPS_1_CH 0
 #define APPS_2_CH 1
 #define TPS_1_CH 7
@@ -22,9 +19,12 @@
 #define ITTR_CH 2          // IST Throttle Position Target Receiver (ITTR)
 #define BPS_CH 3           // Brake Pressure Sensor
 #define MOTOR_CURRENT_CH 4 // Connected to motor driver's CS PIN.The voltage is about 20 mV/A plus a 50 mV offset.
-#define ADC_CHANNELS \
-    {                \
-        0, 1, 2, 3, 4, 6, 7} // Sorted Channels
+
+/////////////////////////
+/// Sampling Settings ///
+/////////////////////////
+
+#define SENSOR_SAMPLING_RATE_US 125 // 8kHz sensor ISR interval
 
 ////////////////////
 /// PWM Settings ///
@@ -138,6 +138,38 @@
 #define BUTTON_1_PIN 24
 #define BUTTON_2_PIN 25
 #define BUTTON_3_PIN 26
+
+//////////////////////////
+/// IMU Settings (SPI1) //
+//////////////////////////
+
+#define IMU_CS_PIN 0
+#define USE_ICM45686
+
+/////////////////////////////
+/// Pulse Counter Settings //
+/////////////////////////////
+
+#define PULSE_WHEEL_FL_PIN 5
+#define PULSE_WHEEL_FR_PIN 6
+#define PULSE_WHEEL_RL_PIN 7
+#define PULSE_WHEEL_RR_PIN 8
+#define PULSE_ENGINE_PIN 14
+#define PULSE_UPDATE_INTERVAL_MS 100
+
+////////////////////
+/// CAN Settings ///
+////////////////////
+
+#define CAN_BITRATE 1000000 // 1 Mbps
+#define CAN_TX_FAST_INTERVAL_MS 20
+#define CAN_TX_SLOW_INTERVAL_MS 100
+#define CAN_ID_THROTTLE 0x100
+#define CAN_ID_STATUS 0x101
+#define CAN_ID_WHEEL_SPEED 0x102
+#define CAN_ID_ENGINE_IMU 0x103
+#define CAN_ID_GYRO 0x104
+#define CAN_ID_MODE_SELECT 0x200
 
 /////////////////////////////////
 /// Other Output Pin Settings ///

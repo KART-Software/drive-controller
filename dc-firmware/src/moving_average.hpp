@@ -12,7 +12,8 @@ public:
 
 private:
     const uint size;
-    float *value;
+    float *values;
+    float sum = 0;
     uint index = 0;
 };
 

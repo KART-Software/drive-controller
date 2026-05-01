@@ -4,12 +4,13 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include "constants.hpp"
+#include "frequency_meter.hpp"
 
 // https://www.ti.com/jp/lit/ds/symlink/ads8688.pdf
 
 #define SPI_MODE_ADC SPI_MODE1
 #define SPI_BIT_ORDER MSBFIRST
-#define SPI_FREQUENCY 5000000
+#define SPI_FREQUENCY 10000000
 
 #define AUTO_SEQ_EN_ADDR 0x01
 #define CH_POWER_DOWN_ADDR 0x02
@@ -29,36 +30,38 @@
 #define RANGE_SELECT_ADDR_6 0x0B
 #define RANGE_SELECT_ADDR_7 0x0C
 
-#define RANGE_0 0b0000 // ±2.5 x VREF
-#define RANGE_1 0b0001 // ±1.25 x VREF
-#define RANGE_2 0b0010 // ±0.625 x VREF
-#define RANGE_3 0b0101 // 0 ~ 2.5 x VREF
-#define RANGE_4 0b0110 // 0 ~ 1.25 x VREF
-                       // VREF = 4.096V
+#define RANGE_0 0b0000  // ±2.5 x VREF
+#define RANGE_1 0b0001  // ±1.25 x VREF
+#define RANGE_2 0b0010  // ±0.625 x VREF
+#define RANGE_3 0b0101  // 0 ~ 2.5 x VREF
+#define RANGE_4 \
+  0b0110  // 0 ~ 1.25 x VREF
+          // VREF = 4.096V
 
-class Adc
-{
-public:
-    Adc(uint8_t csPin, SPIClass &spi = SPI);
-    void begin();
-    void read();
-    uint16_t value[8];
-    uint32_t sps() const { return intervalUs_ ? 1000000u / intervalUs_ : 0; }
+#define ADC_NUM_CH 8
 
-private:
-    SPIClass &spi;
-    uint8_t csPin;
-    SPISettings spiSettings = SPISettings(SPI_FREQUENCY, SPI_BIT_ORDER, SPI_MODE_ADC);
-    const uint8_t numCh = ADC_NUM_CH;
-    const uint8_t chs[ADC_NUM_CH] = ADC_CHANNELS;
-    uint32_t intervalUs_ = 0;
-    uint32_t lastReadUs_ = 0;
-    void setReadChannels();
-    void setReadModeAutoSeq();
-    void setReadRanges();
-    uint32_t createChannelSelectBits();
-    void writeRegister(uint8_t addr, uint8_t value);
-    uint32_t transferCommand32(uint16_t cmd);
+// デイジーチェーン対応 ADS8688
+template <size_t NUM_DEV>
+class _adc {
+ public:
+  _adc(uint8_t csPin = ADC_CS_PIN, SPIClass& spi = SPI);
+
+  void begin();
+  void read();
+  uint16_t value[NUM_DEV * ADC_NUM_CH] = {};
+  const uint16_t* deviceValue(size_t device) const { return &value[device * ADC_NUM_CH]; }
+  uint32_t sps() const { return freqMeter_.hz(); }
+
+ private:
+  SPIClass& spi;
+  uint8_t csPin;
+  SPISettings spiSettings = SPISettings(SPI_FREQUENCY, SPI_BIT_ORDER, SPI_MODE_ADC);
+  FrequencyMeter freqMeter_;
+
+  void writeRegister(uint8_t addr, uint8_t value);
+  void transferCommand(uint16_t cmd, uint16_t* out);
 };
 
-#endif // _ADC_H_
+using Adc = _adc<2>;
+
+#endif  // _ADC_H_

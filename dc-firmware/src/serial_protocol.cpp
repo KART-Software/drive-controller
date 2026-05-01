@@ -10,7 +10,9 @@ void SerialProtocol::initialize()
 }
 
 void SerialProtocol::sendSensorData(Apps &apps1, Apps &apps2, Ittr &ittr, Tps &tps1, Tps &tps2, Bps &bps,
-                                    Target &target, bool isValid, ErrorHandler &errorHandler, uint32_t sps)
+                                    Target &target, bool isValid, ErrorHandler &errorHandler, uint32_t sps,
+                                    float ax, float ay, float az, float gx, float gy, float gz,
+                                    float wfl, float wfr, float wrl, float wrr, float rpm)
 {
     StaticJsonDocument<SENSOR_MSG_JSON_SIZE> doc;
     doc["t"] = "s";
@@ -33,6 +35,17 @@ void SerialProtocol::sendSensorData(Apps &apps1, Apps &apps2, Ittr &ittr, Tps &t
     doc["tgt_ittr"] = target.isIttr();
     doc["v"] = isValid;
     doc["sps"] = sps;
+    doc["ax"] = ax;
+    doc["ay"] = ay;
+    doc["az"] = az;
+    doc["gx"] = gx;
+    doc["gy"] = gy;
+    doc["gz"] = gz;
+    doc["wfl"] = wfl;
+    doc["wfr"] = wfr;
+    doc["wrl"] = wrl;
+    doc["wrr"] = wrr;
+    doc["rpm"] = rpm;
 
     JsonArray err = doc.createNestedArray("err");
     uint8_t len = errorHandler.errorsLength();

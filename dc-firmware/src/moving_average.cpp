@@ -2,20 +2,21 @@
 
 MovingAverage::MovingAverage(uint size) : size(size)
 {
-    value = new float[size];
-    for (int i = 0; i < size; i++)
+    values = new float[size];
+    for (uint i = 0; i < size; i++)
     {
-        value[i] = 0;
+        values[i] = 0;
     }
 }
 
 void MovingAverage::add(float value)
 {
-    this->value[index] = value;
+    sum -= values[index];
+    values[index] = value;
+    sum += value;
     if (index >= size - 1)
     {
         index = 0;
-        // sizeFull = true;
     }
     else
     {
@@ -25,10 +26,5 @@ void MovingAverage::add(float value)
 
 float MovingAverage::getAvg()
 {
-    float sum = 0;
-    for (int i = 0; i < size; i++)
-    {
-        sum += value[i];
-    }
     return sum / size;
 }
