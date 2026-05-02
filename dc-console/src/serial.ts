@@ -3,12 +3,10 @@ import type { Transport } from "./transport";
 const BAUD_RATE = 115200;
 
 let port: SerialPort | null = null;
-let reader: ReadableStreamDefaultReader<string> | null = null;
+let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-let abortController: AbortController | null = null;
-let buffer = "";
 
-let onLineReceived: ((line: string) => void) | null = null;
+let onBytes: ((chunk: Uint8Array) => void) | null = null;
 let onDisconnect: (() => void) | null = null;
 
 async function connect(): Promise<void> {
@@ -16,15 +14,9 @@ async function connect(): Promise<void> {
   await port.open({ baudRate: BAUD_RATE });
 
   writer = port.writable!.getWriter();
+  reader = (port.readable as ReadableStream<Uint8Array>).getReader();
 
-  abortController = new AbortController();
-  const decoder = new TextDecoderStream();
-  (port.readable as unknown as ReadableStream)
-    .pipeTo(decoder.writable, { signal: abortController.signal })
-    .catch(() => {});
-  reader = decoder.readable.getReader();
-
-  readLines();
+  readBytes();
 
   port.addEventListener("disconnect", () => {
     cleanup();
@@ -32,28 +24,21 @@ async function connect(): Promise<void> {
   });
 }
 
-async function readLines(): Promise<void> {
+async function readBytes(): Promise<void> {
   try {
     while (true) {
       const { value, done } = await reader!.read();
       if (done) break;
-      buffer += value;
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed) onLineReceived?.(trimmed);
-      }
+      if (value && value.length > 0) onBytes?.(value);
     }
   } catch {
     // Port closed or error
   }
 }
 
-async function send(text: string): Promise<void> {
+async function send(bytes: Uint8Array): Promise<void> {
   if (!writer) return;
-  const encoder = new TextEncoder();
-  await writer.write(encoder.encode(text + "\n"));
+  await writer.write(bytes);
 }
 
 async function disconnect(): Promise<void> {
@@ -64,16 +49,10 @@ async function cleanup(): Promise<void> {
   const r = reader;
   const w = writer;
   const p = port;
-  const ac = abortController;
   reader = null;
   writer = null;
   port = null;
-  abortController = null;
-  buffer = "";
 
-  try {
-    ac?.abort();
-  } catch {}
   try {
     await r?.cancel();
   } catch {}
@@ -100,10 +79,10 @@ export const serial: Transport = {
   disconnect,
   send,
   isConnected,
-  setOnLineReceived(fn: (line: string) => void) {
-    onLineReceived = fn;
+  setOnBytes(fn) {
+    onBytes = fn;
   },
-  setOnDisconnect(fn: () => void) {
+  setOnDisconnect(fn) {
     onDisconnect = fn;
   },
 };

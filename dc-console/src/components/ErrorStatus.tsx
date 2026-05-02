@@ -36,21 +36,23 @@ interface Props {
 }
 
 export function ErrorStatus({ flags, addLog, onFlagsUpdate, onDirty }: Props) {
-  const [errors, setErrors] = useState<number[]>([]);
+  const [errors, setErrors] = useState<number>(0);
   const [valid, setValid] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     const iv = setInterval(() => {
       const d = sensorStore.latest;
       if (d) {
-        setErrors(d.err ?? []);
+        setErrors(d.err ?? 0);
         setValid(d.v);
       }
     }, 100); // 10Hz
     return () => clearInterval(iv);
   }, []);
 
-  const errSet = new Set(errors);
+  function hasError(bitIndex: number): boolean {
+    return (errors & (1 << bitIndex)) !== 0;
+  }
 
   function onFlagChange(errorId: number, checked: boolean) {
     const flagKey = ERROR_TO_FLAG[errorId];
@@ -76,7 +78,7 @@ export function ErrorStatus({ flags, addLog, onFlagsUpdate, onDirty }: Props) {
           const label = ERROR_LABELS[numId];
           const flagKey = ERROR_TO_FLAG[numId];
           const enabled = flagKey ? (flags[flagKey] ?? false) : true;
-          const hasError = errSet.has(numId);
+          const hasErr = hasError(numId);
           return (
             <div class={`error-item${enabled ? "" : " disabled"}`} key={numId}>
               {flagKey && (
@@ -86,7 +88,7 @@ export function ErrorStatus({ flags, addLog, onFlagsUpdate, onDirty }: Props) {
                   onChange={(e) => onFlagChange(numId, (e.target as HTMLInputElement).checked)}
                 />
               )}
-              <span class={`led${hasError ? " error" : ""}`} />
+              <span class={`led${hasErr ? " error" : ""}`} />
               {label}
             </div>
           );

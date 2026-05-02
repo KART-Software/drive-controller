@@ -49,7 +49,7 @@ export function ConfigPanel({ config, onConfigLoaded, addLog }: Props) {
         addLog("Invalid config file");
         return;
       }
-      const resp = await protocol.sendCommand("set_config", { config: JSON.stringify(data) });
+      const resp = await protocol.sendCommand("set_config", { config: data });
       if (resp.ok) {
         addLog("Config imported and applied");
         onConfigLoaded(data);

@@ -7,6 +7,8 @@ Web Serial API を使ったブラウザベースの ETC (Electronic Throttle Con
 - **Preact** + **TypeScript**
 - **Vite** (ビルド / dev server)
 - **uPlot** (時系列チャート)
+- **protobuf-es** (Protocol Buffers ランタイム / コード生成)
+- **buf** (proto コード生成ツール)
 
 ## セットアップ
 
@@ -19,6 +21,16 @@ pnpm install
 ```bash
 pnpm dev
 ```
+
+### Proto コード生成
+
+`spec/proto/drive_controller.proto` を変更した場合:
+
+```bash
+pnpm run gen:proto
+```
+
+`src/proto/drive_controller_pb.ts` が再生成される。
 
 ## ビルド
 
@@ -44,11 +56,25 @@ Web Serial API が必要。**Chrome** または **Edge** で動作。
 
 ## プロトコル
 
-ファームウェアとの通信は NDJSON (改行区切り JSON) で行う。
+ファームウェアとの通信は **Protocol Buffers** + **COBS** フレーミング + **CRC16-CCITT** 誤り検出で行う。
 
-| 方向 | type | 説明 |
-|------|------|------|
-| FW → Console | `s` | センサーデータ (50Hz) |
-| FW → Console | `d` | デバッグログ |
-| Console → FW | `c` | コマンド送信 |
-| FW → Console | `r` | コマンドレスポンス |
+### ワイヤフォーマット
+
+```
+COBS( proto_bytes ‖ crc16_le ) 0x00
+```
+
+- `proto_bytes` — protobuf エンコードされたメッセージ
+- `crc16_le` — proto\_bytes の CRC16-CCITT (リトルエンディアン 2 バイト)
+- COBS エンコード後に `0x00` デリミタを付加
+
+### メッセージ
+
+| 方向 | メッセージ | 説明 |
+|------|-----------|------|
+| FW → Console | `DeviceToHost.sensor` | センサーデータ (50Hz) |
+| FW → Console | `DeviceToHost.debug` | デバッグログ |
+| FW → Console | `DeviceToHost.response` | コマンドレスポンス |
+| Console → FW | `HostToDevice.command` | コマンド送信 |
+
+スキーマ定義は `spec/proto/drive_controller.proto` を参照。

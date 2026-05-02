@@ -1,19 +1,37 @@
 import type { Transport } from "./transport";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
+import {
+  DeviceToHostSchema,
+  HostToDeviceSchema,
+  ResponseSchema,
+  StateSchema,
+  SensorSchema,
+  EtcStateSchema,
+  EtcMode,
+} from "./proto/drive_controller_pb";
+import type {
+  Command,
+  DeviceToHost,
+  Response,
+  Config as PbConfig,
+} from "./proto/drive_controller_pb";
+import { FrameDecoder } from "./serial/cobs";
+import { crc16Ccitt } from "./serial/crc16";
+import { cobsCrcEncode } from "./serial/cobs-crc";
 
 const SENSOR_INTERVAL = 20; // 50Hz
 
 let connected = false;
 let timer: ReturnType<typeof setInterval> | null = null;
-let onLineReceived: ((line: string) => void) | null = null;
+let onBytes: ((chunk: Uint8Array) => void) | null = null;
 let onDisconnect: (() => void) | null = null;
 
-// Simulated device state
 let t0 = 0;
 let manualMode = false;
 let manualTarget = 30;
 let configChanged = false;
-const MOCK_MODES = ["Calib", "Normal", "Restrict"] as const;
-const flags: Record<string, boolean> = {
+const MOCK_MODES = [EtcMode.CALIB, EtcMode.NORMAL, EtcMode.RESTRICT] as const;
+const flags = {
   apps: true,
   tps: true,
   apps1: true,
@@ -43,27 +61,48 @@ const sensorValues = {
 const pidGains = { kP: 3.0, kI: 0.4, kD: 0.0 };
 const targetCurve = { a4: 0, a3: 0, a2: 0.0087, a1: 0.13 };
 
-function getFullConfig() {
+function getFullConfig(): PbConfig {
   return {
-    sensorValues: { ...sensorValues },
-    plausibilityFlags: { ...flags },
-    useIttr,
-    pid: { ...pidGains },
-    targetCurve: { ...targetCurve },
+    sensorValues: {
+      apps1Min: sensorValues.apps1Min,
+      apps1Max: sensorValues.apps1Max,
+      apps2Min: sensorValues.apps2Min,
+      apps2Max: sensorValues.apps2Max,
+      ittrMin: sensorValues.ittrMin,
+      ittrMax: sensorValues.ittrMax,
+      tps1Min: sensorValues.tps1Min,
+      tps1Max: sensorValues.tps1Max,
+      tps2Min: sensorValues.tps2Min,
+      tps2Max: sensorValues.tps2Max,
+      targetTpIdling: sensorValues.idling,
+      targetTpNormalMax: sensorValues.normalMax,
+      targetTpRestrictedMax: sensorValues.restrictedMax,
+    },
+    etcConfig: {
+      plausibilityCheckFlags: { ...flags },
+      useIttr,
+      pid: { ...pidGains },
+      targetCurve: { ...targetCurve },
+    },
     configChanged,
-  };
+  } as PbConfig;
 }
 
-function emit(line: string) {
-  onLineReceived?.(line);
+function emitFrame(env: DeviceToHost): void {
+  const pb = toBinary(DeviceToHostSchema, env);
+  onBytes?.(cobsCrcEncode(pb));
+}
+
+function emitResponse(r: Response): void {
+  emitFrame(
+    create(DeviceToHostSchema, { payload: { case: "response", value: r } }),
+  );
 }
 
 function sensorTick() {
   const elapsed = (Date.now() - t0) / 1000;
-  // Sine waves at different frequencies to simulate realistic-looking data
-  const base = Math.sin(elapsed * 0.5) * 40 + 50; // 10~90% range
+  const base = Math.sin(elapsed * 0.5) * 40 + 50;
   const noise = () => (Math.random() - 0.5) * 2;
-
   const a1 = Math.max(0, Math.min(100, base + noise()));
   const a2 = Math.max(0, Math.min(100, base + noise() + 0.5));
   const tgt = manualMode ? manualTarget : base;
@@ -78,229 +117,316 @@ function sensorTick() {
   const ittr = base * 0.8 + noise();
   const bpsVal = 14.7 + Math.sin(elapsed * 0.3) * 2 + noise() * 0.5;
 
-  const msg = {
-    t: "s",
-    ts: Date.now() - t0,
-    a1r: Math.round(a1 * 36 + 200),
-    a2r: Math.round(a2 * 36 + 200),
-    a1: +a1.toFixed(2),
-    a2: +a2.toFixed(2),
-    ir: Math.round(ittr * 39 + 100),
-    i: +ittr.toFixed(2),
-    t1r: Math.round(t1 * 33 + 300),
-    t2r: Math.round(t2 * 33 + 300),
-    t1: +t1.toFixed(2),
-    t2: +t2.toFixed(2),
-    br: Math.round(bpsVal * 100),
-    b: +bpsVal.toFixed(2),
-    tgt: +tgt.toFixed(2),
-    m: MOCK_MODES[Math.floor(elapsed / 3) % MOCK_MODES.length],
+  const sensor = create(SensorSchema, {
+    sps: 50,
+    apps1Raw: Math.round(a1 * 36 + 200),
+    apps2Raw: Math.round(a2 * 36 + 200),
+    ittrRaw: Math.round(ittr * 39 + 100),
+    tps1Raw: Math.round(t1 * 33 + 300),
+    tps2Raw: Math.round(t2 * 33 + 300),
+    bpsRaw: Math.round(bpsVal * 100),
+    apps1: +a1.toFixed(2),
+    apps2: +a2.toFixed(2),
+    ittr: +ittr.toFixed(2),
+    tps1: +t1.toFixed(2),
+    tps2: +t2.toFixed(2),
+    bps: +bpsVal.toFixed(2),
+    targetTp: +tgt.toFixed(2),
+  });
+  const etc = create(EtcStateSchema, {
+    mode: MOCK_MODES[Math.floor(elapsed / 3) % MOCK_MODES.length],
     manual: manualMode,
-    tgt_ittr: useIttr,
-    v: true,
-    err: [] as number[],
-  };
-
-  emit(JSON.stringify(msg));
+    valid: true,
+    errors: 0,
+  });
+  const state = create(StateSchema, {
+    timestamp: Date.now() - t0,
+    sensor,
+    etc,
+  });
+  emitFrame(
+    create(DeviceToHostSchema, { payload: { case: "sensor", value: state } }),
+  );
 }
 
-function handleCommand(text: string) {
-  let parsed: { c: string; id: number; d?: Record<string, unknown> };
-  try {
-    parsed = JSON.parse(text);
-  } catch {
+function handleCommand(cmd: Command): void {
+  const id = cmd.id;
+  const body = cmd.body;
+  if (!body.case) {
+    emitResponse(create(ResponseSchema, { id, ok: false }));
     return;
   }
-
-  const { c: cmd, id, d: data } = parsed;
-
-  // Simulate processing delay
   setTimeout(() => {
-    switch (cmd) {
-      case "get_config": {
-        emit(JSON.stringify({ t: "r", id, ok: true, data: getFullConfig() }));
+    switch (body.case) {
+      case "getConfig":
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "config", value: getFullConfig() },
+          }),
+        );
         break;
-      }
-      case "save": {
+      case "save":
+      case "revert":
         configChanged = false;
-        emit(JSON.stringify({ t: "r", id, ok: true, data: getFullConfig() }));
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "config", value: getFullConfig() },
+          }),
+        );
         break;
-      }
-      case "revert": {
-        configChanged = false;
-        emit(JSON.stringify({ t: "r", id, ok: true, data: getFullConfig() }));
-        break;
-      }
-      case "set_plausibility_check_flags": {
-        for (const key of Object.keys(flags)) {
-          if (key in (data ?? {})) {
-            flags[key] = (data as Record<string, boolean>)[key];
-          }
-        }
+      case "setPlausibilityFlags": {
+        const d = body.value;
+        if (d.apps !== undefined) flags.apps = d.apps;
+        if (d.tps !== undefined) flags.tps = d.tps;
+        if (d.apps1 !== undefined) flags.apps1 = d.apps1;
+        if (d.apps2 !== undefined) flags.apps2 = d.apps2;
+        if (d.tps1 !== undefined) flags.tps1 = d.tps1;
+        if (d.tps2 !== undefined) flags.tps2 = d.tps2;
+        if (d.target !== undefined) flags.target = d.target;
+        if (d.bps !== undefined) flags.bps = d.bps;
+        if (d.bpsTps !== undefined) flags.bpsTps = d.bpsTps;
         configChanged = true;
-        emit(JSON.stringify({ t: "r", id, ok: true, data: { ...flags } }));
-        break;
-      }
-      case "set_ittr":
-        useIttr = (data?.val as boolean) ?? false;
-        configChanged = true;
-        emit(JSON.stringify({ t: "r", id, ok: true }));
-        break;
-      case "set_pid": {
-        if (data?.kP != null) pidGains.kP = data.kP as number;
-        if (data?.kI != null) pidGains.kI = data.kI as number;
-        if (data?.kD != null) pidGains.kD = data.kD as number;
-        configChanged = true;
-        emit(JSON.stringify({ t: "r", id, ok: true, data: { ...pidGains } }));
-        break;
-      }
-      case "set_target_curve": {
-        if (data?.a4 != null) targetCurve.a4 = data.a4 as number;
-        if (data?.a3 != null) targetCurve.a3 = data.a3 as number;
-        if (data?.a2 != null) targetCurve.a2 = data.a2 as number;
-        if (data?.a1 != null) targetCurve.a1 = data.a1 as number;
-        configChanged = true;
-        emit(
-          JSON.stringify({ t: "r", id, ok: true, data: { ...targetCurve } }),
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: {
+              case: "plausibilityFlags",
+              value: { ...flags },
+            },
+          }),
         );
         break;
       }
-      case "set_manual":
-        manualMode = !manualMode;
-        if (manualMode) manualTarget = 30;
-        emit(JSON.stringify({ t: "r", id, ok: manualMode || true }));
+      case "setIttr":
+        useIttr = body.value.use;
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "ittr", value: { use: useIttr } },
+          }),
+        );
         break;
-      case "manual_adjust": {
-        const amount = (data?.amount as number) ?? 0;
-        manualTarget = Math.max(-10, Math.min(110, manualTarget + amount));
-        emit(JSON.stringify({ t: "r", id, ok: true }));
+      case "setEtcPid": {
+        const d = body.value;
+        if (d.kP !== undefined) pidGains.kP = d.kP;
+        if (d.kI !== undefined) pidGains.kI = d.kI;
+        if (d.kD !== undefined) pidGains.kD = d.kD;
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "pid", value: { ...pidGains } },
+          }),
+        );
         break;
       }
-      case "set_apps_min": {
+      case "setEtcTargetCurve": {
+        const d = body.value;
+        if (d.a4 !== undefined) targetCurve.a4 = d.a4;
+        if (d.a3 !== undefined) targetCurve.a3 = d.a3;
+        if (d.a2 !== undefined) targetCurve.a2 = d.a2;
+        if (d.a1 !== undefined) targetCurve.a1 = d.a1;
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "targetCurve", value: { ...targetCurve } },
+          }),
+        );
+        break;
+      }
+      case "setEtcManual":
+        manualMode = !manualMode;
+        if (manualMode) manualTarget = 30;
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
+      case "etcManualAdjust":
+        manualTarget = Math.max(
+          -10,
+          Math.min(110, manualTarget + body.value.amount),
+        );
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
+      case "setAppsMin":
         sensorValues.apps1Min = 200 + Math.round(Math.random() * 50);
         sensorValues.apps2Min = 200 + Math.round(Math.random() * 50);
         sensorValues.ittrMin = 100 + Math.round(Math.random() * 50);
         configChanged = true;
-        emit(
-          JSON.stringify({
-            t: "r",
+        emitResponse(
+          create(ResponseSchema, {
             id,
             ok: true,
             data: {
-              apps1Min: sensorValues.apps1Min,
-              apps2Min: sensorValues.apps2Min,
-              ittrMin: sensorValues.ittrMin,
+              case: "appsMin",
+              value: {
+                apps1Min: sensorValues.apps1Min,
+                apps2Min: sensorValues.apps2Min,
+                ittrMin: sensorValues.ittrMin,
+              },
             },
           }),
         );
         break;
-      }
-      case "set_apps_max": {
+      case "setAppsMax":
         sensorValues.apps1Max = 3700 + Math.round(Math.random() * 200);
         sensorValues.apps2Max = 3700 + Math.round(Math.random() * 200);
         sensorValues.ittrMax = 3900 + Math.round(Math.random() * 200);
         configChanged = true;
-        emit(
-          JSON.stringify({
-            t: "r",
+        emitResponse(
+          create(ResponseSchema, {
             id,
             ok: true,
             data: {
-              apps1Max: sensorValues.apps1Max,
-              apps2Max: sensorValues.apps2Max,
-              ittrMax: sensorValues.ittrMax,
+              case: "appsMax",
+              value: {
+                apps1Max: sensorValues.apps1Max,
+                apps2Max: sensorValues.apps2Max,
+                ittrMax: sensorValues.ittrMax,
+              },
             },
           }),
         );
         break;
-      }
-      case "set_tps_min": {
+      case "setTpsMin":
         sensorValues.tps1Min = 300 + Math.round(Math.random() * 50);
         sensorValues.tps2Min = 300 + Math.round(Math.random() * 50);
         configChanged = true;
-        emit(
-          JSON.stringify({
-            t: "r",
+        emitResponse(
+          create(ResponseSchema, {
             id,
             ok: true,
             data: {
-              tps1Min: sensorValues.tps1Min,
-              tps2Min: sensorValues.tps2Min,
+              case: "tpsMin",
+              value: {
+                tps1Min: sensorValues.tps1Min,
+                tps2Min: sensorValues.tps2Min,
+              },
             },
           }),
         );
         break;
-      }
-      case "set_tps_max": {
+      case "setTpsMax":
         sensorValues.tps1Max = 3500 + Math.round(Math.random() * 200);
         sensorValues.tps2Max = 3500 + Math.round(Math.random() * 200);
         configChanged = true;
-        emit(
-          JSON.stringify({
-            t: "r",
+        emitResponse(
+          create(ResponseSchema, {
             id,
             ok: true,
             data: {
-              tps1Max: sensorValues.tps1Max,
-              tps2Max: sensorValues.tps2Max,
+              case: "tpsMax",
+              value: {
+                tps1Max: sensorValues.tps1Max,
+                tps2Max: sensorValues.tps2Max,
+              },
             },
           }),
         );
         break;
-      }
-      case "set_idling": {
+      case "setIdling":
         sensorValues.idling = +(4 + Math.random() * 3).toFixed(1);
         configChanged = true;
-        emit(
-          JSON.stringify({
-            t: "r",
-            id,
-            ok: true,
-            data: { idling: sensorValues.idling },
-          }),
-        );
-        break;
-      }
-      case "set_target_bound": {
-        if (data?.idling != null) sensorValues.idling = data.idling as number;
-        if (data?.normalMax != null)
-          sensorValues.normalMax = data.normalMax as number;
-        if (data?.restrictedMax != null)
-          sensorValues.restrictedMax = data.restrictedMax as number;
-        configChanged = true;
-        emit(
-          JSON.stringify({
-            t: "r",
+        emitResponse(
+          create(ResponseSchema, {
             id,
             ok: true,
             data: {
-              idling: sensorValues.idling,
-              normalMax: sensorValues.normalMax,
-              restrictedMax: sensorValues.restrictedMax,
+              case: "idling",
+              value: { idling: sensorValues.idling },
+            },
+          }),
+        );
+        break;
+      case "setEtcTargetBound": {
+        const d = body.value;
+        if (d.idling !== undefined) sensorValues.idling = d.idling;
+        if (d.normalMax !== undefined) sensorValues.normalMax = d.normalMax;
+        if (d.restrictedMax !== undefined)
+          sensorValues.restrictedMax = d.restrictedMax;
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: {
+              case: "targetBound",
+              value: {
+                idling: sensorValues.idling,
+                normalMax: sensorValues.normalMax,
+                restrictedMax: sensorValues.restrictedMax,
+              },
             },
           }),
         );
         break;
       }
-      case "set_config": {
-        const jsonStr = data?.config as string | undefined;
-        const ok = !!jsonStr;
-        if (ok) configChanged = true;
-        emit(JSON.stringify({ t: "r", id, ok }));
+      case "setConfig": {
+        const cfg = body.value.config;
+        if (cfg) {
+          if (cfg.sensorValues) {
+            const sv = cfg.sensorValues;
+            sensorValues.apps1Min = sv.apps1Min ?? sensorValues.apps1Min;
+            sensorValues.apps1Max = sv.apps1Max ?? sensorValues.apps1Max;
+            sensorValues.apps2Min = sv.apps2Min ?? sensorValues.apps2Min;
+            sensorValues.apps2Max = sv.apps2Max ?? sensorValues.apps2Max;
+            sensorValues.ittrMin = sv.ittrMin ?? sensorValues.ittrMin;
+            sensorValues.ittrMax = sv.ittrMax ?? sensorValues.ittrMax;
+            sensorValues.tps1Min = sv.tps1Min ?? sensorValues.tps1Min;
+            sensorValues.tps1Max = sv.tps1Max ?? sensorValues.tps1Max;
+            sensorValues.tps2Min = sv.tps2Min ?? sensorValues.tps2Min;
+            sensorValues.tps2Max = sv.tps2Max ?? sensorValues.tps2Max;
+            sensorValues.idling = sv.targetTpIdling ?? sensorValues.idling;
+            sensorValues.normalMax =
+              sv.targetTpNormalMax ?? sensorValues.normalMax;
+            sensorValues.restrictedMax =
+              sv.targetTpRestrictedMax ?? sensorValues.restrictedMax;
+          }
+          if (cfg.etcConfig) {
+            if (cfg.etcConfig.plausibilityCheckFlags)
+              Object.assign(flags, cfg.etcConfig.plausibilityCheckFlags);
+            if (cfg.etcConfig.pid) Object.assign(pidGains, cfg.etcConfig.pid);
+            if (cfg.etcConfig.targetCurve)
+              Object.assign(targetCurve, cfg.etcConfig.targetCurve);
+            useIttr = cfg.etcConfig.useIttr;
+          }
+          configChanged = true;
+        }
+        emitResponse(create(ResponseSchema, { id, ok: !!cfg }));
         break;
       }
       case "reboot":
-        emit(JSON.stringify({ t: "r", id, ok: true }));
-        break;
-      case "motor_off":
-        emit(JSON.stringify({ t: "r", id, ok: true }));
-        break;
+      case "etcMotorOff":
       default:
-        emit(JSON.stringify({ t: "r", id, ok: true }));
+        emitResponse(create(ResponseSchema, { id, ok: true }));
         break;
     }
   }, 5);
 }
+
+const decoder = new FrameDecoder((payload) => {
+  if (payload.length < 2) return;
+  const pbLen = payload.length - 2;
+  const recvCrc = payload[pbLen] | (payload[pbLen + 1] << 8);
+  const calcCrc = crc16Ccitt(payload.subarray(0, pbLen));
+  if (recvCrc !== calcCrc) return;
+  try {
+    const env = fromBinary(HostToDeviceSchema, payload.subarray(0, pbLen));
+    if (env.payload.case === "command") {
+      handleCommand(env.payload.value);
+    }
+  } catch {
+    // ignore malformed
+  }
+});
 
 export const mockSerial: Transport = {
   async connect() {
@@ -316,16 +442,16 @@ export const mockSerial: Transport = {
     }
     onDisconnect?.();
   },
-  async send(text: string) {
-    handleCommand(text);
+  async send(bytes: Uint8Array) {
+    decoder.push(bytes);
   },
   isConnected() {
     return connected;
   },
-  setOnLineReceived(fn: (line: string) => void) {
-    onLineReceived = fn;
+  setOnBytes(fn) {
+    onBytes = fn;
   },
-  setOnDisconnect(fn: () => void) {
+  setOnDisconnect(fn) {
     onDisconnect = fn;
   },
 };

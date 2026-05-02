@@ -18,7 +18,7 @@ export interface SensorData {
   manual: boolean;
   tgt_ittr: boolean;
   v: boolean;
-  err: number[];
+  err: number;
   sps?: number;
 }
 

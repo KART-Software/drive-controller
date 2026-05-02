@@ -58,7 +58,6 @@ export function App() {
         console.log(`[Serial ${dir.toUpperCase()}]`, line);
       });
     }
-    t.setOnLineReceived((line) => protocol.handleLine(line));
     t.setOnDisconnect(() => {
       setConnected(false);
       addLog("Disconnected");
