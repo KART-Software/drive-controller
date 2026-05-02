@@ -1,0 +1,4 @@
+# nanopb size options for drive_controller.proto
+# Strings and repeated fields require explicit max sizes for static allocation.
+
+dc.DebugMessage.msg          max_size:192

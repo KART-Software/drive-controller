@@ -1,0 +1,314 @@
+syntax = "proto3";
+
+package dc;
+
+// =====================================================================
+// Drive controller serial protocol (Teensy <-> Web console).
+// Wire format: COBS-encoded frames terminated by 0x00. Each payload is
+// [protobuf bytes][CRC16-CCITT-FALSE 2byte LE]. The protobuf bytes encode
+// either a HostToDevice or DeviceToHost message depending on direction.
+// =====================================================================
+
+enum EtcMode {
+  ETC_MODE_UNSPECIFIED = 0;
+  ETC_MODE_CALIB       = 1;
+  ETC_MODE_NORMAL      = 2;
+  ETC_MODE_RESTRICT    = 3;
+  ETC_MODE_MOTOR_OFF   = 4;
+}
+
+// ---------------------------------------------------------------------
+// Shared sub-messages
+// ---------------------------------------------------------------------
+
+message SensorCalib {
+  uint32 apps1_min                = 1;
+  uint32 apps1_max                = 2;
+  uint32 apps2_min                = 3;
+  uint32 apps2_max                = 4;
+  uint32 ittr_min                 = 5;
+  uint32 ittr_max                 = 6;
+  uint32 tps1_min                 = 7;
+  uint32 tps1_max                 = 8;
+  uint32 tps2_min                 = 9;
+  uint32 tps2_max                 = 10;
+  float  target_tp_idling         = 11;
+  float  target_tp_normal_max     = 12;
+  float  target_tp_restricted_max = 13;
+  uint32 wheel_rotor_teeth_front  = 14;
+  uint32 wheel_rotor_teeth_rear   = 15;
+  uint32 engine_teeth             = 16;
+}
+
+message EtcPlausibilityCheckFlags {
+  bool apps    = 1;
+  bool tps     = 2;
+  bool apps1   = 3;
+  bool apps2   = 4;
+  bool tps1    = 5;
+  bool tps2    = 6;
+  bool target  = 7;
+  bool bps     = 8;
+  bool bps_tps = 9;
+}
+
+message EtcPid {
+  float k_p = 1;
+  float k_i = 2;
+  float k_d = 3;
+}
+
+message EtcTargetCurve {
+  // 結構細かい数字なので double
+  double a4 = 1;
+  double a3 = 2;
+  double a2 = 3;
+  double a1 = 4;
+}
+
+message EtcConfig {
+  EtcPlausibilityCheckFlags plausibility_check_flags = 1;
+  bool                      use_ittr                 = 2;
+  EtcPid                    pid                      = 3;
+  EtcTargetCurve            target_curve             = 4;
+}
+
+message LaunchConfig {
+}
+
+message TractionConfig {
+}
+
+message Config {
+  SensorCalib    sensor_values   = 1;
+  EtcConfig      etc_config      = 2;
+  LaunchConfig   launch_config   = 3;
+  TractionConfig traction_config = 4;
+  bool           config_changed  = 5;
+}
+
+// ---------------------------------------------------------------------
+// Device -> Host
+// ---------------------------------------------------------------------
+
+message EtcState{
+  EtcMode mode   = 1;
+  bool    manual = 2;
+  bool    valid  = 3;
+  uint32  errors = 4;  // bitmask: bit0=apps, 1=tps, 2=apps1, 3=apps2, 4=tps1, 5=tps2, 6=target, 7=bps, 8=bps_tps
+}
+
+message Sensor{
+  uint32 sps       = 1;
+  uint32 apps1_raw = 2;
+  uint32 apps2_raw = 3;
+  uint32 ittr_raw  = 4;
+  uint32 tps1_raw  = 5;
+  uint32 tps2_raw  = 6;
+  uint32 bps_raw   = 7;
+
+  float apps1 = 8;
+  float apps2 = 9;
+  float ittr  = 10;
+  float tps1  = 11;
+  float tps2  = 12;
+  float bps   = 13;
+
+  float target_tp = 14;
+
+  float accel_x = 15;
+  float accel_y = 16;
+  float accel_z = 17;
+  float gyro_x  = 18;
+  float gyro_y  = 19;
+  float gyro_z  = 20;
+
+  float wheel_speed_fl = 21;
+  float wheel_speed_fr = 22;
+  float wheel_speed_rl = 23;
+  float wheel_speed_rr = 24;
+  float rpm            = 25;
+
+  uint32 wheel_count_fl = 26;
+  uint32 wheel_count_fr = 27;
+  uint32 wheel_count_rl = 28;
+  uint32 wheel_count_rr = 29;
+  uint32 rpm_count      = 30;
+}
+
+message State {
+  uint32 timestamp = 1;
+
+  Sensor   sensor = 2;
+  EtcState etc    = 3;
+}
+
+message DebugMessage {
+  uint32 timestamp = 1;
+  string msg       = 2;
+}
+
+// Per-command response payloads. Each command picks the payload it cares
+// about (or none).
+message AppsMinResponse {
+  uint32 apps1_min = 1;
+  uint32 apps2_min = 2;
+  uint32 ittr_min  = 3;
+}
+
+message AppsMaxResponse {
+  uint32 apps1_max = 1;
+  uint32 apps2_max = 2;
+  uint32 ittr_max  = 3;
+}
+
+message TpsMinResponse {
+  uint32 tps1_min = 1;
+  uint32 tps2_min = 2;
+}
+
+message TpsMaxResponse {
+  uint32 tps1_max = 1;
+  uint32 tps2_max = 2;
+}
+
+message IdlingResponse {
+  float idling = 1;
+}
+
+message TargetBoundResponse {
+  float idling         = 1;
+  float normal_max     = 2;
+  float restricted_max = 3;
+}
+
+message IttrResponse {
+  bool use = 1;
+}
+
+message Response {
+  uint32 id = 1;
+  bool   ok = 2;
+  oneof data {
+    Config                    config             = 10;
+    AppsMinResponse           apps_min           = 11;
+    AppsMaxResponse           apps_max           = 12;
+    TpsMinResponse            tps_min            = 13;
+    TpsMaxResponse            tps_max            = 14;
+    IdlingResponse            idling             = 15;
+    TargetBoundResponse       target_bound       = 16;
+    IttrResponse              ittr               = 17;
+    EtcPlausibilityCheckFlags plausibility_flags = 18;
+    EtcPid                    pid                = 19;
+    EtcTargetCurve            target_curve       = 20;
+  }
+}
+
+message DeviceToHost {
+  oneof payload {
+    State        sensor   = 1;
+    DebugMessage debug    = 2;
+    Response     response = 3;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Host -> Device
+// ---------------------------------------------------------------------
+
+message EtcMotorOffCmd {}
+
+message SaveCmd {}
+
+message SetAppsMinCmd {}
+
+message SetAppsMaxCmd {}
+
+message SetTpsMinCmd {}
+
+message SetTpsMaxCmd {}
+
+message SetIdlingCmd {}
+
+message GetConfigCmd {}
+
+message RebootCmd {}
+
+message RevertCmd {}
+
+message SetEtcManualCmd {}
+
+message SetEtcTargetBoundCmd {
+    // optional fields use proto3 explicit presence
+  optional float idling         = 1;
+  optional float normal_max     = 2;
+  optional float restricted_max = 3;
+}
+
+message SetEtcPlausibilityFlagsCmd {
+  optional bool apps    = 1;
+  optional bool tps     = 2;
+  optional bool apps1   = 3;
+  optional bool apps2   = 4;
+  optional bool tps1    = 5;
+  optional bool tps2    = 6;
+  optional bool target  = 7;
+  optional bool bps     = 8;
+  optional bool bps_tps = 9;
+}
+
+message SetIttrCmd {
+  bool use = 1;
+}
+
+message SetEtcPidCmd {
+  optional float k_p = 1;
+  optional float k_i = 2;
+  optional float k_d = 3;
+}
+
+message SetEtcTargetCurveCmd {
+  // 結構細かい数字なので double
+  optional double a4 = 1;
+  optional double a3 = 2;
+  optional double a2 = 3;
+  optional double a1 = 4;
+}
+
+message EtcManualAdjustCmd {
+  float amount = 1;
+}
+
+message SetConfigCmd {
+  Config config = 1;
+}
+
+message Command {
+  uint32 id = 1;
+  oneof body {
+    EtcMotorOffCmd             etc_motor_off          = 10;
+    SetAppsMinCmd              set_apps_min           = 11;
+    SetAppsMaxCmd              set_apps_max           = 12;
+    SetTpsMinCmd               set_tps_min            = 13;
+    SetTpsMaxCmd               set_tps_max            = 14;
+    SetIdlingCmd               set_idling             = 15;
+    SetEtcTargetBoundCmd       set_etc_target_bound   = 16;
+    SetEtcPlausibilityFlagsCmd set_plausibility_flags = 17;
+    SetIttrCmd                 set_ittr               = 18;
+    SetEtcPidCmd               set_etc_pid            = 19;
+    SetEtcTargetCurveCmd       set_etc_target_curve   = 20;
+    SetEtcManualCmd            set_etc_manual         = 21;
+    EtcManualAdjustCmd         etc_manual_adjust      = 22;
+    GetConfigCmd               get_config             = 23;
+    SetConfigCmd               set_config             = 24;
+    SaveCmd                    save                   = 25;
+    RebootCmd                  reboot                 = 26;
+    RevertCmd                  revert                 = 27;
+  }
+}
+
+message HostToDevice {
+  oneof payload {
+    Command command = 1;
+  }
+}
