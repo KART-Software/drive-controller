@@ -1,5 +1,5 @@
 CompileFlags:
-  CompilationDatabase: .
+  CompilationDatabase: dc-firmware/
   Add:
     - --include=/home/a000410/Projects/kart/drive-controller/dc-firmware/.clangd_shim.h
   Remove:
