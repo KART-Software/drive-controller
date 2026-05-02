@@ -1,9 +1,8 @@
-#include "icm45686.hpp"
+#include "sensor/icm45686.hpp"
 
-Icm45686::Icm45686(uint8_t csPin, SPIClass &spi) : spi(spi), csPin(csPin) {}
+Icm45686::Icm45686(uint8_t csPin, SPIClass& spi) : spi(spi), csPin(csPin) {}
 
-void Icm45686::writeRegister(uint8_t reg, uint8_t val)
-{
+void Icm45686::writeRegister(uint8_t reg, uint8_t val) {
     digitalWriteFast(csPin, LOW);
     spi.beginTransaction(spiSettings);
     spi.transfer(reg & 0x7F);
@@ -12,8 +11,7 @@ void Icm45686::writeRegister(uint8_t reg, uint8_t val)
     digitalWriteFast(csPin, HIGH);
 }
 
-uint8_t Icm45686::readRegister(uint8_t reg)
-{
+uint8_t Icm45686::readRegister(uint8_t reg) {
     digitalWriteFast(csPin, LOW);
     spi.beginTransaction(spiSettings);
     spi.transfer(reg | 0x80);
@@ -23,27 +21,24 @@ uint8_t Icm45686::readRegister(uint8_t reg)
     return val;
 }
 
-void Icm45686::readRegisters(uint8_t reg, uint8_t *buf, uint8_t len)
-{
+void Icm45686::readRegisters(uint8_t reg, uint8_t* buf, uint8_t len) {
     digitalWriteFast(csPin, LOW);
     spi.beginTransaction(spiSettings);
     spi.transfer(reg | 0x80);
-    for (uint8_t i = 0; i < len; i++)
-    {
+    for (uint8_t i = 0; i < len; i++) {
         buf[i] = spi.transfer(0x00);
     }
     spi.endTransaction();
     digitalWriteFast(csPin, HIGH);
 }
 
-void Icm45686::begin()
-{
+void Icm45686::begin() {
     spi.begin();
     pinMode(csPin, OUTPUT);
     digitalWriteFast(csPin, HIGH);
     delay(1);
 
-    writeRegister(ICM45686_REG_MISC2, 0x02); // soft reset
+    writeRegister(ICM45686_REG_MISC2, 0x02);  // soft reset
     delay(10);
 
     (void)readRegister(ICM45686_WHO_AM_I);
@@ -59,8 +54,7 @@ void Icm45686::begin()
     delay(50);
 }
 
-void Icm45686::read()
-{
+void Icm45686::read() {
     uint8_t buf[12];
     readRegisters(ICM45686_ACCEL_DATA_X1, buf, sizeof(buf));
 

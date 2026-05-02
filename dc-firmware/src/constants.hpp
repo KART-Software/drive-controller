@@ -16,15 +16,15 @@
 #define APPS_2_CH 1
 #define TPS_1_CH 7
 #define TPS_2_CH 6
-#define ITTR_CH 2          // IST Throttle Position Target Receiver (ITTR)
-#define BPS_CH 3           // Brake Pressure Sensor
-#define MOTOR_CURRENT_CH 4 // Connected to motor driver's CS PIN.The voltage is about 20 mV/A plus a 50 mV offset.
+#define ITTR_CH 2           // IST Throttle Position Target Receiver (ITTR)
+#define BPS_CH 3            // Brake Pressure Sensor
+#define MOTOR_CURRENT_CH 4  // Connected to motor driver's CS PIN.The voltage is about 20 mV/A plus a 50 mV offset.
 
 /////////////////////////
 /// Sampling Settings ///
 /////////////////////////
 
-#define SENSOR_SAMPLING_RATE_US 125 // 8kHz sensor ISR interval
+#define SENSOR_SAMPLING_RATE_US 125  // 8kHz sensor ISR interval
 
 ////////////////////
 /// PWM Settings ///
@@ -37,40 +37,40 @@
 // #define TB67H450
 
 #ifdef HILITAND
-#define DC_MOTOR_ENABLE_PIN 5 // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_PWM_1_PIN 33 // TODO: Teensy 4.1 の PWM 対応ピンに変更
-#define DC_MOTOR_PWM_2_PIN 32 // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_ENABLE_PIN 5  // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_PWM_1_PIN 33  // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_PWM_2_PIN 32  // TODO: Teensy 4.1 の PWM 対応ピンに変更
 #define MOTOR_DIRECTION 1
 #endif
 
 #ifdef VNH5019
-#define DC_MOTOR_IN_A_PIN 17 // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_IN_B_PIN 2  // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_EN_A_PIN 16 // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_EN_B_PIN 0  // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_PWM_PIN 4   // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_IN_A_PIN 17  // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_IN_B_PIN 2   // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_EN_A_PIN 16  // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_EN_B_PIN 0   // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_PWM_PIN 4    // TODO: Teensy 4.1 の PWM 対応ピンに変更
 #define MOTOR_DIRECTION 1
 #endif
 
 #ifdef G2_18V17
-#define DC_MOTOR_SLP_PIN 4  // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_PWM_PIN 16 // TODO: Teensy 4.1 の PWM 対応ピンに変更
-#define DC_MOTOR_DIR_PIN 17 // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_FLT_PIN 2  // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_SLP_PIN 4   // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_PWM_PIN 16  // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_DIR_PIN 17  // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_FLT_PIN 2   // TODO: Teensy 4.1 のピン番号に変更
 #define MOTOR_DIRECTION -1
 #endif
 
 #ifdef DRV8256P
-#define DC_MOTOR_PWM_1_PIN 17 // TODO: Teensy 4.1 の PWM 対応ピンに変更
-#define DC_MOTOR_PWM_2_PIN 16 // TODO: Teensy 4.1 の PWM 対応ピンに変更
-#define DC_MOTOR_FLT_PIN 4    // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_SLP_PIN 2    // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_PWM_1_PIN 17  // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_PWM_2_PIN 16  // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_FLT_PIN 4     // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_SLP_PIN 2     // TODO: Teensy 4.1 のピン番号に変更
 #define MOTOR_DIRECTION 1
 #endif
 
 #ifdef TB67H450
-#define DC_MOTOR_IN_1_PIN 16 // TODO: Teensy 4.1 の PWM 対応ピンに変更
-#define DC_MOTOR_IN_2_PIN 17 // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_IN_1_PIN 16  // TODO: Teensy 4.1 の PWM 対応ピンに変更
+#define DC_MOTOR_IN_2_PIN 17  // TODO: Teensy 4.1 の PWM 対応ピンに変更
 #define MOTOR_DIRECTION 1
 #endif
 
@@ -78,7 +78,7 @@
 /// Motor Control Settings ///
 //////////////////////////////
 
-#define MOTOR_CONTROLL_CYCLE_TIME 1 // ms
+#define MOTOR_CONTROLL_CYCLE_TIME 1  // ms
 
 #define KP 3.0
 #define KI 0.4
@@ -123,13 +123,13 @@
 #define TARGET_CURVE_A2 0.0087
 #define TARGET_CURVE_A1 0.13
 
-#define BPS_RAW_MAX 4.5 * 65535 / 5.12 // 4.5V
-#define BPS_RAW_MIN 5000               // 0.5V
+#define BPS_RAW_MAX 4.5 * 65535 / 5.12  // 4.5V
+#define BPS_RAW_MIN 5000                // 0.5V
 
-#define BPS_MAX 1000                    // psi
-#define BPS_MIN 0                       // psi
-#define BPS_HIGH_PRESSURE_THRESHOLD 600 // psi
-#define BPS_MARGIN 50                   // psi
+#define BPS_MAX 1000                     // psi
+#define BPS_MIN 0                        // psi
+#define BPS_HIGH_PRESSURE_THRESHOLD 600  // psi
+#define BPS_MARGIN 50                    // psi
 
 ///////////////////////
 /// Button Settings ///
@@ -144,7 +144,6 @@
 //////////////////////////
 
 #define IMU_CS_PIN 0
-#define USE_ICM45686
 
 /////////////////////////////
 /// Pulse Counter Settings //
@@ -161,7 +160,7 @@
 /// CAN Settings ///
 ////////////////////
 
-#define CAN_BITRATE 1000000 // 1 Mbps
+#define CAN_BITRATE 1000000  // 1 Mbps
 #define CAN_TX_FAST_INTERVAL_MS 20
 #define CAN_TX_SLOW_INTERVAL_MS 100
 #define CAN_ID_THROTTLE 0x100
@@ -175,8 +174,8 @@
 /// Other Output Pin Settings ///
 /////////////////////////////////
 
-#define FUEL_PUMP_PIN 32      // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_RELAY_PIN 33 // TODO: Teensy 4.1 のピン番号に変更
+#define FUEL_PUMP_PIN 32       // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_RELAY_PIN 33  // TODO: Teensy 4.1 のピン番号に変更
 
 #define APPS_CHECK_FLAG false
 #define TPS_CHECK_FLAG false

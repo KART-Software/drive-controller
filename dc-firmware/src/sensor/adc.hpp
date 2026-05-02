@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include "constants.hpp"
-#include "frequency_meter.hpp"
+#include "sensor/frequency_meter.hpp"
 
 // https://www.ti.com/jp/lit/ds/symlink/ads8688.pdf
 
@@ -35,31 +35,31 @@
 #define RANGE_2 0b0010  // ±0.625 x VREF
 #define RANGE_3 0b0101  // 0 ~ 2.5 x VREF
 #define RANGE_4 \
-  0b0110  // 0 ~ 1.25 x VREF
-          // VREF = 4.096V
+    0b0110  // 0 ~ 1.25 x VREF
+            // VREF = 4.096V
 
 #define ADC_NUM_CH 8
 
 // デイジーチェーン対応 ADS8688
 template <size_t NUM_DEV>
 class _adc {
- public:
-  _adc(uint8_t csPin = ADC_CS_PIN, SPIClass& spi = SPI);
+   public:
+    _adc(uint8_t csPin = ADC_CS_PIN, SPIClass& spi = SPI);
 
-  void begin();
-  void read();
-  uint16_t value[NUM_DEV * ADC_NUM_CH] = {};
-  const uint16_t* deviceValue(size_t device) const { return &value[device * ADC_NUM_CH]; }
-  uint32_t sps() const { return freqMeter_.hz(); }
+    void begin();
+    void read();
+    uint16_t value[NUM_DEV * ADC_NUM_CH] = {};
+    const uint16_t* deviceValue(size_t device) const { return &value[device * ADC_NUM_CH]; }
+    uint32_t sps() const { return freqMeter_.hz(); }
 
- private:
-  SPIClass& spi;
-  uint8_t csPin;
-  SPISettings spiSettings = SPISettings(SPI_FREQUENCY, SPI_BIT_ORDER, SPI_MODE_ADC);
-  FrequencyMeter freqMeter_;
+   private:
+    SPIClass& spi;
+    uint8_t csPin;
+    SPISettings spiSettings = SPISettings(SPI_FREQUENCY, SPI_BIT_ORDER, SPI_MODE_ADC);
+    FrequencyMeter freqMeter_;
 
-  void writeRegister(uint8_t addr, uint8_t value);
-  void transferCommand(uint16_t cmd, uint16_t* out);
+    void writeRegister(uint8_t addr, uint8_t value);
+    void transferCommand(uint16_t cmd, uint16_t* out);
 };
 
 using Adc = _adc<2>;

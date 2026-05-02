@@ -8,7 +8,7 @@ class MovingAverage
 public:
     MovingAverage(uint size = 100);
     void add(float value);
-    float getAvg();
+    float getAvg() const;
 
 private:
     const uint size;

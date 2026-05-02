@@ -1,18 +1,19 @@
 #include "plausibility_validator.hpp"
 
-PlausibilityValidator::PlausibilityValidator(Apps &apps1, Apps &apps2, Ittr &ittr, Tps &tps1, Tps &tps2, Target &target,
-                                             Bps &bps)
-    : apps1(apps1), apps2(apps2), ittr(ittr), tps1(tps1), tps2(tps2), target(target), bps(bps)
-{
-}
+PlausibilityValidator::PlausibilityValidator(const Apps& apps1,
+                                             const Apps& apps2,
+                                             const Ittr& ittr,
+                                             const Tps& tps1,
+                                             const Tps& tps2,
+                                             const Target& target,
+                                             const Bps& bps)
+    : apps1(apps1), apps2(apps2), ittr(ittr), tps1(tps1), tps2(tps2), target(target), bps(bps) {}
 
-void PlausibilityValidator::initialize()
-{
+void PlausibilityValidator::initialize() {
     initParameters();
 }
 
-void PlausibilityValidator::initParameters()
-{
+void PlausibilityValidator::initParameters() {
     unsigned long now = millis();
     lastAppsPlausibleTime = now;
     lastTpsPlausibleTime = now;
@@ -26,15 +27,11 @@ void PlausibilityValidator::initParameters()
     isValidAllTime = true;
 }
 
-bool PlausibilityValidator::isCurrentlyValid()
-{
-    if (millis() < PLAUSIBLE_DURATION)
-    {
+bool PlausibilityValidator::isCurrentlyValid() {
+    if (millis() < PLAUSIBLE_DURATION) {
         isValidAllTime = true;
         return true;
-    }
-    else
-    {
+    } else {
         bool isValid = true;
         isValid &= isAppsPlausible() || !appsCheckFlag;
         isValid &= isTpsPlausible() || !tpsCheckFlag;
@@ -52,161 +49,139 @@ bool PlausibilityValidator::isCurrentlyValid()
     }
 }
 
-bool PlausibilityValidator::isValid()
-{
+bool PlausibilityValidator::isValid() {
     isValidAllTime &= isCurrentlyValid();
     return isValidAllTime;
 }
 
-bool PlausibilityValidator::isAppsPlausible()
-{
+bool PlausibilityValidator::isAppsPlausible() {
     unsigned long now = millis();
-    if (abs(apps1.convertedValue() - apps2.convertedValue()) < SENSOR_SAME_POSITION_THRESHOLD)
-    {
+    if (abs(apps1.convertedValue() - apps2.convertedValue()) < SENSOR_SAME_POSITION_THRESHOLD) {
         lastAppsPlausibleTime = now;
         return true;
     }
-    if (now - lastAppsPlausibleTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastAppsPlausibleTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_APPS_IMPLAUSIBLE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isTpsPlausible()
-{
+bool PlausibilityValidator::isTpsPlausible() {
     unsigned long now = millis();
-    if (abs(tps1.convertedValue() - tps2.convertedValue()) < SENSOR_SAME_POSITION_THRESHOLD)
-    {
+    if (abs(tps1.convertedValue() - tps2.convertedValue()) < SENSOR_SAME_POSITION_THRESHOLD) {
         lastTpsPlausibleTime = now;
         return true;
     }
-    if (now - lastTpsPlausibleTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastTpsPlausibleTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_TPS_IMPLAUSIBLE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isApps1CircuitValid()
-{
+bool PlausibilityValidator::isApps1CircuitValid() {
     unsigned long now = millis();
-    if (apps1.isInRange())
-    {
+    if (apps1.isInRange()) {
         lastApps1CircuitValidTime = now;
         return true;
     }
-    if (now - lastApps1CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastApps1CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_APPS_1_CIRCUIT_FAILURE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isApps2CircuitValid()
-{
+bool PlausibilityValidator::isApps2CircuitValid() {
     unsigned long now = millis();
-    if (apps2.isInRange())
-    {
+    if (apps2.isInRange()) {
         lastApps2CircuitValidTime = now;
         return true;
     }
-    if (now - lastApps2CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastApps2CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_APPS_2_CIRCUIT_FAILURE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isTps1CircuitValid()
-{
+bool PlausibilityValidator::isTps1CircuitValid() {
     unsigned long now = millis();
-    if (tps1.isInRange())
-    {
+    if (tps1.isInRange()) {
         lastTps1CircuitValidTime = now;
         return true;
     }
-    if (now - lastTps1CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastTps1CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_TPS_1_CIRCUIT_FAILURE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isTps2CircuitValid()
-{
+bool PlausibilityValidator::isTps2CircuitValid() {
     unsigned long now = millis();
-    if (tps2.isInRange())
-    {
+    if (tps2.isInRange()) {
         lastTps2CircuitValidTime = now;
         return true;
     }
-    if (now - lastTps2CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastTps2CircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_TPS_2_CIRCUIT_FAILURE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isAppsTpsTargetValid()
-{
+bool PlausibilityValidator::isAppsTpsTargetValid() {
     unsigned long now = millis();
     double targetTp = target.getTarget();
     double tpsValue = tps1.convertedValue();
-    if (abs(targetTp - tpsValue) < SENSOR_SAME_POSITION_THRESHOLD)
-    {
+    if (abs(targetTp - tpsValue) < SENSOR_SAME_POSITION_THRESHOLD) {
         lastAppsTpsTargetValidTime = now;
         return true;
     }
-    if (now - lastAppsTpsTargetValidTime > APPS_TPS_TARGET_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastAppsTpsTargetValidTime > APPS_TPS_TARGET_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_APPS_TPS_TARGET_FAILURE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isBpsCircuitValid()
-{
+bool PlausibilityValidator::isBpsCircuitValid() {
     unsigned long now = millis();
-    if (bps.isInRange())
-    {
+    if (bps.isInRange()) {
         lastBpsCircuitValidTime = now;
         return true;
     }
-    if (now - lastBpsCircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastBpsCircuitValidTime > SENSOR_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_BPS_CIRCUIT_FAILURE);
         return false;
     }
     return true;
 }
 
-bool PlausibilityValidator::isBpsTpsPlausible()
-{
+bool PlausibilityValidator::isBpsTpsPlausible() {
     unsigned long now = millis();
-    if (!bps.isHighPressure() || !tps1.isLargeOpen())
-    {
+    if (!bps.isHighPressure() || !tps1.isLargeOpen()) {
         lastBpsTpsPlausibleTime = now;
         return true;
     }
-    if (now - lastBpsTpsPlausibleTime > BPS_TPS_IMPLAUSIBLE_THRESHOLD_TIME)
-    {
+    if (now - lastBpsTpsPlausibleTime > BPS_TPS_IMPLAUSIBLE_THRESHOLD_TIME) {
         errorHandler.raise(ERR_BPS_TPS_IMPLAUSIBLE);
         return false;
     }
     return true;
 }
 
-void PlausibilityValidator::setCheckFlags(bool apps, bool tps, bool apps1, bool apps2, bool tps1, bool tps2,
-                                          bool target, bool bps, bool bpsTps)
-{
+void PlausibilityValidator::setCheckFlags(bool apps,
+                                          bool tps,
+                                          bool apps1,
+                                          bool apps2,
+                                          bool tps1,
+                                          bool tps2,
+                                          bool target,
+                                          bool bps,
+                                          bool bpsTps) {
     appsCheckFlag = apps;
     tpsCheckFlag = tps;
     apps1CheckFlag = apps1;

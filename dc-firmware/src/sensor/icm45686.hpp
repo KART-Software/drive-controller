@@ -17,21 +17,20 @@
 #define ICM45686_ACC_SENSITIVITY_16G (16000.0f / 32768.0f)
 #define ICM45686_GYR_SENSITIVITY_2000 (2000.0f / 32768.0f)
 
-class Icm45686 : public Imu
-{
-public:
-    Icm45686(uint8_t csPin, SPIClass &spi = SPI1);
+class Icm45686 : public Imu {
+   public:
+    Icm45686(uint8_t csPin, SPIClass& spi = SPI1);
     void begin() override;
     void read() override;
 
-private:
-    SPIClass &spi;
+   private:
+    SPIClass& spi;
     uint8_t csPin;
     SPISettings spiSettings = SPISettings(ICM45686_SPI_FREQUENCY, MSBFIRST, SPI_MODE3);
 
     void writeRegister(uint8_t reg, uint8_t val);
     uint8_t readRegister(uint8_t reg);
-    void readRegisters(uint8_t reg, uint8_t *buf, uint8_t len);
+    void readRegisters(uint8_t reg, uint8_t* buf, uint8_t len);
 };
 
-#endif // _ICM45686_H_
+#endif  // _ICM45686_H_

@@ -1,5 +1,5 @@
 #include "flash.hpp"
-#include "serial_protocol.hpp"
+#include "serial/serial_protocol.hpp"
 
 bool Flash::initialize()
 {

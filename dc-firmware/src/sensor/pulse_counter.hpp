@@ -9,7 +9,7 @@ public:
     PulseCounter(uint8_t pin);
     void begin();
     void update(); // Call periodically from main loop to compute frequency
-    float getFrequencyHz();
+    float getFrequencyHz() const;
     float getRpm(uint8_t pulsesPerRev);
 
 private:

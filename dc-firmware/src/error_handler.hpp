@@ -13,25 +13,23 @@
 #define ERR_BPS_CIRCUIT_FAILURE 7
 #define ERR_BPS_TPS_IMPLAUSIBLE 8
 
-struct Error
-{
+struct Error {
     const uint8_t ID;
     bool raised;
 };
 
 typedef Error Errors[MAX_ERR_LEN];
-class ErrorHandler
-{
-public:
+class ErrorHandler {
+   public:
     ErrorHandler();
     Errors errors;
     void raise(int8_t errID);
     void clear(int8_t errID);
     void clearAll();
-    uint8_t errorsLength();
+    uint8_t errorsLength() const;
     bool raised(int8_t errID);
 
-private:
+   private:
     uint8_t _length = 0;
     void initError(int8_t errID);
 };

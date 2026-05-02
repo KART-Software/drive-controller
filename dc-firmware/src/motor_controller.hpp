@@ -3,12 +3,11 @@
 
 #include "dcmotor.hpp"
 #include "pid.hpp"
-#include "sensors.hpp"
+#include "sensor/sensors.hpp"
 
-class MotorController
-{
-public:
-    MotorController(Target &target, Tps &tps);
+class MotorController {
+   public:
+    MotorController(const Target& target, const Tps& tps);
     void initialize();
     void cycle();
     void setMotorOn();
@@ -16,11 +15,11 @@ public:
     bool isOn();
     void setPidGains(double kP, double kI, double kD);
 
-private:
+   private:
     DcMotor dcMotor = DcMotor();
     PID pid = PID();
-    Target &target;
-    Tps &tps;
+    const Target& target;
+    const Tps& tps;
     const unsigned long cycleTime = MOTOR_CONTROLL_CYCLE_TIME;
     double output;
 };
