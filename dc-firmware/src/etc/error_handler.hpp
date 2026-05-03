@@ -2,7 +2,6 @@
 #define _ERROR_HANDLER_H_
 #include <Arduino.h>
 
-#define MAX_ERR_LEN 16
 #define ERR_TPS_IMPLAUSIBLE 0
 #define ERR_APPS_IMPLAUSIBLE 1
 #define ERR_TPS_1_CIRCUIT_FAILURE 2
@@ -15,25 +14,16 @@
 
 namespace etc {
 
-struct Error {
-    const uint8_t ID;
-    bool raised;
-};
-
-typedef Error Errors[MAX_ERR_LEN];
 class ErrorHandler {
    public:
-    ErrorHandler();
-    Errors errors;
-    void raise(int8_t errID);
-    void clear(int8_t errID);
-    void clearAll();
-    uint8_t errorsLength() const;
-    bool raised(int8_t errID);
+    void raise(uint8_t errID) { _bits |= (1u << errID); }
+    void clear(uint8_t errID) { _bits &= ~(1u << errID); }
+    void clearAll() { _bits = 0; }
+    bool raised(uint8_t errID) const { return _bits & (1u << errID); }
+    uint16_t bits() const { return _bits; }
 
    private:
-    uint8_t _length = 0;
-    void initError(int8_t errID);
+    uint16_t _bits = 0;
 };
 
 }  // namespace etc

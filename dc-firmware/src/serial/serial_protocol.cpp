@@ -190,14 +190,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     e.valid = isValid;
 
     // Build error bitmask
-    uint32_t errBits = 0;
-    uint8_t len = errorHandler.errorsLength();
-    for (uint8_t j = 0; j < len; j++) {
-        if (errorHandler.errors[j].raised) {
-            errBits |= (1u << errorHandler.errors[j].ID);
-        }
-    }
-    e.errors = errBits;
+    e.errors = errorHandler.bits();
 
     sendDeviceMessage(env);
 }
