@@ -4,7 +4,8 @@
     "--background-index",
     "--clang-tidy",
     "--header-insertion=iwyu",
-    "--completion-style=detailed"
+    "--completion-style=detailed",
+    "--query-driver=${env:HOME}/.platformio/packages/toolchain-gccarmnoneeabi-teensy/bin/arm-none-eabi-*"
   ],
   "[cpp]": {
     "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"

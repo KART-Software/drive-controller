@@ -1,10 +1,11 @@
 CompileFlags:
   CompilationDatabase: dc-firmware/
   Add:
-    - --include=/home/a000410/Projects/kart/drive-controller/dc-firmware/.clangd_shim.h
+    - --include=.clangd_shim.h
   Remove:
     - -mthumb
     - -mcpu=*
     - -mfloat-abi=*
     - -mfpu=*
+    - -nostdlib
     - --specs=*
