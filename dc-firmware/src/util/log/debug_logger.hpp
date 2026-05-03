@@ -1,5 +1,4 @@
-#ifndef _DEBUG_LOGGER_H_
-#define _DEBUG_LOGGER_H_
+#pragma once
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -18,4 +17,3 @@ class DebugLogger {
     static uint8_t writerCount;
 };
 
-#endif

@@ -1,5 +1,4 @@
-#ifndef _CONFIG_MODEL_H_
-#define _CONFIG_MODEL_H_
+#pragma once
 
 #include <ArduinoJson.h>
 #include "constants.hpp"
@@ -43,4 +42,3 @@ struct ConfigModel
     void toJson(JsonObject &out) const;
 };
 
-#endif

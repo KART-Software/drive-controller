@@ -1,5 +1,4 @@
-#ifndef _FREQUENCY_METER_H_
-#define _FREQUENCY_METER_H_
+#pragma once
 
 #include <Arduino.h>
 
@@ -39,4 +38,3 @@ private:
     uint32_t lastUs_ = 0;
 };
 
-#endif // _FREQUENCY_METER_H_

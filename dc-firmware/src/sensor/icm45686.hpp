@@ -1,5 +1,4 @@
-#ifndef _ICM45686_H_
-#define _ICM45686_H_
+#pragma once
 
 #include "imu.hpp"
 
@@ -33,4 +32,3 @@ class Icm45686 : public Imu {
     void readRegisters(uint8_t reg, uint8_t* buf, uint8_t len);
 };
 
-#endif  // _ICM45686_H_

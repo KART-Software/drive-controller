@@ -1,5 +1,4 @@
-#ifndef _CONFIGURATOR_H_
-#define _CONFIGURATOR_H_
+#pragma once
 
 #include "config_model.hpp"
 #include "etc/motor_controller.hpp"
@@ -45,4 +44,3 @@ class Configurator {
     void calibrate();
 };
 
-#endif

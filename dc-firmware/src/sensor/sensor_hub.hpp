@@ -1,5 +1,4 @@
-#ifndef _SENSOR_HUB_H_
-#define _SENSOR_HUB_H_
+#pragma once
 
 #include "adc.hpp"
 #include "constants.hpp"
@@ -61,4 +60,3 @@ class SensorHub {
     PulseCounter pulseEngine_{PULSE_ENGINE_PIN};
 };
 
-#endif  // _SENSOR_HUB_H_

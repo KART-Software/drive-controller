@@ -1,5 +1,4 @@
-#ifndef _SENSORS_H_
-#define _SENSORS_H_
+#pragma once
 
 #include <Arduino.h>
 
@@ -126,4 +125,3 @@ class EtcTarget {
     double ca2 = TARGET_CURVE_A2;
     double ca1 = TARGET_CURVE_A1;
 };
-#endif

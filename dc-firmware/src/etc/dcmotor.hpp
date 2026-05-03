@@ -1,5 +1,4 @@
-#ifndef _DC_MOTOR_H_
-#define _DC_MOTOR_H_
+#pragma once
 
 #include <Arduino.h>
 #include "constants.hpp"
@@ -94,4 +93,3 @@ class DcMotor {
 
 }  // namespace etc
 
-#endif

@@ -1,5 +1,4 @@
-#ifndef _CAN_BUS_H_
-#define _CAN_BUS_H_
+#pragma once
 
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
@@ -39,4 +38,3 @@ public:
     static uint8_t modeStringToId(const char *mode);
 };
 
-#endif // _CAN_BUS_H_

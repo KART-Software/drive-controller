@@ -1,5 +1,4 @@
-#ifndef _PID_H_
-#define _PID_H_
+#pragma once
 
 #include <Arduino.h>
 #include "constants.hpp"
@@ -20,4 +19,3 @@ private:
     int8_t direction;
 };
 
-#endif

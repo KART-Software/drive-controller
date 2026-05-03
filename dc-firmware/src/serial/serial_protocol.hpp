@@ -1,5 +1,4 @@
-#ifndef _SERIAL_PROTOCOL_H_
-#define _SERIAL_PROTOCOL_H_
+#pragma once
 
 #include <Arduino.h>
 
@@ -48,4 +47,3 @@ class SerialProtocol {
     static bool readCommand(dc_Command& out);
 };
 
-#endif

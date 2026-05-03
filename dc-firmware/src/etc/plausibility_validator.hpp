@@ -1,5 +1,4 @@
-#ifndef _PLAUSIBILITY_VALIDATOR_H_
-#define _PLAUSIBILITY_VALIDATOR_H_
+#pragma once
 
 #include <Arduino.h>
 #include "error_handler.hpp"
@@ -65,4 +64,3 @@ class PlausibilityValidator {
 
 }  // namespace etc
 
-#endif

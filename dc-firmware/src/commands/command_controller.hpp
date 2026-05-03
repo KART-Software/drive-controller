@@ -1,5 +1,4 @@
-#ifndef _COMMAND_CONTROLLER_H_
-#define _COMMAND_CONTROLLER_H_
+#pragma once
 
 #include "command_router.hpp"
 #include "configurator.hpp"
@@ -21,4 +20,3 @@ class CommandController {
     CommandContainer container;
 };
 
-#endif

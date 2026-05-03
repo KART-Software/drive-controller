@@ -1,5 +1,4 @@
-#ifndef _COMMAND_ROUTER_H_
-#define _COMMAND_ROUTER_H_
+#pragma once
 
 #include "proto/drive_controller.pb.h"
 
@@ -24,4 +23,3 @@ class CommandRouter {
     uint8_t routeCount = 0;
 };
 
-#endif

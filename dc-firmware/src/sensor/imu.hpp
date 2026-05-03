@@ -1,5 +1,4 @@
-#ifndef _IMU_H_
-#define _IMU_H_
+#pragma once
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -18,4 +17,3 @@ public:
     float gyro[3] = {0, 0, 0}; // X, Y, Z
 };
 
-#endif // _IMU_H_

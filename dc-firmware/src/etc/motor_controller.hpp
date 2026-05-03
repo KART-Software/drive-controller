@@ -1,5 +1,4 @@
-#ifndef _MOTOR_CONTROLLER_H_
-#define _MOTOR_CONTROLLER_H_
+#pragma once
 
 #include "dcmotor.hpp"
 #include "sensor/sensors.hpp"
@@ -28,4 +27,3 @@ class MotorController {
 
 }  // namespace etc
 
-#endif

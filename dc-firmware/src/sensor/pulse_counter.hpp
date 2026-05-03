@@ -1,5 +1,4 @@
-#ifndef _PULSE_COUNTER_H_
-#define _PULSE_COUNTER_H_
+#pragma once
 
 #include <Arduino.h>
 
@@ -33,4 +32,3 @@ private:
     uint32_t readCounter() const;
 };
 
-#endif // _PULSE_COUNTER_H_

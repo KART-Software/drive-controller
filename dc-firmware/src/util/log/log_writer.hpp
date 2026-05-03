@@ -1,5 +1,4 @@
-#ifndef _LOG_WRITER_H_
-#define _LOG_WRITER_H_
+#pragma once
 
 #include <stdarg.h>
 
@@ -9,4 +8,3 @@ class LogWriter {
     virtual void writev(const char* fmt, va_list args) = 0;
 };
 
-#endif

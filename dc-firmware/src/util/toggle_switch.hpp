@@ -1,5 +1,4 @@
-#ifndef _TOGGLE_SWITCH_H_
-#define _TOGGLE_SWITCH_H_
+#pragma once
 #include <Arduino.h>
 #include <constants.hpp>
 
@@ -49,4 +48,3 @@ private:
     ToggleSwitch toggleSwitch1, toggleSwitch2, toggleSwitch3;
 };
 
-#endif

@@ -1,5 +1,4 @@
-#ifndef _MOVING_AVERAGE_H_
-#define _MOVING_AVERAGE_H_
+#pragma once
 
 #include <Arduino.h>
 
@@ -17,4 +16,3 @@ private:
     uint index = 0;
 };
 
-#endif

@@ -1,5 +1,4 @@
-#ifndef _ERROR_HANDLER_H_
-#define _ERROR_HANDLER_H_
+#pragma once
 #include <Arduino.h>
 
 #define ERR_TPS_IMPLAUSIBLE 0
@@ -28,4 +27,3 @@ class ErrorHandler {
 
 }  // namespace etc
 
-#endif

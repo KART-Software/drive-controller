@@ -1,5 +1,4 @@
-#ifndef _CONSTANTS_H_
-#define _CONSTANTS_H_
+#pragma once
 
 //////////////////////
 /// IST Controller ///
@@ -187,4 +186,3 @@
 #define BPS_CHECK_FLAG false
 #define BPSTPS_CHECK_FLAG false
 
-#endif

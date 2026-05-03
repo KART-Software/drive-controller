@@ -1,5 +1,4 @@
-#ifndef _COBS_H_
-#define _COBS_H_
+#pragma once
 
 #include <stddef.h>
 #include <stdint.h>
@@ -25,4 +24,3 @@ size_t decode(const uint8_t *src, size_t src_len, uint8_t *dst);
 
 } // namespace cobs
 
-#endif // _COBS_H_

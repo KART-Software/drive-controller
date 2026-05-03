@@ -1,5 +1,4 @@
-#ifndef _ADC_H_
-#define _ADC_H_
+#pragma once
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -64,4 +63,3 @@ class _adc {
 
 using Adc = _adc<2>;
 
-#endif  // _ADC_H_
