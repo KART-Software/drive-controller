@@ -1,5 +1,7 @@
 #include "error_handler.hpp"
 
+namespace etc {
+
 ErrorHandler::ErrorHandler()
     : errors({
           {ERR_TPS_IMPLAUSIBLE, false},
@@ -43,3 +45,5 @@ uint8_t ErrorHandler::errorsLength() const {
 bool ErrorHandler::raised(int8_t errID) {
     return errors[errID].raised;
 }
+
+}  // namespace etc

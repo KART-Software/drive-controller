@@ -11,6 +11,8 @@
 #define SENSOR_SAME_POSITION_THRESHOLD 10.0
 #define PLAUSIBLE_DURATION 500
 
+namespace etc {
+
 class PlausibilityValidator {
    public:
     PlausibilityValidator(const Apps& apps1,
@@ -18,7 +20,7 @@ class PlausibilityValidator {
                           const Ittr& ittr,
                           const Tps& tps1,
                           const Tps& tps2,
-                          const Target& target,
+                          const EtcTarget& target,
                           const Bps& bps);
     void initialize();
     bool isCurrentlyValid();
@@ -42,7 +44,7 @@ class PlausibilityValidator {
     const Apps &apps1, &apps2;
     const Ittr& ittr;
     const Tps &tps1, &tps2;
-    const Target& target;
+    const EtcTarget& target;
     const Bps& bps;
     bool isValidAllTime;
     unsigned long lastTpsPlausibleTime, lastAppsPlausibleTime, lastTps1CircuitValidTime, lastTps2CircuitValidTime,
@@ -60,5 +62,7 @@ class PlausibilityValidator {
     bool isBpsCircuitValid();
     bool isBpsTpsPlausible();
 };
+
+}  // namespace etc
 
 #endif

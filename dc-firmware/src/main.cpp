@@ -5,9 +5,8 @@
 #include "commands/command_router.hpp"
 #include "configurator.hpp"
 #include "constants.hpp"
-#include "error_handler.hpp"
-#include "motor_controller.hpp"
-#include "plausibility_validator.hpp"
+#include "etc/motor_controller.hpp"
+#include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "serial/serial_protocol.hpp"
 
@@ -17,14 +16,14 @@ IntervalTimer sensorSamplingTimer;
 CanBus canBus;
 SensorHub sensorHub;
 
-PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
+etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
                                             sensorHub.apps2(),
                                             sensorHub.ittr(),
                                             sensorHub.tps1(),
                                             sensorHub.tps2(),
                                             sensorHub.target(),
                                             sensorHub.bps());
-MotorController motorController(sensorHub.target(), sensorHub.tps1());
+etc::MotorController motorController(sensorHub.target(), sensorHub.tps1());
 Configurator configurator(sensorHub, motorController, plausibilityValidator);
 CommandRouter commandRouter;
 CommandController commandController(configurator, motorController, sensorHub.mut.target());

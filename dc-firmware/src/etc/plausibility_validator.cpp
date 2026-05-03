@@ -1,11 +1,13 @@
 #include "plausibility_validator.hpp"
 
+namespace etc {
+
 PlausibilityValidator::PlausibilityValidator(const Apps& apps1,
                                              const Apps& apps2,
                                              const Ittr& ittr,
                                              const Tps& tps1,
                                              const Tps& tps2,
-                                             const Target& target,
+                                             const EtcTarget& target,
                                              const Bps& bps)
     : apps1(apps1), apps2(apps2), ittr(ittr), tps1(tps1), tps2(tps2), target(target), bps(bps) {}
 
@@ -192,3 +194,5 @@ void PlausibilityValidator::setCheckFlags(bool apps,
     bpsCheckFlag = bps;
     bpsTpsCheckFlag = bpsTps;
 }
+
+}  // namespace etc

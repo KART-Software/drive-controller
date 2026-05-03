@@ -13,6 +13,8 @@
 #define ERR_BPS_CIRCUIT_FAILURE 7
 #define ERR_BPS_TPS_IMPLAUSIBLE 8
 
+namespace etc {
+
 struct Error {
     const uint8_t ID;
     bool raised;
@@ -33,5 +35,7 @@ class ErrorHandler {
     uint8_t _length = 0;
     void initError(int8_t errID);
 };
+
+}  // namespace etc
 
 #endif

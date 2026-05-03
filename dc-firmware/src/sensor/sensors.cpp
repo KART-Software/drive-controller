@@ -101,17 +101,17 @@ bool Bps::isHighPressure() const {
     return convertedValue() > highPressureThreshold;
 }
 
-Target::Target(Apps& apps, Ittr& ittr) : apps(apps), ittr(ittr) {}
+EtcTarget::EtcTarget(Apps& apps, Ittr& ittr) : apps(apps), ittr(ittr) {}
 
-bool Target::isIttr() const {
+bool EtcTarget::isIttr() const {
     return _isIttr;
 }
 
-void Target::setIttr(bool isIttr) {
+void EtcTarget::setIttr(bool isIttr) {
     _isIttr = isIttr;
 }
 
-double Target::getTarget() const {
+double EtcTarget::getTarget() const {
     if (_isManual) {
         return manualTarget;
     }
@@ -127,37 +127,37 @@ double Target::getTarget() const {
     return minValue + y * (maxValue - minValue) / 100.0;  // TODO change
 }
 
-void Target::setModeCalibration() {
+void EtcTarget::setModeCalibration() {
     mode = Mode::Calibration;
     minValue = tpsMinValue;
     maxValue = tpsMaxValue;
 }
 
-void Target::setModeNormal() {
+void EtcTarget::setModeNormal() {
     mode = Mode::Normal;
     minValue = idlingValue;
     maxValue = normalMaxValue;
 }
 
-void Target::setModeRestricted() {
+void EtcTarget::setModeRestricted() {
     mode = Mode::Restricted;
     minValue = idlingValue;
     maxValue = restrictedMaxValue;
 }
 
-void Target::setIdlingValue(double val) {
+void EtcTarget::setIdlingValue(double val) {
     idlingValue = val;
 }
 
-void Target::setNormalMaxValue(double val) {
+void EtcTarget::setNormalMaxValue(double val) {
     normalMaxValue = val;
 }
 
-void Target::setRestrictedMaxValue(double val) {
+void EtcTarget::setRestrictedMaxValue(double val) {
     restrictedMaxValue = val;
 }
 
-uint16_t Target::getSensorRawValue() const {
+uint16_t EtcTarget::getSensorRawValue() const {
     if (_isIttr) {
         return ittr.getRawValue();
     } else {
@@ -165,7 +165,7 @@ uint16_t Target::getSensorRawValue() const {
     }
 }
 
-double Target::getSensorValue() const {
+double EtcTarget::getSensorValue() const {
     if (_isIttr) {
         return ittr.convertedValue();
     } else {
@@ -173,20 +173,20 @@ double Target::getSensorValue() const {
     }
 }
 
-const char* Target::getModeString() const {
+const char* EtcTarget::getModeString() const {
     switch (mode) {
-        case Target::Mode::Calibration:
+        case EtcTarget::Mode::Calibration:
             return "Calib";
-        case Target::Mode::Normal:
+        case EtcTarget::Mode::Normal:
             return "Normal";
-        case Target::Mode::Restricted:
+        case EtcTarget::Mode::Restricted:
             return "Restrict";
         default:
             return "";
     }
 }
 
-bool Target::setManual() {
+bool EtcTarget::setManual() {
     if (!_isManual) {
         manualTarget = ((int)(getTarget() * 10.0)) * 0.1;  // xx.x の値に丸める
     }
@@ -194,11 +194,11 @@ bool Target::setManual() {
     return _isManual;
 }
 
-bool Target::isManual() const {
+bool EtcTarget::isManual() const {
     return _isManual;
 }
 
-double Target::manualAdjust(double amount) {
+double EtcTarget::manualAdjust(double amount) {
     manualTarget += amount;
     if (manualTarget < MANUAL_MIN)
         manualTarget = MANUAL_MIN;
@@ -207,7 +207,7 @@ double Target::manualAdjust(double amount) {
     return manualTarget;
 }
 
-void Target::setTargetCurve(const TargetCurve& curve) {
+void EtcTarget::setTargetCurve(const TargetCurve& curve) {
     ca4 = curve.a4;
     ca3 = curve.a3;
     ca2 = curve.a2;

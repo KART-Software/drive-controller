@@ -1,5 +1,7 @@
 #include "dcmotor.hpp"
 
+namespace etc {
+
 DcMotor::DcMotor() {}
 
 #ifdef HILITAND
@@ -292,3 +294,4 @@ void DcMotor::pwmSetUp()
 }
 
 #endif
+}  // namespace etc

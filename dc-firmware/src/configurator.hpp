@@ -2,15 +2,15 @@
 #define _CONFIGURATOR_H_
 
 #include "config_model.hpp"
+#include "etc/motor_controller.hpp"
+#include "etc/plausibility_validator.hpp"
 #include "flash.hpp"
-#include "motor_controller.hpp"
-#include "plausibility_validator.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
 
 class Configurator {
    public:
-    Configurator(SensorHub& hub, MotorController& motorController, PlausibilityValidator& plausibilityValidator);
+    Configurator(SensorHub& hub, etc::MotorController& motorController, etc::PlausibilityValidator& plausibilityValidator);
     void initialize();
     void calibrateFromFlash();
     void getConfigJson(JsonObject& out);
@@ -35,9 +35,9 @@ class Configurator {
     Apps &apps1, &apps2;
     Tps &tps1, &tps2;
     Ittr& ittr;
-    Target& target;
-    MotorController& motorController;
-    PlausibilityValidator& plausibilityValidator;
+    EtcTarget& target;
+    etc::MotorController& motorController;
+    etc::PlausibilityValidator& plausibilityValidator;
     bool configChanged = false;
     void loadConfigFromFlash();
     void calibrate();

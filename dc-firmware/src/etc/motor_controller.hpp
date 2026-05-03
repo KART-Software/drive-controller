@@ -2,12 +2,14 @@
 #define _MOTOR_CONTROLLER_H_
 
 #include "dcmotor.hpp"
-#include "pid.hpp"
+#include "util/pid.hpp"
 #include "sensor/sensors.hpp"
+
+namespace etc {
 
 class MotorController {
    public:
-    MotorController(const Target& target, const Tps& tps);
+    MotorController(const EtcTarget& target, const Tps& tps);
     void initialize();
     void cycle();
     void setMotorOn();
@@ -18,10 +20,12 @@ class MotorController {
    private:
     DcMotor dcMotor = DcMotor();
     PID pid = PID();
-    const Target& target;
+    const EtcTarget& target;
     const Tps& tps;
     const unsigned long cycleTime = MOTOR_CONTROLL_CYCLE_TIME;
     double output;
 };
+
+}  // namespace etc
 
 #endif

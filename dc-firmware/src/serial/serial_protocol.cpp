@@ -13,7 +13,7 @@ namespace {
 uint8_t rxBuf[DC_MAX_FRAME];
 size_t rxLen = 0;
 
-dc_EtcMode targetModeToProto(const Target& t) {
+dc_EtcMode targetModeToProto(const EtcTarget& t) {
     const char* s = t.getModeString();
     if (strcmp(s, "Calib") == 0)
         return dc_EtcMode_ETC_MODE_CALIB;
@@ -136,7 +136,7 @@ void SerialProtocol::initialize() {
     }
 }
 
-void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const ErrorHandler& errorHandler) {
+void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_sensor_tag;
     dc_State& st = env.payload.sensor;

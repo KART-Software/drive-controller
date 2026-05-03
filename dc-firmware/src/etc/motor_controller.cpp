@@ -1,6 +1,8 @@
 #include "motor_controller.hpp"
 
-MotorController::MotorController(const Target& target, const Tps& tps) : target(target), tps(tps) {}
+namespace etc {
+
+MotorController::MotorController(const EtcTarget& target, const Tps& tps) : target(target), tps(tps) {}
 
 void MotorController::initialize() {
     dcMotor.initialize();
@@ -28,3 +30,5 @@ bool MotorController::isOn() {
 void MotorController::setPidGains(double kP, double kI, double kD) {
     pid.setGains(kP, kI, kD);
 }
+
+}  // namespace etc

@@ -2,8 +2,8 @@
 #include "serial/serial_protocol.hpp"
 
 Configurator::Configurator(SensorHub& hub,
-                           MotorController& motorController,
-                           PlausibilityValidator& plausibilityValidator)
+                           etc::MotorController& motorController,
+                           etc::PlausibilityValidator& plausibilityValidator)
     : apps1(hub.mut.apps1()),
       apps2(hub.mut.apps2()),
       tps1(hub.mut.tps1()),

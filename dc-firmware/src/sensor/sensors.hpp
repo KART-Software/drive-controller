@@ -5,7 +5,7 @@
 
 #include "config_model.hpp"
 #include "constants.hpp"
-#include "moving_average.hpp"
+#include "util/moving_average.hpp"
 
 #define MANUAL_MIN -10
 #define MANUAL_MAX 110
@@ -83,9 +83,9 @@ class Bps : public Sensor {
     const double highPressureThreshold;
 };
 
-class Target {
+class EtcTarget {
    public:
-    Target(Apps& apps, Ittr& ittr);
+    EtcTarget(Apps& apps, Ittr& ittr);
     double getTarget() const;
     void setModeCalibration();
     void setModeNormal();

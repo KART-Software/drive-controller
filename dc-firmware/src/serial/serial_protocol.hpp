@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#include "error_handler.hpp"
+#include "etc/error_handler.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
 
@@ -21,7 +21,7 @@ class SerialProtocol {
     static void initialize();
 
     // Sensor data (50 Hz).
-    static void sendSensorData(const SensorHub& hub, bool isValid, const ErrorHandler& errorHandler);
+    static void sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler);
 
     // Debug log message.
     static void sendDebugf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));

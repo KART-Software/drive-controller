@@ -39,6 +39,8 @@
 #define PWM_DUTY_MAX 1024
 #endif
 
+namespace etc {
+
 class DcMotor
 {
 public:
@@ -90,5 +92,7 @@ private:
     void pwmSetUp();
     bool _isOn = false;
 };
+
+}  // namespace etc
 
 #endif

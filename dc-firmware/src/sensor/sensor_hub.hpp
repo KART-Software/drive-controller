@@ -20,7 +20,7 @@ class SensorHub {
     const Tps& tps2() const { return tps2_; }
     const Ittr& ittr() const { return ittr_; }
     const Bps& bps() const { return bps_; }
-    const Target& target() const { return target_; }
+    const EtcTarget& target() const { return target_; }
     const Imu* imu() const { return imu_; }
     float wheelSpeedFL() const { return pulseWheelFL_.getFrequencyHz(); }
     float wheelSpeedFR() const { return pulseWheelFR_.getFrequencyHz(); }
@@ -38,7 +38,7 @@ class SensorHub {
         Tps& tps2() { return hub.tps2_; }
         Ittr& ittr() { return hub.ittr_; }
         Bps& bps() { return hub.bps_; }
-        Target& target() { return hub.target_; }
+        EtcTarget& target() { return hub.target_; }
     } mut{*this};
 
    private:
@@ -49,7 +49,7 @@ class SensorHub {
     Tps tps2_{TPS_2_RAW_MIN, TPS_2_RAW_MAX};
     Ittr ittr_;
     Bps bps_;
-    Target target_{apps1_, ittr_};
+    EtcTarget target_{apps1_, ittr_};
 
     Icm45686 imu_impl_{IMU_CS_PIN};
     Imu* imu_ = &imu_impl_;
