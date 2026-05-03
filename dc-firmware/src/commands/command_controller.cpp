@@ -184,7 +184,9 @@ void revert(void* ctx, const dc_Command& cmd) {
 
 }  // namespace
 
-CommandController::CommandController(Configurator& configurator, etc::MotorController& motorController, EtcTarget& target)
+CommandController::CommandController(Configurator& configurator,
+                                     etc::MotorController& motorController,
+                                     EtcTarget& target)
     : container{configurator, motorController, target} {}
 
 void CommandController::registerCommands(CommandRouter& router) {

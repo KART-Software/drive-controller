@@ -2,8 +2,8 @@
 #define _MOTOR_CONTROLLER_H_
 
 #include "dcmotor.hpp"
-#include "util/pid.hpp"
 #include "sensor/sensors.hpp"
+#include "util/pid.hpp"
 
 namespace etc {
 

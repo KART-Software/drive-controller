@@ -41,9 +41,8 @@
 
 namespace etc {
 
-class DcMotor
-{
-public:
+class DcMotor {
+   public:
     DcMotor();
     void initialize();
     void write(double value);
@@ -51,7 +50,7 @@ public:
     void off();
     bool isOn();
 
-private:
+   private:
 #ifdef HILITAND
     const uint8_t enablePin = DC_MOTOR_ENABLE_PIN;
     const uint8_t pwmPin1 = DC_MOTOR_PWM_1_PIN;

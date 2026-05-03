@@ -10,7 +10,9 @@
 
 class Configurator {
    public:
-    Configurator(SensorHub& hub, etc::MotorController& motorController, etc::PlausibilityValidator& plausibilityValidator);
+    Configurator(SensorHub& hub,
+                 etc::MotorController& motorController,
+                 etc::PlausibilityValidator& plausibilityValidator);
     void initialize();
     void calibrateFromFlash();
     void getConfigJson(JsonObject& out);

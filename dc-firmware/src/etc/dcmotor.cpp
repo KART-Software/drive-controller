@@ -6,52 +6,43 @@ DcMotor::DcMotor() {}
 
 #ifdef HILITAND
 
-void DcMotor::initialize()
-{
+void DcMotor::initialize() {
     pinMode(enablePin, OUTPUT);
     digitalWrite(enablePin, LOW);
     pwmSetUp();
 }
 
-void DcMotor::write(double value)
-{
+void DcMotor::write(double value) {
     uint16_t duty1, duty2;
-    if (value > 0)
-    {
+    if (value > 0) {
         duty1 = min(outputMax, outputMax * abs(value) / scaleMax);
         duty2 = 0;
-    }
-    else
-    {
+    } else {
         duty1 = 0;
         duty2 = min(outputMax, outputMax * abs(value) / scaleMax);
     }
     write(duty1, duty2);
 }
 
-void DcMotor::write(uint16_t duty1, uint16_t duty2)
-{
+void DcMotor::write(uint16_t duty1, uint16_t duty2) {
     if (!_isOn)
         return;
     analogWrite(pwmPin1, duty1);
     analogWrite(pwmPin2, duty2);
 }
 
-void DcMotor::on()
-{
+void DcMotor::on() {
     digitalWrite(enablePin, HIGH);
     _isOn = true;
 }
 
-void DcMotor::off()
-{
+void DcMotor::off() {
     write(0, 0);
     digitalWrite(enablePin, LOW);
     _isOn = false;
 }
 
-void DcMotor::pwmSetUp()
-{
+void DcMotor::pwmSetUp() {
     pinMode(pwmPin1, OUTPUT);
     digitalWrite(pwmPin1, LOW);
     pinMode(pwmPin2, OUTPUT);
@@ -64,8 +55,7 @@ void DcMotor::pwmSetUp()
 #endif
 
 #ifdef VNH5019
-void DcMotor::initialize()
-{
+void DcMotor::initialize() {
     pinMode(inAPin, OUTPUT);
     pinMode(inBPin, OUTPUT);
     digitalWrite(inAPin, LOW);
@@ -73,20 +63,15 @@ void DcMotor::initialize()
     pwmSetUp();
 }
 
-void DcMotor::write(double value)
-{
-    if (value > 0)
-    {
+void DcMotor::write(double value) {
+    if (value > 0) {
         write(min(outputMax, outputMax * abs(value) / scaleMax), HIGH, LOW);
-    }
-    else
-    {
+    } else {
         write(min(outputMax, outputMax * abs(value) / scaleMax), LOW, HIGH);
     }
 }
 
-void DcMotor::write(uint16_t duty, uint8_t inAState, uint8_t inBState)
-{
+void DcMotor::write(uint16_t duty, uint8_t inAState, uint8_t inBState) {
     if (!_isOn)
         return;
     analogWrite(pwmPin, duty);
@@ -94,19 +79,16 @@ void DcMotor::write(uint16_t duty, uint8_t inAState, uint8_t inBState)
     digitalWrite(inBPin, inBState);
 }
 
-void DcMotor::on()
-{
+void DcMotor::on() {
     _isOn = true;
 }
 
-void DcMotor::off()
-{
+void DcMotor::off() {
     write(0, LOW, LOW);
     _isOn = false;
 }
 
-void DcMotor::pwmSetUp()
-{
+void DcMotor::pwmSetUp() {
     pinMode(pwmPin, OUTPUT);
     digitalWrite(pwmPin, LOW);
     analogWriteFrequency(pwmPin, PWM_FREQUENCY);
@@ -116,8 +98,7 @@ void DcMotor::pwmSetUp()
 #endif
 
 #ifdef G2_18V17
-void DcMotor::initialize()
-{
+void DcMotor::initialize() {
     pinMode(relayPin, OUTPUT);
     digitalWrite(relayPin, LOW);
     pinMode(dirPin, OUTPUT);
@@ -126,36 +107,31 @@ void DcMotor::initialize()
     pwmSetUp();
 }
 
-void DcMotor::write(double value)
-{
+void DcMotor::write(double value) {
     write(min(outputMax, outputMax * abs(value) / scaleMax), value < 0);
 }
 
-void DcMotor::write(uint16_t duty, uint8_t forward)
-{
+void DcMotor::write(uint16_t duty, uint8_t forward) {
     if (!_isOn)
         return;
     analogWrite(pwmPin, duty);
     digitalWrite(dirPin, forward);
 }
 
-void DcMotor::on()
-{
+void DcMotor::on() {
     digitalWrite(relayPin, HIGH);
     digitalWrite(slpPin, HIGH);
     _isOn = true;
 }
 
-void DcMotor::off()
-{
+void DcMotor::off() {
     write(0, LOW);
     digitalWrite(relayPin, LOW);
     digitalWrite(slpPin, LOW);
     _isOn = false;
 }
 
-void DcMotor::pwmSetUp()
-{
+void DcMotor::pwmSetUp() {
     pinMode(pwmPin, OUTPUT);
     digitalWrite(pwmPin, LOW);
     analogWriteFrequency(pwmPin, PWM_FREQUENCY);
@@ -164,20 +140,17 @@ void DcMotor::pwmSetUp()
 
 #endif
 
-bool DcMotor::isOn()
-{
+bool DcMotor::isOn() {
     return _isOn;
 }
 
-double DcMotor::min(double a, double b)
-{
+double DcMotor::min(double a, double b) {
     return ((a) < (b) ? (a) : (b));
 }
 
 #ifdef DRV8256P
 
-void DcMotor::initialize()
-{
+void DcMotor::initialize() {
     pinMode(relayPin, OUTPUT);
     digitalWrite(relayPin, LOW);
     pinMode(slpPin, OUTPUT);
@@ -185,47 +158,39 @@ void DcMotor::initialize()
     pwmSetUp();
 }
 
-void DcMotor::write(double value)
-{
+void DcMotor::write(double value) {
     uint16_t duty1, duty2;
-    if (value > 0)
-    {
+    if (value > 0) {
         duty1 = min(outputMax, outputMax * abs(value) / scaleMax);
         duty2 = 0;
-    }
-    else
-    {
+    } else {
         duty1 = 0;
         duty2 = min(outputMax, outputMax * abs(value) / scaleMax);
     }
     write(duty1, duty2);
 }
 
-void DcMotor::write(uint16_t duty1, uint16_t duty2)
-{
+void DcMotor::write(uint16_t duty1, uint16_t duty2) {
     if (!_isOn)
         return;
     analogWrite(pwmPin1, duty1);
     analogWrite(pwmPin2, duty2);
 }
 
-void DcMotor::on()
-{
+void DcMotor::on() {
     digitalWrite(relayPin, HIGH);
     digitalWrite(slpPin, HIGH);
     _isOn = true;
 }
 
-void DcMotor::off()
-{
+void DcMotor::off() {
     write(0, 0);
     digitalWrite(relayPin, LOW);
     digitalWrite(slpPin, LOW);
     _isOn = false;
 }
 
-void DcMotor::pwmSetUp()
-{
+void DcMotor::pwmSetUp() {
     pinMode(pwmPin1, OUTPUT);
     digitalWrite(pwmPin1, LOW);
     pinMode(pwmPin2, OUTPUT);
@@ -238,52 +203,43 @@ void DcMotor::pwmSetUp()
 #endif
 
 #ifdef TB67H450
-void DcMotor::initialize()
-{
+void DcMotor::initialize() {
     pinMode(relayPin, OUTPUT);
     digitalWrite(relayPin, LOW);
     pwmSetUp();
 }
 
-void DcMotor::write(double value)
-{
+void DcMotor::write(double value) {
     uint16_t duty1, duty2;
-    if (value > 0)
-    {
+    if (value > 0) {
         duty1 = min(outputMax, outputMax * abs(value) / scaleMax);
         duty2 = 0;
-    }
-    else
-    {
+    } else {
         duty1 = 0;
         duty2 = min(outputMax, outputMax * abs(value) / scaleMax);
     }
     write(duty1, duty2);
 }
 
-void DcMotor::write(uint16_t duty1, uint16_t duty2)
-{
+void DcMotor::write(uint16_t duty1, uint16_t duty2) {
     if (!_isOn)
         return;
     analogWrite(pwmPin1, duty1);
     analogWrite(pwmPin2, duty2);
 }
 
-void DcMotor::on()
-{
+void DcMotor::on() {
     digitalWrite(relayPin, HIGH);
     _isOn = true;
 }
 
-void DcMotor::off()
-{
+void DcMotor::off() {
     write(0, 0);
     digitalWrite(relayPin, LOW);
     _isOn = false;
 }
 
-void DcMotor::pwmSetUp()
-{
+void DcMotor::pwmSetUp() {
     pinMode(pwmPin1, OUTPUT);
     digitalWrite(pwmPin1, LOW);
     pinMode(pwmPin2, OUTPUT);

@@ -17,12 +17,12 @@ CanBus canBus;
 SensorHub sensorHub;
 
 etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
-                                            sensorHub.apps2(),
-                                            sensorHub.ittr(),
-                                            sensorHub.tps1(),
-                                            sensorHub.tps2(),
-                                            sensorHub.target(),
-                                            sensorHub.bps());
+                                                 sensorHub.apps2(),
+                                                 sensorHub.ittr(),
+                                                 sensorHub.tps1(),
+                                                 sensorHub.tps2(),
+                                                 sensorHub.target(),
+                                                 sensorHub.bps());
 etc::MotorController motorController(sensorHub.target(), sensorHub.tps1());
 Configurator configurator(sensorHub, motorController, plausibilityValidator);
 CommandRouter commandRouter;
