@@ -202,18 +202,22 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     sendDeviceMessage(env);
 }
 
-void SerialProtocol::sendDebugf(const char* fmt, ...) {
+void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_debug_tag;
     dc_DebugMessage& d = env.payload.debug;
     d.timestamp = millis();
 
-    va_list args;
-    va_start(args, fmt);
     vsnprintf(d.msg, sizeof(d.msg), fmt, args);
-    va_end(args);
 
     sendDeviceMessage(env);
+}
+
+void SerialProtocol::sendDebugf(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    sendDebugv(fmt, args);
+    va_end(args);
 }
 
 void SerialProtocol::sendResponse(uint32_t id, bool ok) {

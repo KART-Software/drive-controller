@@ -25,6 +25,7 @@ class SerialProtocol {
 
     // Debug log message.
     static void sendDebugf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+    static void sendDebugv(const char* fmt, va_list args);
 
     // Response without payload data.
     static void sendResponse(uint32_t id, bool ok);

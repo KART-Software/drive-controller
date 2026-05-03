@@ -8,7 +8,9 @@
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
+#include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
+#include "util/log/debug_logger.hpp"
 
 IntervalTimer motorControlTimer;
 IntervalTimer sensorSamplingTimer;
@@ -40,6 +42,9 @@ void sensorSamplingISR() {
 
 void setup() {
     SerialProtocol::initialize();
+
+    static SerialDebugWriter serialDebugWriter;
+    DebugLogger::addWriter(&serialDebugWriter);
 
     pinMode(FUEL_PUMP_PIN, OUTPUT);
     digitalWrite(FUEL_PUMP_PIN, HIGH);

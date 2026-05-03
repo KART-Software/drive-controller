@@ -4,9 +4,9 @@
 #include "config_model.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
-#include "flash.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
+#include "util/flash.hpp"
 
 class Configurator {
    public:
