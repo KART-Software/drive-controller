@@ -1,6 +1,8 @@
 #include "command_controller.hpp"
 #include "serial/serial_protocol.hpp"
 
+#include <TimeLib.h>
+
 namespace {
 
 void sendConfigResponse(CommandContainer* c, uint32_t id, bool ok) {
@@ -182,6 +184,14 @@ void revert(void* ctx, const dc_Command& cmd) {
     sendConfigResponse(c, cmd.id, true);
 }
 
+void setRtc(void* ctx, const dc_Command& cmd) {
+    (void)ctx;
+    uint32_t epoch = cmd.body.set_rtc.epoch;
+    Teensy3Clock.set(epoch);
+    setTime(epoch);
+    SerialProtocol::sendResponse(cmd.id, true);
+}
+
 }  // namespace
 
 CommandController::CommandController(Configurator& configurator,
@@ -208,4 +218,5 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_set_config_tag, setConfig, &container);
     router.on(dc_Command_reboot_tag, reboot, nullptr);
     router.on(dc_Command_revert_tag, revert, &container);
+    router.on(dc_Command_set_rtc_tag, setRtc, nullptr);
 }

@@ -283,6 +283,10 @@ message SetConfigCmd {
   Config config = 1;
 }
 
+message SetRtcCmd {
+  uint32 epoch = 1;  // Unix timestamp (seconds since 1970-01-01)
+}
+
 message Command {
   uint32 id = 1;
   oneof body {
@@ -304,6 +308,7 @@ message Command {
     SaveCmd                    save                   = 25;
     RebootCmd                  reboot                 = 26;
     RevertCmd                  revert                 = 27;
+    SetRtcCmd                  set_rtc                = 28;
   }
 }
 
