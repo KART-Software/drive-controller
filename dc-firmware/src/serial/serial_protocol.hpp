@@ -41,9 +41,9 @@ class SerialProtocol {
     static void sendResponseWithFlags(uint32_t id, bool ok, const dc_EtcPlausibilityCheckFlags& p);
     static void sendResponseWithPid(uint32_t id, bool ok, const dc_EtcPid& p);
     static void sendResponseWithCurve(uint32_t id, bool ok, const dc_EtcTargetCurve& p);
+    static void sendResponseWithGpsGear(uint32_t id, bool ok, const dc_GpsGearResponse& p);
 
     // Drain Serial input, decoding any complete frames. If a Command was
     // decoded this call, copies it into `out` and returns true.
     static bool readCommand(dc_Command& out);
 };
-

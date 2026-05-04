@@ -1,5 +1,7 @@
 #include "sensors.hpp"
 
+#include <string.h>
+
 Sensor::Sensor(uint16_t rawMinValue, uint16_t rawMaxValue, double minValue, double maxValue, double margin)
     : rawMinValue(rawMinValue), rawMaxValue(rawMaxValue), minValue(minValue), maxValue(maxValue), margin(margin) {
     setConversion(minValue, maxValue);
@@ -99,6 +101,53 @@ Bps::Bps(uint16_t rawMinValue,
 
 bool Bps::isHighPressure() const {
     return convertedValue() > highPressureThreshold;
+}
+
+// ── GearPositionSensor ──
+
+ClutchSensor::ClutchSensor(uint16_t rawMinValue, uint16_t rawMaxValue, double minValue, double maxValue, double margin)
+    : Sensor(rawMinValue, rawMaxValue, minValue, maxValue, margin) {}
+
+void GearPositionSensor::update(uint16_t raw) {
+    rawValue_ = raw;
+    mvgAvg_.add(raw);
+}
+
+int8_t GearPositionSensor::getGear() const {
+    if (gearCount_ == 0)
+        return -1;
+    uint16_t avg = (uint16_t)mvgAvg_.getAvg();
+    int8_t best = -1;
+    uint32_t bestDist = UINT32_MAX;
+    for (uint8_t i = 0; i < gearCount_; i++) {
+        uint32_t dist = (avg > rawValues_[i]) ? (avg - rawValues_[i]) : (rawValues_[i] - avg);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = gears_[i];
+        }
+    }
+    return (bestDist <= GPS_TOLERANCE) ? best : -1;
+}
+
+uint16_t GearPositionSensor::getRawValue() const {
+    return rawValue_;
+}
+
+void GearPositionSensor::setTable(uint8_t count, const int8_t gears[], const uint16_t rawValues[]) {
+    gearCount_ = (count > GPS_MAX_GEARS) ? GPS_MAX_GEARS : count;
+    memcpy(gears_, gears, gearCount_ * sizeof(int8_t));
+    memcpy(rawValues_, rawValues, gearCount_ * sizeof(uint16_t));
+}
+
+uint16_t GearPositionSensor::setCurrentAsGear(int8_t gear) {
+    uint16_t avg = (uint16_t)mvgAvg_.getAvg();
+    for (uint8_t i = 0; i < gearCount_; i++) {
+        if (gears_[i] == gear) {
+            rawValues_[i] = avg;
+            return avg;
+        }
+    }
+    return avg;
 }
 
 EtcTarget::EtcTarget(Apps& apps, Ittr& ittr) : apps(apps), ittr(ittr) {}

@@ -28,6 +28,7 @@ class Configurator {
     void setIttrFlag(bool val);
     void setPid(double kP, double kI, double kD);
     void setTargetCurve(const TargetCurve& curve);
+    void setGpsGear(int8_t gear);
     bool importConfig(const dc_Config& cfg);
     void save();
     void revert();
@@ -37,10 +38,11 @@ class Configurator {
     Tps &tps1, &tps2;
     Ittr& ittr;
     EtcTarget& target;
+    GearPositionSensor& gps;
+    ClutchSensor& clutch;
     etc::MotorController& motorController;
     etc::PlausibilityValidator& plausibilityValidator;
     bool configChanged = false;
     void loadConfigFromFlash();
     void calibrate();
 };
-

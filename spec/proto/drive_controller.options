@@ -1,4 +1,7 @@
 # nanopb size options for drive_controller.proto
 # Strings and repeated fields require explicit max sizes for static allocation.
 
-dc.DebugMessage.msg          max_size:192
+dc.DebugMessage.msg              max_size:192
+
+dc.GpsGearResponse.raw_values    max_count:7
+dc.GpsGearResponse.gears         max_count:7

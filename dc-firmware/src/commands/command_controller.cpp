@@ -192,6 +192,33 @@ void setRtc(void* ctx, const dc_Command& cmd) {
     SerialProtocol::sendResponse(cmd.id, true);
 }
 
+void setGpsGear(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    int8_t gear = (int8_t)cmd.body.set_gps_gear.gear;
+    c->configurator.setGpsGear(gear);
+    dc_GpsGearResponse p = dc_GpsGearResponse_init_zero;
+    p.gear = gear;
+    const auto& gpsConfig = c->configurator.config.gps;
+    if (gpsConfig.type == TransmissionType::IST) {
+        const int8_t gearsArr[] = GPS_IST_GEARS;
+        p.raw_values_count = GPS_IST_GEAR_COUNT;
+        p.gears_count = GPS_IST_GEAR_COUNT;
+        for (uint8_t i = 0; i < GPS_IST_GEAR_COUNT; i++) {
+            p.raw_values[i] = gpsConfig.istRawValues[i];
+            p.gears[i] = gearsArr[i];
+        }
+    } else {
+        const int8_t gearsArr[] = GPS_NORMAL_GEARS;
+        p.raw_values_count = GPS_NORMAL_GEAR_COUNT;
+        p.gears_count = GPS_NORMAL_GEAR_COUNT;
+        for (uint8_t i = 0; i < GPS_NORMAL_GEAR_COUNT; i++) {
+            p.raw_values[i] = gpsConfig.normalRawValues[i];
+            p.gears[i] = gearsArr[i];
+        }
+    }
+    SerialProtocol::sendResponseWithGpsGear(cmd.id, true, p);
+}
+
 }  // namespace
 
 CommandController::CommandController(Configurator& configurator,
@@ -219,4 +246,5 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_reboot_tag, reboot, nullptr);
     router.on(dc_Command_revert_tag, revert, &container);
     router.on(dc_Command_set_rtc_tag, setRtc, nullptr);
+    router.on(dc_Command_set_gps_gear_tag, setGpsGear, &container);
 }

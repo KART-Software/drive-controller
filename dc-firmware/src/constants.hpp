@@ -1,10 +1,11 @@
 #pragma once
 
-//////////////////////
-/// IST Controller ///
-//////////////////////
+/////////////////////////////
+/// Default Feature Flags ///
+/////////////////////////////
 
-#define IST_CONTROLLER
+#define USE_ITTR true  // ITTR (IST Throttle Target Receiver) をデフォルトで使う
+#define USE_IST true   // GPS のデフォルト TransmissionType を IST にする
 
 ////////////////////
 /// ADC Settings ///
@@ -18,6 +19,8 @@
 #define ITTR_CH 2           // IST Throttle Position Target Receiver (ITTR)
 #define BPS_CH 3            // Brake Pressure Sensor
 #define MOTOR_CURRENT_CH 4  // Connected to motor driver's CS PIN.The voltage is about 20 mV/A plus a 50 mV offset.
+#define GPS_CH 8            // Gear Position Sensor (2nd ADS8688 CH0)
+#define CLUTCH_CH 9         // Clutch Position Sensor (2nd ADS8688 CH1)
 
 /////////////////////////
 /// Sampling Settings ///
@@ -130,6 +133,38 @@
 #define BPS_HIGH_PRESSURE_THRESHOLD 600  // psi
 #define BPS_MARGIN 50                    // psi
 
+///////////////////////////
+/// Clutch Sensor (CLS) ///
+///////////////////////////
+
+#define CLUTCH_RAW_MIN 5000
+#define CLUTCH_RAW_MAX 60000
+#define CLUTCH_MIN 0
+#define CLUTCH_MAX 100
+#define CLUTCH_MARGIN 5
+
+///////////////////////////////////
+/// Gear Position Sensor (GPS)  ///
+///////////////////////////////////
+
+#define GPS_TOLERANCE 2000  // raw 値の判定許容誤差
+
+// IST transmission: N, 1, 2, 3, 4 (5 positions)
+#define GPS_IST_GEAR_COUNT 5
+#define GPS_IST_GEARS \
+    { 0, 1, 2, 3, 4 }
+#define GPS_IST_RAW_DEFAULTS \
+    { 32768, 32768, 32768, 32768, 32768 }
+
+// Normal transmission: 1, N, 2, 3, 4, 5, 6 (7 positions)
+#define GPS_NORMAL_GEAR_COUNT 7
+#define GPS_NORMAL_GEARS \
+    { 1, 0, 2, 3, 4, 5, 6 }
+#define GPS_NORMAL_RAW_DEFAULTS \
+    { 32768, 32768, 32768, 32768, 32768, 32768, 32768 }
+
+#define GPS_MAX_GEARS 7  // max(IST=5, Normal=7)
+
 ///////////////////////
 /// Button Settings ///
 ///////////////////////
@@ -185,4 +220,3 @@
 #define TARGET_CHECK_FLAG false
 #define BPS_CHECK_FLAG false
 #define BPSTPS_CHECK_FLAG false
-

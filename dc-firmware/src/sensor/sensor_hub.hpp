@@ -20,6 +20,8 @@ class SensorHub {
     const Ittr& ittr() const { return ittr_; }
     const Bps& bps() const { return bps_; }
     const EtcTarget& target() const { return target_; }
+    const GearPositionSensor& gps() const { return gps_; }
+    const ClutchSensor& clutch() const { return clutch_; }
     const Imu* imu() const { return imu_; }
     float wheelSpeedFL() const { return pulseWheelFL_.getFrequencyHz(); }
     float wheelSpeedFR() const { return pulseWheelFR_.getFrequencyHz(); }
@@ -38,6 +40,8 @@ class SensorHub {
         Ittr& ittr() { return hub.ittr_; }
         Bps& bps() { return hub.bps_; }
         EtcTarget& target() { return hub.target_; }
+        GearPositionSensor& gps() { return hub.gps_; }
+        ClutchSensor& clutch() { return hub.clutch_; }
     } mut{*this};
 
    private:
@@ -49,6 +53,8 @@ class SensorHub {
     Ittr ittr_;
     Bps bps_;
     EtcTarget target_{apps1_, ittr_};
+    GearPositionSensor gps_;
+    ClutchSensor clutch_;
 
     Icm45686 imu_impl_{IMU_CS_PIN};
     Imu* imu_ = &imu_impl_;
@@ -59,4 +65,3 @@ class SensorHub {
     PulseCounter pulseWheelRR_{PULSE_WHEEL_RR_PIN};
     PulseCounter pulseEngine_{PULSE_ENGINE_PIN};
 };
-

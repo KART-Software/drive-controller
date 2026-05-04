@@ -134,6 +134,12 @@ message Sensor{
   uint32 wheel_count_rl = 28;
   uint32 wheel_count_rr = 29;
   uint32 rpm_count      = 30;
+
+  uint32 gps_raw = 31;  // Gear Position Sensor raw ADC value
+  sint32 gear    = 32;  // detected gear (-1=unknown, 0=N, 1-6)
+
+  uint32 clutch_raw = 33;  // Clutch Position Sensor raw ADC value
+  float  clutch     = 34;  // clutch position 0-100 (0=fully open, 100=fully closed)
 }
 
 message State {
@@ -186,6 +192,12 @@ message IttrResponse {
   bool use = 1;
 }
 
+message GpsGearResponse {
+  sint32          gear       = 1;  // which gear was just calibrated (0=N, 1-6), -1 if none
+  repeated uint32 raw_values = 2;  // all raw values for the active transmission
+  repeated sint32 gears      = 3;  // gear IDs corresponding to raw_values
+}
+
 message Response {
   uint32 id = 1;
   bool   ok = 2;
@@ -201,6 +213,7 @@ message Response {
     EtcPlausibilityCheckFlags plausibility_flags = 18;
     EtcPid                    pid                = 19;
     EtcTargetCurve            target_curve       = 20;
+    GpsGearResponse           gps_gear           = 21;
   }
 }
 
@@ -287,6 +300,10 @@ message SetRtcCmd {
   uint32 epoch = 1;  // Unix timestamp (seconds since 1970-01-01)
 }
 
+message SetGpsGearCmd {
+  sint32 gear = 1;  // which gear position to calibrate (0=N, 1-6)
+}
+
 message Command {
   uint32 id = 1;
   oneof body {
@@ -309,6 +326,7 @@ message Command {
     RebootCmd                  reboot                 = 26;
     RevertCmd                  revert                 = 27;
     SetRtcCmd                  set_rtc                = 28;
+    SetGpsGearCmd              set_gps_gear           = 29;
   }
 }
 

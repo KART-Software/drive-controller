@@ -183,6 +183,12 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     s.wheel_count_rr = 0;
     s.rpm_count = 0;
 
+    s.gps_raw = hub.gps().getRawValue();
+    s.gear = hub.gps().getGear();
+
+    s.clutch_raw = hub.clutch().getRawValue();
+    s.clutch = (float)hub.clutch().convertedValue();
+
     st.has_etc = true;
     dc_EtcState& e = st.etc;
     e.mode = targetModeToProto(hub.target());
@@ -245,6 +251,7 @@ DEFINE_RESP_HELPER(sendResponseWithFlags,
                    dc_EtcPlausibilityCheckFlags)
 DEFINE_RESP_HELPER(sendResponseWithPid, dc_Response_pid_tag, pid, dc_EtcPid)
 DEFINE_RESP_HELPER(sendResponseWithCurve, dc_Response_target_curve_tag, target_curve, dc_EtcTargetCurve)
+DEFINE_RESP_HELPER(sendResponseWithGpsGear, dc_Response_gps_gear_tag, gps_gear, dc_GpsGearResponse)
 
 #undef DEFINE_RESP_HELPER
 

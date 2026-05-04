@@ -18,6 +18,8 @@ void SensorHub::read() {
     tps1_.update(adc_.value[TPS_1_CH]);
     tps2_.update(adc_.value[TPS_2_CH]);
     bps_.update(adc_.value[BPS_CH]);
+    gps_.update(adc_.value[GPS_CH]);
+    clutch_.update(adc_.value[CLUTCH_CH]);
     imu_impl_.read();
 }
 

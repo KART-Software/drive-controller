@@ -1,7 +1,8 @@
 #include "config_model.hpp"
 
-void ConfigModel::loadFromConstants()
-{
+#include <string.h>
+
+void ConfigModel::loadFromConstants() {
     sensorValues.apps1Min = APPS_1_RAW_MIN;
     sensorValues.apps1Max = APPS_1_RAW_MAX;
     sensorValues.apps2Min = APPS_2_RAW_MIN;
@@ -12,6 +13,8 @@ void ConfigModel::loadFromConstants()
     sensorValues.tps1Max = TPS_1_RAW_MAX;
     sensorValues.tps2Min = TPS_2_RAW_MIN;
     sensorValues.tps2Max = TPS_2_RAW_MAX;
+    sensorValues.clutchMin = CLUTCH_RAW_MIN;
+    sensorValues.clutchMax = CLUTCH_RAW_MAX;
     sensorValues.idling = TARGET_IDLING;
     sensorValues.normalMax = TARGET_NORMAL_MAX;
     sensorValues.restrictedMax = TARGET_RESTRICTED_MAX;
@@ -26,11 +29,7 @@ void ConfigModel::loadFromConstants()
     plausibilityFlags.bps = BPS_CHECK_FLAG;
     plausibilityFlags.bpsTps = BPSTPS_CHECK_FLAG;
 
-#ifdef IST_CONTROLLER
-    useIttr = true;
-#else
-    useIttr = false;
-#endif
+    useIttr = USE_ITTR;
 
     pid.kP = KP;
     pid.kI = KI;
@@ -40,31 +39,32 @@ void ConfigModel::loadFromConstants()
     targetCurve.a3 = TARGET_CURVE_A3;
     targetCurve.a2 = TARGET_CURVE_A2;
     targetCurve.a1 = TARGET_CURVE_A1;
+
+    gps.type = USE_IST ? TransmissionType::IST : TransmissionType::Normal;
+    const uint16_t istDefaults[] = GPS_IST_RAW_DEFAULTS;
+    memcpy(gps.istRawValues, istDefaults, sizeof(gps.istRawValues));
+    const uint16_t normalDefaults[] = GPS_NORMAL_RAW_DEFAULTS;
+    memcpy(gps.normalRawValues, normalDefaults, sizeof(gps.normalRawValues));
 }
 
-bool ConfigModel::loadFromJson(const String &jsonStr)
-{
+bool ConfigModel::loadFromJson(const String& jsonStr) {
     StaticJsonDocument<CONFIG_JSON_SIZE> doc;
     DeserializationError error = deserializeJson(doc, jsonStr);
-    if (error)
-    {
+    if (error) {
         return false;
     }
 
     // sensorValues
-    if (!doc.containsKey("sensorValues"))
-    {
+    if (!doc.containsKey("sensorValues")) {
         return false;
     }
     JsonObject sv = doc["sensorValues"];
-    bool svOk = sv.containsKey("apps1Min") && sv.containsKey("apps1Max") &&
-                sv.containsKey("apps2Min") && sv.containsKey("apps2Max") &&
-                sv.containsKey("ittrMin") && sv.containsKey("ittrMax") &&
-                sv.containsKey("tps1Min") && sv.containsKey("tps1Max") &&
-                sv.containsKey("tps2Min") && sv.containsKey("tps2Max") &&
-                sv.containsKey("idling");
-    if (!svOk)
-    {
+    bool svOk = sv.containsKey("apps1Min") && sv.containsKey("apps1Max") && sv.containsKey("apps2Min") &&
+                sv.containsKey("apps2Max") && sv.containsKey("ittrMin") && sv.containsKey("ittrMax") &&
+                sv.containsKey("tps1Min") && sv.containsKey("tps1Max") && sv.containsKey("tps2Min") &&
+                sv.containsKey("tps2Max") && sv.containsKey("idling") && sv.containsKey("clutchMin") &&
+                sv.containsKey("clutchMax");
+    if (!svOk) {
         return false;
     }
     sensorValues.apps1Min = sv["apps1Min"];
@@ -77,23 +77,21 @@ bool ConfigModel::loadFromJson(const String &jsonStr)
     sensorValues.tps1Max = sv["tps1Max"];
     sensorValues.tps2Min = sv["tps2Min"];
     sensorValues.tps2Max = sv["tps2Max"];
+    sensorValues.clutchMin = sv["clutchMin"] | (uint16_t)CLUTCH_RAW_MIN;
+    sensorValues.clutchMax = sv["clutchMax"] | (uint16_t)CLUTCH_RAW_MAX;
     sensorValues.idling = sv["idling"];
     sensorValues.normalMax = sv["normalMax"] | (double)TARGET_NORMAL_MAX;
     sensorValues.restrictedMax = sv["restrictedMax"] | (double)TARGET_RESTRICTED_MAX;
 
     // plausibilityFlags
-    if (!doc.containsKey("plausibilityFlags"))
-    {
+    if (!doc.containsKey("plausibilityFlags")) {
         return false;
     }
     JsonObject pf = doc["plausibilityFlags"];
-    bool pfOk = pf.containsKey("apps") && pf.containsKey("tps") &&
-                pf.containsKey("apps1") && pf.containsKey("apps2") &&
-                pf.containsKey("tps1") && pf.containsKey("tps2") &&
-                pf.containsKey("target") && pf.containsKey("bps") &&
+    bool pfOk = pf.containsKey("apps") && pf.containsKey("tps") && pf.containsKey("apps1") && pf.containsKey("apps2") &&
+                pf.containsKey("tps1") && pf.containsKey("tps2") && pf.containsKey("target") && pf.containsKey("bps") &&
                 pf.containsKey("bpsTps");
-    if (!pfOk)
-    {
+    if (!pfOk) {
         return false;
     }
     plausibilityFlags.apps = pf["apps"];
@@ -107,49 +105,63 @@ bool ConfigModel::loadFromJson(const String &jsonStr)
     plausibilityFlags.bpsTps = pf["bpsTps"];
 
     // useIttr
-    if (!doc.containsKey("useIttr"))
-    {
+    if (!doc.containsKey("useIttr")) {
         return false;
     }
     useIttr = doc["useIttr"];
 
     // pid
-    if (doc.containsKey("pid"))
-    {
+    if (doc.containsKey("pid")) {
         JsonObject p = doc["pid"];
         pid.kP = p["kP"] | (double)KP;
         pid.kI = p["kI"] | (double)KI;
         pid.kD = p["kD"] | (double)KD;
-    }
-    else
-    {
+    } else {
         pid.kP = KP;
         pid.kI = KI;
         pid.kD = KD;
     }
 
     // targetCurve (optional)
-    if (doc.containsKey("targetCurve"))
-    {
+    if (doc.containsKey("targetCurve")) {
         JsonObject tc = doc["targetCurve"];
         targetCurve.a4 = tc["a4"] | (double)TARGET_CURVE_A4;
         targetCurve.a3 = tc["a3"] | (double)TARGET_CURVE_A3;
         targetCurve.a2 = tc["a2"] | (double)TARGET_CURVE_A2;
         targetCurve.a1 = tc["a1"] | (double)TARGET_CURVE_A1;
-    }
-    else
-    {
+    } else {
         targetCurve.a4 = TARGET_CURVE_A4;
         targetCurve.a3 = TARGET_CURVE_A3;
         targetCurve.a2 = TARGET_CURVE_A2;
         targetCurve.a1 = TARGET_CURVE_A1;
     }
 
+    // gps (optional)
+    if (doc.containsKey("gps")) {
+        JsonObject g = doc["gps"];
+        gps.type = (g["type"] | 0) == 1 ? TransmissionType::Normal : TransmissionType::IST;
+        if (g.containsKey("ist")) {
+            JsonArray arr = g["ist"];
+            for (size_t i = 0; i < GPS_IST_GEAR_COUNT && i < arr.size(); i++)
+                gps.istRawValues[i] = arr[i];
+        }
+        if (g.containsKey("normal")) {
+            JsonArray arr = g["normal"];
+            for (size_t i = 0; i < GPS_NORMAL_GEAR_COUNT && i < arr.size(); i++)
+                gps.normalRawValues[i] = arr[i];
+        }
+    } else {
+        gps.type = USE_IST ? TransmissionType::IST : TransmissionType::Normal;
+        const uint16_t istDefaults[] = GPS_IST_RAW_DEFAULTS;
+        memcpy(gps.istRawValues, istDefaults, sizeof(gps.istRawValues));
+        const uint16_t normalDefaults[] = GPS_NORMAL_RAW_DEFAULTS;
+        memcpy(gps.normalRawValues, normalDefaults, sizeof(gps.normalRawValues));
+    }
+
     return true;
 }
 
-void ConfigModel::toJson(JsonObject &out) const
-{
+void ConfigModel::toJson(JsonObject& out) const {
     JsonObject sv = out.createNestedObject("sensorValues");
     sv["apps1Min"] = sensorValues.apps1Min;
     sv["apps1Max"] = sensorValues.apps1Max;
@@ -161,6 +173,8 @@ void ConfigModel::toJson(JsonObject &out) const
     sv["tps1Max"] = sensorValues.tps1Max;
     sv["tps2Min"] = sensorValues.tps2Min;
     sv["tps2Max"] = sensorValues.tps2Max;
+    sv["clutchMin"] = sensorValues.clutchMin;
+    sv["clutchMax"] = sensorValues.clutchMax;
     sv["idling"] = sensorValues.idling;
     sv["normalMax"] = sensorValues.normalMax;
     sv["restrictedMax"] = sensorValues.restrictedMax;
@@ -188,4 +202,13 @@ void ConfigModel::toJson(JsonObject &out) const
     tc["a3"] = targetCurve.a3;
     tc["a2"] = targetCurve.a2;
     tc["a1"] = targetCurve.a1;
+
+    JsonObject g = out.createNestedObject("gps");
+    g["type"] = (uint8_t)gps.type;
+    JsonArray ist = g.createNestedArray("ist");
+    for (size_t i = 0; i < GPS_IST_GEAR_COUNT; i++)
+        ist.add(gps.istRawValues[i]);
+    JsonArray normal = g.createNestedArray("normal");
+    for (size_t i = 0; i < GPS_NORMAL_GEAR_COUNT; i++)
+        normal.add(gps.normalRawValues[i]);
 }

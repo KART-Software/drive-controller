@@ -10,6 +10,8 @@ Configurator::Configurator(SensorHub& hub,
       tps2(hub.mut.tps2()),
       ittr(hub.mut.ittr()),
       target(hub.mut.target()),
+      gps(hub.mut.gps()),
+      clutch(hub.mut.clutch()),
       motorController(motorController),
       plausibilityValidator(plausibilityValidator) {}
 
@@ -39,6 +41,18 @@ void Configurator::calibrate() {
     target.setIttr(config.useIttr);
     motorController.setPidGains(config.pid.kP, config.pid.kI, config.pid.kD);
     target.setTargetCurve(config.targetCurve);
+
+    clutch.setRawMin(config.sensorValues.clutchMin);
+    clutch.setRawMax(config.sensorValues.clutchMax);
+
+    // GPS: apply the active transmission table
+    if (config.gps.type == TransmissionType::IST) {
+        const int8_t gears[] = GPS_IST_GEARS;
+        gps.setTable(GPS_IST_GEAR_COUNT, gears, config.gps.istRawValues);
+    } else {
+        const int8_t gears[] = GPS_NORMAL_GEARS;
+        gps.setTable(GPS_NORMAL_GEAR_COUNT, gears, config.gps.normalRawValues);
+    }
 }
 
 void Configurator::loadConfigFromFlash() {
@@ -77,6 +91,29 @@ void Configurator::setPid(double kP, double kI, double kD) {
 void Configurator::setTargetCurve(const TargetCurve& curve) {
     config.targetCurve = curve;
     target.setTargetCurve(curve);
+    configChanged = true;
+}
+
+void Configurator::setGpsGear(int8_t gear) {
+    uint16_t raw = gps.setCurrentAsGear(gear);
+    // Store calibrated value into the active transmission table
+    if (config.gps.type == TransmissionType::IST) {
+        const int8_t gears[] = GPS_IST_GEARS;
+        for (uint8_t i = 0; i < GPS_IST_GEAR_COUNT; i++) {
+            if (gears[i] == gear) {
+                config.gps.istRawValues[i] = raw;
+                break;
+            }
+        }
+    } else {
+        const int8_t gears[] = GPS_NORMAL_GEARS;
+        for (uint8_t i = 0; i < GPS_NORMAL_GEAR_COUNT; i++) {
+            if (gears[i] == gear) {
+                config.gps.normalRawValues[i] = raw;
+                break;
+            }
+        }
+    }
     configChanged = true;
 }
 

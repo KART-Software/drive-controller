@@ -82,6 +82,31 @@ class Bps : public Sensor {
     const double highPressureThreshold;
 };
 
+class ClutchSensor : public Sensor {
+   public:
+    ClutchSensor(uint16_t rawMinValue = CLUTCH_RAW_MIN,
+                 uint16_t rawMaxValue = CLUTCH_RAW_MAX,
+                 double minValue = CLUTCH_MIN,
+                 double maxValue = CLUTCH_MAX,
+                 double margin = CLUTCH_MARGIN);
+};
+
+class GearPositionSensor {
+   public:
+    void update(uint16_t raw);
+    int8_t getGear() const;
+    uint16_t getRawValue() const;
+    void setTable(uint8_t count, const int8_t gears[], const uint16_t rawValues[]);
+    uint16_t setCurrentAsGear(int8_t gear);
+
+   private:
+    MovingAverage mvgAvg_ = MovingAverage(60);
+    uint16_t rawValue_ = 0;
+    uint8_t gearCount_ = 0;
+    int8_t gears_[GPS_MAX_GEARS] = {};
+    uint16_t rawValues_[GPS_MAX_GEARS] = {};
+};
+
 class EtcTarget {
    public:
     EtcTarget(Apps& apps, Ittr& ittr);
