@@ -1,11 +1,12 @@
 #pragma once
 
-#include "config_model.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
 #include "util/flash.hpp"
+
+#define CONFIG_FILE_NAME "/config.pb"
 
 class Configurator {
    public:
@@ -14,26 +15,24 @@ class Configurator {
                  etc::PlausibilityValidator& plausibilityValidator);
     void initialize();
     void calibrateFromFlash();
-    void getConfigJson(JsonObject& out);
-    // Fill a proto Config message reflecting the current configuration.
-    void getConfigProto(dc_Config& out);
 
     void setAppsMin();
     void setAppsMax();
     void setTpsMin();
     void setTpsMax();
     void setIdling();
-    void setTargetBound(double idling, double normalMax, double restrictedMax);
-    void setPlausibilityFlags(const PlausibilityCheckFlags& flags);
+    void setTargetBound(float idling, float normalMax, float restrictedMax);
+    void setPlausibilityFlags(const dc_EtcPlausibilityCheckFlags& flags);
     void setIttrFlag(bool val);
-    void setPid(double kP, double kI, double kD);
-    void setTargetCurve(const TargetCurve& curve);
+    void setPid(float kP, float kI, float kD);
+    void setTargetCurve(const dc_EtcTargetCurve& curve);
     void setGpsGear(int8_t gear);
     bool importConfig(const dc_Config& cfg);
     void save();
     void revert();
+
     Flash flash;
-    ConfigModel config;
+    dc_Config config = dc_Config_init_zero;
     Apps &apps1, &apps2;
     Tps &tps1, &tps2;
     Ittr& ittr;
@@ -43,6 +42,9 @@ class Configurator {
     etc::MotorController& motorController;
     etc::PlausibilityValidator& plausibilityValidator;
     bool configChanged = false;
+
+   private:
+    void loadFromConstants();
     void loadConfigFromFlash();
     void calibrate();
 };

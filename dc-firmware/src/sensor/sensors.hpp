@@ -2,12 +2,15 @@
 
 #include <Arduino.h>
 
-#include "config_model.hpp"
 #include "constants.hpp"
 #include "util/moving_average.hpp"
 
 #define MANUAL_MIN -10
 #define MANUAL_MAX 110
+
+struct TargetCurve {
+    double a4, a3, a2, a1;
+};
 
 class Sensor {
    public:

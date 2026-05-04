@@ -1,10 +1,11 @@
 #include "flash.hpp"
+#include <pb_decode.h>
+#include <pb_encode.h>
 #include "util/log/debug_logger.hpp"
 
 bool Flash::initialize() {
     for (int i = 0; i < BEGIN_FS_LIMIT_TIMES; i++) {
         if (fs.begin(256 * 1024)) {
-            // 使用率が90%超の場合はフォーマット
             if (fs.totalSize() > 0 && fs.usedSize() > fs.totalSize() * 9 / 10) {
                 DebugLogger::log("LittleFS nearly full, formatting...");
                 fs.quickFormat();
@@ -16,30 +17,43 @@ bool Flash::initialize() {
     return false;
 }
 
-void Flash::write(const char* fileName, const String& jsonStr) {
-    if (fs.exists(fileName)) {
-        fs.remove(fileName);
+bool Flash::writeProto(const char* fileName, const pb_msgdesc_t* fields, const void* msg) {
+    uint8_t buf[kBufSize];
+    pb_ostream_t stream = pb_ostream_from_buffer(buf, sizeof(buf));
+    if (!pb_encode(&stream, fields, msg)) {
+        DebugLogger::log("Flash writeProto: encode failed");
+        return false;
     }
+    size_t len = stream.bytes_written;
+    if (fs.exists(fileName))
+        fs.remove(fileName);
     File file = fs.open(fileName, FILE_WRITE);
     if (!file) {
-        DebugLogger::log("Flash write: open failed");
-        return;
+        DebugLogger::log("Flash writeProto: open failed");
+        return false;
     }
-    size_t written = file.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
+    file.write(buf, len);
     file.close();
-    DebugLogger::log("Saved to %s (%u bytes)", fileName, (unsigned)written);
+    DebugLogger::log("Saved %u bytes to %s", (unsigned)len, fileName);
+    return true;
 }
 
-String Flash::read(const char* fileName) {
+bool Flash::readProto(const char* fileName, const pb_msgdesc_t* fields, void* msg) {
     File file = fs.open(fileName);
     if (!file || file.isDirectory()) {
-        DebugLogger::log("Flash read: %s not found", fileName);
-        return String();
+        DebugLogger::log("Flash readProto: %s not found", fileName);
+        return false;
     }
-    String jsonStr = file.readString();
+    uint8_t buf[kBufSize];
+    size_t len = file.read(buf, sizeof(buf));
     file.close();
-    DebugLogger::log("Loaded from %s (%u bytes)", fileName, (unsigned)jsonStr.length());
-    return jsonStr;
+    pb_istream_t stream = pb_istream_from_buffer(buf, len);
+    if (!pb_decode(&stream, fields, msg)) {
+        DebugLogger::log("Flash readProto: decode failed");
+        return false;
+    }
+    DebugLogger::log("Loaded %u bytes from %s", (unsigned)len, fileName);
+    return true;
 }
 
 void Flash::remove(const char* fileName) {
