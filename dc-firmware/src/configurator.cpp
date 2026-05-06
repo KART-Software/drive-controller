@@ -22,8 +22,8 @@ void Configurator::initialize() {
 void Configurator::loadFromConstants() {
     config = dc_Config_init_zero;
 
-    config.has_sensor_values = true;
-    dc_SensorCalib& sv = config.sensor_values;
+    config.has_sensor_calib = true;
+    dc_SensorCalib& sv = config.sensor_calib;
     sv.apps1_min = APPS_1_RAW_MIN;
     sv.apps1_max = APPS_1_RAW_MAX;
     sv.apps2_min = APPS_2_RAW_MIN;
@@ -39,9 +39,17 @@ void Configurator::loadFromConstants() {
     sv.target_tp_restricted_max = TARGET_RESTRICTED_MAX;
     sv.clutch_min = CLUTCH_RAW_MIN;
     sv.clutch_max = CLUTCH_RAW_MAX;
+    sv.gps.type = USE_IST ? dc_TransmissionType_TRANSMISSION_IST : dc_TransmissionType_TRANSMISSION_NORMAL;
+    const uint16_t istDef[] = GPS_IST_RAW_DEFAULTS;
+    sv.gps.ist_raw_values_count = GPS_IST_GEAR_COUNT;
+    for (uint8_t i = 0; i < GPS_IST_GEAR_COUNT; i++)
+        sv.gps.ist_raw_values[i] = istDef[i];
+    const uint16_t normDef[] = GPS_NORMAL_RAW_DEFAULTS;
+    sv.gps.normal_raw_values_count = GPS_NORMAL_GEAR_COUNT;
+    for (uint8_t i = 0; i < GPS_NORMAL_GEAR_COUNT; i++)
+        sv.gps.normal_raw_values[i] = normDef[i];
 
-    config.has_etc_config = true;
-    dc_EtcConfig& ec = config.etc_config;
+    dc_EtcConfig& ec = config.etc;
     ec.has_plausibility_check_flags = true;
     ec.plausibility_check_flags.apps = APPS_CHECK_FLAG;
     ec.plausibility_check_flags.tps = TPS_CHECK_FLAG;
@@ -62,24 +70,12 @@ void Configurator::loadFromConstants() {
     ec.target_curve.a3 = TARGET_CURVE_A3;
     ec.target_curve.a2 = TARGET_CURVE_A2;
     ec.target_curve.a1 = TARGET_CURVE_A1;
-
-    config.has_gps_calib = true;
-    dc_GpsCalib& gc = config.gps_calib;
-    gc.type = USE_IST ? dc_TransmissionType_TRANSMISSION_IST : dc_TransmissionType_TRANSMISSION_NORMAL;
-    const uint16_t istDef[] = GPS_IST_RAW_DEFAULTS;
-    gc.ist_raw_values_count = GPS_IST_GEAR_COUNT;
-    for (uint8_t i = 0; i < GPS_IST_GEAR_COUNT; i++)
-        gc.ist_raw_values[i] = istDef[i];
-    const uint16_t normDef[] = GPS_NORMAL_RAW_DEFAULTS;
-    gc.normal_raw_values_count = GPS_NORMAL_GEAR_COUNT;
-    for (uint8_t i = 0; i < GPS_NORMAL_GEAR_COUNT; i++)
-        gc.normal_raw_values[i] = normDef[i];
 }
 
 void Configurator::calibrate() {
-    if (!config.has_sensor_values)
+    if (!config.has_sensor_calib)
         return;
-    const dc_SensorCalib& sv = config.sensor_values;
+    const dc_SensorCalib& sv = config.sensor_calib;
     apps1.setRawMin(sv.apps1_min);
     apps1.setRawMax(sv.apps1_max);
     apps2.setRawMin(sv.apps2_min);
@@ -96,8 +92,8 @@ void Configurator::calibrate() {
     clutch.setRawMin(sv.clutch_min);
     clutch.setRawMax(sv.clutch_max);
 
-    if (config.has_etc_config) {
-        const dc_EtcConfig& ec = config.etc_config;
+    if (config.has_etc) {
+        const dc_EtcConfig& ec = config.etc;
         if (ec.has_plausibility_check_flags) {
             const auto& f = ec.plausibility_check_flags;
             plausibilityValidator.setCheckFlags(f.apps, f.tps, f.apps1, f.apps2, f.tps1, f.tps2, f.target, f.bps,
@@ -116,8 +112,8 @@ void Configurator::calibrate() {
         }
     }
 
-    if (config.has_gps_calib) {
-        const dc_GpsCalib& gc = config.gps_calib;
+    if (config.has_sensor_calib) {
+        const dc_GpsCalib& gc = config.sensor_calib.gps;
         if (gc.type == dc_TransmissionType_TRANSMISSION_IST) {
             static const int8_t gears[] = GPS_IST_GEARS;
             uint16_t raw[GPS_IST_GEAR_COUNT];
@@ -139,12 +135,10 @@ void Configurator::loadConfigFromFlash() {
     dc_Config loaded = dc_Config_init_zero;
     if (!flash.readProto(CONFIG_FILE_NAME, dc_Config_fields, &loaded))
         return;
-    if (loaded.has_sensor_values)
-        config.sensor_values = loaded.sensor_values;
-    if (loaded.has_etc_config)
-        config.etc_config = loaded.etc_config;
-    if (loaded.has_gps_calib)
-        config.gps_calib = loaded.gps_calib;
+    if (loaded.has_sensor_calib)
+        config.sensor_calib = loaded.sensor_calib;
+    if (loaded.has_etc)
+        config.etc = loaded.etc;
 }
 
 void Configurator::calibrateFromFlash() {
@@ -153,41 +147,41 @@ void Configurator::calibrateFromFlash() {
 }
 
 void Configurator::setAppsMin() {
-    config.sensor_values.apps1_min = apps1.setCurrentValRawMin();
-    config.sensor_values.apps2_min = apps2.setCurrentValRawMin();
-    config.sensor_values.ittr_min = ittr.setCurrentValRawMin();
+    config.sensor_calib.apps1_min = apps1.setCurrentValRawMin();
+    config.sensor_calib.apps2_min = apps2.setCurrentValRawMin();
+    config.sensor_calib.ittr_min = ittr.setCurrentValRawMin();
     configChanged = true;
 }
 
 void Configurator::setAppsMax() {
-    config.sensor_values.apps1_max = apps1.setCurrentValRawMax();
-    config.sensor_values.apps2_max = apps2.setCurrentValRawMax();
-    config.sensor_values.ittr_max = ittr.setCurrentValRawMax();
+    config.sensor_calib.apps1_max = apps1.setCurrentValRawMax();
+    config.sensor_calib.apps2_max = apps2.setCurrentValRawMax();
+    config.sensor_calib.ittr_max = ittr.setCurrentValRawMax();
     configChanged = true;
 }
 
 void Configurator::setTpsMin() {
-    config.sensor_values.tps1_min = tps1.setCurrentValRawMin();
-    config.sensor_values.tps2_min = tps2.setCurrentValRawMin();
+    config.sensor_calib.tps1_min = tps1.setCurrentValRawMin();
+    config.sensor_calib.tps2_min = tps2.setCurrentValRawMin();
     configChanged = true;
 }
 
 void Configurator::setTpsMax() {
-    config.sensor_values.tps1_max = tps1.setCurrentValRawMax();
-    config.sensor_values.tps2_max = tps2.setCurrentValRawMax();
+    config.sensor_calib.tps1_max = tps1.setCurrentValRawMax();
+    config.sensor_calib.tps2_max = tps2.setCurrentValRawMax();
     configChanged = true;
 }
 
 void Configurator::setIdling() {
-    config.sensor_values.target_tp_idling = (float)tps1.convertedValue();
-    target.setIdlingValue(config.sensor_values.target_tp_idling);
+    config.sensor_calib.target_tp_idling = (float)tps1.convertedValue();
+    target.setIdlingValue(config.sensor_calib.target_tp_idling);
     configChanged = true;
 }
 
 void Configurator::setTargetBound(float idling, float normalMax, float restrictedMax) {
-    config.sensor_values.target_tp_idling = idling;
-    config.sensor_values.target_tp_normal_max = normalMax;
-    config.sensor_values.target_tp_restricted_max = restrictedMax;
+    config.sensor_calib.target_tp_idling = idling;
+    config.sensor_calib.target_tp_normal_max = normalMax;
+    config.sensor_calib.target_tp_restricted_max = restrictedMax;
     target.setIdlingValue(idling);
     target.setNormalMaxValue(normalMax);
     target.setRestrictedMaxValue(restrictedMax);
@@ -195,31 +189,31 @@ void Configurator::setTargetBound(float idling, float normalMax, float restricte
 }
 
 void Configurator::setPlausibilityFlags(const dc_EtcPlausibilityCheckFlags& flags) {
-    config.etc_config.plausibility_check_flags = flags;
-    config.etc_config.has_plausibility_check_flags = true;
+    config.etc.plausibility_check_flags = flags;
+    config.etc.has_plausibility_check_flags = true;
     plausibilityValidator.setCheckFlags(flags.apps, flags.tps, flags.apps1, flags.apps2, flags.tps1, flags.tps2,
                                         flags.target, flags.bps, flags.bps_tps);
     configChanged = true;
 }
 
 void Configurator::setIttrFlag(bool val) {
-    config.etc_config.use_ittr = val;
+    config.etc.use_ittr = val;
     target.setIttr(val);
     configChanged = true;
 }
 
 void Configurator::setPid(float kP, float kI, float kD) {
-    config.etc_config.pid.k_p = kP;
-    config.etc_config.pid.k_i = kI;
-    config.etc_config.pid.k_d = kD;
-    config.etc_config.has_pid = true;
+    config.etc.pid.k_p = kP;
+    config.etc.pid.k_i = kI;
+    config.etc.pid.k_d = kD;
+    config.etc.has_pid = true;
     motorController.setPidGains((double)kP, (double)kI, (double)kD);
     configChanged = true;
 }
 
 void Configurator::setTargetCurve(const dc_EtcTargetCurve& curve) {
-    config.etc_config.target_curve = curve;
-    config.etc_config.has_target_curve = true;
+    config.etc.target_curve = curve;
+    config.etc.has_target_curve = true;
     TargetCurve tc;
     tc.a4 = curve.a4;
     tc.a3 = curve.a3;
@@ -231,7 +225,7 @@ void Configurator::setTargetCurve(const dc_EtcTargetCurve& curve) {
 
 void Configurator::setGpsGear(int8_t gear) {
     uint16_t raw = gps.setCurrentAsGear(gear);
-    dc_GpsCalib& gc = config.gps_calib;
+    dc_GpsCalib& gc = config.sensor_calib.gps;
     if (gc.type == dc_TransmissionType_TRANSMISSION_IST) {
         const int8_t gears[] = GPS_IST_GEARS;
         for (uint8_t i = 0; i < GPS_IST_GEAR_COUNT; i++) {
@@ -264,8 +258,8 @@ void Configurator::save() {
     if (configChanged) {
         flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config);
         SerialProtocol::sendDebugf("save: normalMax=%g restrictedMax=%g",
-                                   (double)config.sensor_values.target_tp_normal_max,
-                                   (double)config.sensor_values.target_tp_restricted_max);
+                                   (double)config.sensor_calib.target_tp_normal_max,
+                                   (double)config.sensor_calib.target_tp_restricted_max);
     }
     configChanged = false;
 }

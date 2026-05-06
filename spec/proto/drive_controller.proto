@@ -21,25 +21,37 @@ enum EtcMode {
 // Shared sub-messages
 // ---------------------------------------------------------------------
 
+enum TransmissionType {
+  TRANSMISSION_IST    = 0;
+  TRANSMISSION_NORMAL = 1;
+}
+
+message GpsCalib {
+  TransmissionType type              = 1;
+  repeated uint32  ist_raw_values    = 2;  // max_count:5 (N,1,2,3,4)
+  repeated uint32  normal_raw_values = 3;  // max_count:7 (1,N,2,3,4,5,6)
+}
+
 message SensorCalib {
-  uint32 apps1_min                = 1;
-  uint32 apps1_max                = 2;
-  uint32 apps2_min                = 3;
-  uint32 apps2_max                = 4;
-  uint32 ittr_min                 = 5;
-  uint32 ittr_max                 = 6;
-  uint32 tps1_min                 = 7;
-  uint32 tps1_max                 = 8;
-  uint32 tps2_min                 = 9;
-  uint32 tps2_max                 = 10;
-  float  target_tp_idling         = 11;
-  float  target_tp_normal_max     = 12;
-  float  target_tp_restricted_max = 13;
-  uint32 wheel_rotor_teeth_front  = 14;
-  uint32 wheel_rotor_teeth_rear   = 15;
-  uint32 engine_teeth             = 16;
-  uint32 clutch_min               = 17;
-  uint32 clutch_max               = 18;
+  uint32   apps1_min                = 1;
+  uint32   apps1_max                = 2;
+  uint32   apps2_min                = 3;
+  uint32   apps2_max                = 4;
+  uint32   ittr_min                 = 5;
+  uint32   ittr_max                 = 6;
+  uint32   tps1_min                 = 7;
+  uint32   tps1_max                 = 8;
+  uint32   tps2_min                 = 9;
+  uint32   tps2_max                 = 10;
+  float    target_tp_idling         = 11;
+  float    target_tp_normal_max     = 12;
+  float    target_tp_restricted_max = 13;
+  uint32   wheel_rotor_teeth_front  = 14;
+  uint32   wheel_rotor_teeth_rear   = 15;
+  uint32   engine_teeth             = 16;
+  uint32   clutch_min               = 17;
+  uint32   clutch_max               = 18;
+  GpsCalib gps                      = 19;
 }
 
 message EtcPlausibilityCheckFlags {
@@ -81,24 +93,11 @@ message LaunchConfig {
 message TractionConfig {
 }
 
-enum TransmissionType {
-  TRANSMISSION_IST    = 0;
-  TRANSMISSION_NORMAL = 1;
-}
-
-message GpsCalib {
-  TransmissionType type              = 1;
-  repeated uint32  ist_raw_values    = 2;  // max_count:5 (N,1,2,3,4)
-  repeated uint32  normal_raw_values = 3;  // max_count:7 (1,N,2,3,4,5,6)
-}
-
 message Config {
-  SensorCalib    sensor_values   = 1;
-  EtcConfig      etc_config      = 2;
-  LaunchConfig   launch_config   = 3;
-  TractionConfig traction_config = 4;
-  bool           config_changed  = 5;
-  GpsCalib       gps_calib       = 6;
+  SensorCalib    sensor_calib = 1;
+  EtcConfig      etc          = 2;
+  LaunchConfig   launch       = 3;
+  TractionConfig traction     = 4;
 }
 
 // ---------------------------------------------------------------------
@@ -212,11 +211,16 @@ message GpsGearResponse {
   repeated sint32 gears      = 3;  // gear IDs corresponding to raw_values
 }
 
+message ConfigResponse {
+  Config config  = 1;
+  bool   changed = 2;
+}
+
 message Response {
   uint32 id = 1;
   bool   ok = 2;
   oneof data {
-    Config                    config             = 10;
+    ConfigResponse            config             = 10;
     AppsMinResponse           apps_min           = 11;
     AppsMaxResponse           apps_max           = 12;
     TpsMinResponse            tps_min            = 13;

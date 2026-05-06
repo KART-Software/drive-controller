@@ -237,7 +237,7 @@ void SerialProtocol::sendResponse(uint32_t id, bool ok) {
         sendResponseInternal(resp);                                  \
     }
 
-DEFINE_RESP_HELPER(sendResponseWithConfig, dc_Response_config_tag, config, dc_Config)
+DEFINE_RESP_HELPER(sendResponseWithConfig, dc_Response_config_tag, config, dc_ConfigResponse)
 DEFINE_RESP_HELPER(sendResponseWithAppsMin, dc_Response_apps_min_tag, apps_min, dc_AppsMinResponse)
 DEFINE_RESP_HELPER(sendResponseWithAppsMax, dc_Response_apps_max_tag, apps_max, dc_AppsMaxResponse)
 DEFINE_RESP_HELPER(sendResponseWithTpsMin, dc_Response_tps_min_tag, tps_min, dc_TpsMinResponse)

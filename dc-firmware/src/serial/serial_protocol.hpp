@@ -30,7 +30,7 @@ class SerialProtocol {
     static void sendResponse(uint32_t id, bool ok);
 
     // Response with a typed oneof payload.
-    static void sendResponseWithConfig(uint32_t id, bool ok, const dc_Config& cfg);
+    static void sendResponseWithConfig(uint32_t id, bool ok, const dc_ConfigResponse& cfg);
     static void sendResponseWithAppsMin(uint32_t id, bool ok, const dc_AppsMinResponse& p);
     static void sendResponseWithAppsMax(uint32_t id, bool ok, const dc_AppsMaxResponse& p);
     static void sendResponseWithTpsMin(uint32_t id, bool ok, const dc_TpsMinResponse& p);
