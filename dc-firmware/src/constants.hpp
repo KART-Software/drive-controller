@@ -1,12 +1,5 @@
 #pragma once
 
-/////////////////////////////
-/// Default Feature Flags ///
-/////////////////////////////
-
-#define USE_ITTR true  // ITTR (IST Throttle Target Receiver) をデフォルトで使う
-#define USE_IST true   // GPS のデフォルト TransmissionType を IST にする
-
 ////////////////////
 /// ADC Settings ///
 ////////////////////
@@ -82,48 +75,20 @@
 
 #define MOTOR_CONTROLL_CYCLE_TIME 1  // ms
 
-#define KP 3.0
-#define KI 0.4
-#define KD 0.0
-
 ///////////////////////
 /// Sensor Settings ///
 ///////////////////////
-
-#define TPS_1_RAW_MIN 19278
-#define TPS_2_RAW_MIN 44710
-
-#define TPS_1_RAW_MAX 30657
-#define TPS_2_RAW_MAX 33505
 
 #define TPS_MIN 0
 #define TPS_MAX 100
 #define TPS_MARGIN 15
 #define TPS_LARGE_OPEN_THRESHOLD 50
 
-#define APPS_1_RAW_MIN 27070
-#define APPS_2_RAW_MIN 39292
-
-#define APPS_1_RAW_MAX 34499
-#define APPS_2_RAW_MAX 31798
-
 #define APPS_MIN 0
 #define APPS_MAX 100
 #define APPS_MARGIN 20
 
-#define ITTR_RAW_MAX APPS_1_RAW_MAX
-#define ITTR_RAW_MIN APPS_1_RAW_MIN
-
 #define ITTR_MARGIN 0
-
-#define TARGET_IDLING 15
-#define TARGET_NORMAL_MAX 100
-#define TARGET_RESTRICTED_MAX 60
-
-#define TARGET_CURVE_A4 0.0
-#define TARGET_CURVE_A3 0.0
-#define TARGET_CURVE_A2 0.0087
-#define TARGET_CURVE_A1 0.13
 
 #define BPS_RAW_MAX 4.5 * 65535 / 5.12  // 4.5V
 #define BPS_RAW_MIN 5000                // 0.5V
@@ -137,8 +102,6 @@
 /// Clutch Sensor (CLS) ///
 ///////////////////////////
 
-#define CLUTCH_RAW_MIN 5000
-#define CLUTCH_RAW_MAX 60000
 #define CLUTCH_MIN 0
 #define CLUTCH_MAX 100
 #define CLUTCH_MARGIN 5
@@ -153,15 +116,11 @@
 #define GPS_IST_GEAR_COUNT 5
 #define GPS_IST_GEARS \
     { 0, 1, 2, 3, 4 }
-#define GPS_IST_RAW_DEFAULTS \
-    { 32768, 32768, 32768, 32768, 32768 }
 
 // Normal transmission: 1, N, 2, 3, 4, 5, 6 (7 positions)
 #define GPS_NORMAL_GEAR_COUNT 7
 #define GPS_NORMAL_GEARS \
     { 1, 0, 2, 3, 4, 5, 6 }
-#define GPS_NORMAL_RAW_DEFAULTS \
-    { 32768, 32768, 32768, 32768, 32768, 32768, 32768 }
 
 #define GPS_MAX_GEARS 7  // max(IST=5, Normal=7)
 
@@ -210,13 +169,3 @@
 
 #define FUEL_PUMP_PIN 32       // TODO: Teensy 4.1 のピン番号に変更
 #define DC_MOTOR_RELAY_PIN 33  // TODO: Teensy 4.1 のピン番号に変更
-
-#define APPS_CHECK_FLAG false
-#define TPS_CHECK_FLAG false
-#define APPS1_CHECK_FLAG false
-#define APPS2_CHECK_FLAG false
-#define TPS1_CHECK_FLAG false
-#define TPS2_CHECK_FLAG false
-#define TARGET_CHECK_FLAG false
-#define BPS_CHECK_FLAG false
-#define BPSTPS_CHECK_FLAG false

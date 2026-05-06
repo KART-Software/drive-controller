@@ -64,8 +64,8 @@ class Tps : public Sensor {
 
 class Ittr : public Apps {
    public:
-    Ittr(uint16_t rawMinValue = ITTR_RAW_MIN,
-         uint16_t rawMaxValue = ITTR_RAW_MAX,
+    Ittr(uint16_t rawMinValue = 0,
+         uint16_t rawMaxValue = 65535,
          double minValue = APPS_MIN,
          double maxValue = APPS_MAX,
          double margin = ITTR_MARGIN);
@@ -87,8 +87,8 @@ class Bps : public Sensor {
 
 class ClutchSensor : public Sensor {
    public:
-    ClutchSensor(uint16_t rawMinValue = CLUTCH_RAW_MIN,
-                 uint16_t rawMaxValue = CLUTCH_RAW_MAX,
+    ClutchSensor(uint16_t rawMinValue = 0,
+                 uint16_t rawMaxValue = 65535,
                  double minValue = CLUTCH_MIN,
                  double maxValue = CLUTCH_MAX,
                  double margin = CLUTCH_MARGIN);
@@ -143,13 +143,13 @@ class EtcTarget {
     double manualTarget;
     bool _isManual = false;
 
-    double normalMaxValue = TARGET_NORMAL_MAX;
-    double restrictedMaxValue = TARGET_RESTRICTED_MAX;
+    double normalMaxValue = 0.0;
+    double restrictedMaxValue = 0.0;
     double tpsMinValue = TPS_MIN;
     double tpsMaxValue = TPS_MAX;
 
-    double ca4 = TARGET_CURVE_A4;
-    double ca3 = TARGET_CURVE_A3;
-    double ca2 = TARGET_CURVE_A2;
-    double ca1 = TARGET_CURVE_A1;
+    double ca4 = 0.0;
+    double ca3 = 0.0;
+    double ca2 = 0.0;
+    double ca1 = 0.0;
 };

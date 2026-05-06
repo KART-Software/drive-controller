@@ -44,7 +44,7 @@ class Configurator {
     bool configChanged = false;
 
    private:
-    void loadFromConstants();
+    void loadDefault();
     void loadConfigFromFlash();
     void calibrate();
 };

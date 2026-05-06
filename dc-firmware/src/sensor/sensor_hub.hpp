@@ -46,10 +46,10 @@ class SensorHub {
 
    private:
     Adc adc_;
-    Apps apps1_{APPS_1_RAW_MIN, APPS_1_RAW_MAX};
-    Apps apps2_{APPS_2_RAW_MIN, APPS_2_RAW_MAX};
-    Tps tps1_{TPS_1_RAW_MIN, TPS_1_RAW_MAX};
-    Tps tps2_{TPS_2_RAW_MIN, TPS_2_RAW_MAX};
+    Apps apps1_{0, 65535};
+    Apps apps2_{0, 65535};
+    Tps tps1_{0, 65535};
+    Tps tps2_{0, 65535};
     Ittr ittr_;
     Bps bps_;
     EtcTarget target_{apps1_, ittr_};

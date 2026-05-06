@@ -1,4 +1,5 @@
 #include "configurator.hpp"
+#include "default_config.hpp"
 #include "serial/serial_protocol.hpp"
 
 Configurator::Configurator(SensorHub& hub,
@@ -19,57 +20,8 @@ void Configurator::initialize() {
     flash.initialize();
 }
 
-void Configurator::loadFromConstants() {
-    config = dc_Config_init_zero;
-
-    config.has_sensor_calib = true;
-    dc_SensorCalib& sv = config.sensor_calib;
-    sv.apps1_min = APPS_1_RAW_MIN;
-    sv.apps1_max = APPS_1_RAW_MAX;
-    sv.apps2_min = APPS_2_RAW_MIN;
-    sv.apps2_max = APPS_2_RAW_MAX;
-    sv.ittr_min = ITTR_RAW_MIN;
-    sv.ittr_max = ITTR_RAW_MAX;
-    sv.tps1_min = TPS_1_RAW_MIN;
-    sv.tps1_max = TPS_1_RAW_MAX;
-    sv.tps2_min = TPS_2_RAW_MIN;
-    sv.tps2_max = TPS_2_RAW_MAX;
-    sv.target_tp_idling = TARGET_IDLING;
-    sv.target_tp_normal_max = TARGET_NORMAL_MAX;
-    sv.target_tp_restricted_max = TARGET_RESTRICTED_MAX;
-    sv.clutch_min = CLUTCH_RAW_MIN;
-    sv.clutch_max = CLUTCH_RAW_MAX;
-    sv.gps.type = USE_IST ? dc_TransmissionType_TRANSMISSION_IST : dc_TransmissionType_TRANSMISSION_NORMAL;
-    const uint16_t istDef[] = GPS_IST_RAW_DEFAULTS;
-    sv.gps.ist_raw_values_count = GPS_IST_GEAR_COUNT;
-    for (uint8_t i = 0; i < GPS_IST_GEAR_COUNT; i++)
-        sv.gps.ist_raw_values[i] = istDef[i];
-    const uint16_t normDef[] = GPS_NORMAL_RAW_DEFAULTS;
-    sv.gps.normal_raw_values_count = GPS_NORMAL_GEAR_COUNT;
-    for (uint8_t i = 0; i < GPS_NORMAL_GEAR_COUNT; i++)
-        sv.gps.normal_raw_values[i] = normDef[i];
-
-    dc_EtcConfig& ec = config.etc;
-    ec.has_plausibility_check_flags = true;
-    ec.plausibility_check_flags.apps = APPS_CHECK_FLAG;
-    ec.plausibility_check_flags.tps = TPS_CHECK_FLAG;
-    ec.plausibility_check_flags.apps1 = APPS1_CHECK_FLAG;
-    ec.plausibility_check_flags.apps2 = APPS2_CHECK_FLAG;
-    ec.plausibility_check_flags.tps1 = TPS1_CHECK_FLAG;
-    ec.plausibility_check_flags.tps2 = TPS2_CHECK_FLAG;
-    ec.plausibility_check_flags.target = TARGET_CHECK_FLAG;
-    ec.plausibility_check_flags.bps = BPS_CHECK_FLAG;
-    ec.plausibility_check_flags.bps_tps = BPSTPS_CHECK_FLAG;
-    ec.use_ittr = USE_ITTR;
-    ec.has_pid = true;
-    ec.pid.k_p = KP;
-    ec.pid.k_i = KI;
-    ec.pid.k_d = KD;
-    ec.has_target_curve = true;
-    ec.target_curve.a4 = TARGET_CURVE_A4;
-    ec.target_curve.a3 = TARGET_CURVE_A3;
-    ec.target_curve.a2 = TARGET_CURVE_A2;
-    ec.target_curve.a1 = TARGET_CURVE_A1;
+void Configurator::loadDefault() {
+    config = DEFAULT_CONFIG;
 }
 
 void Configurator::calibrate() {
@@ -131,7 +83,7 @@ void Configurator::calibrate() {
 }
 
 void Configurator::loadConfigFromFlash() {
-    loadFromConstants();
+    loadDefault();
     dc_Config loaded = dc_Config_init_zero;
     if (!flash.readProto(CONFIG_FILE_NAME, dc_Config_fields, &loaded))
         return;
