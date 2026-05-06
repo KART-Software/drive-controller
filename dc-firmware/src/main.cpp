@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#include "can_bus.hpp"
+#include "can_controller.hpp"
 #include "commands/command_controller.hpp"
 #include "commands/command_router.hpp"
 #include "configurator.hpp"
@@ -15,8 +15,8 @@
 IntervalTimer motorControlTimer;
 IntervalTimer sensorSamplingTimer;
 
-CanBus canBus;
 SensorHub sensorHub;
+CanController canController(sensorHub);
 
 etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
                                                  sensorHub.apps2(),
@@ -50,7 +50,7 @@ void setup() {
     digitalWrite(FUEL_PUMP_PIN, HIGH);
     sensorHub.begin();
 
-    canBus.begin();
+    canController.begin();
     configurator.initialize();
     configurator.calibrateFromFlash();
 
@@ -80,28 +80,34 @@ void setup() {
 
 unsigned long lastLogTime = 0;
 unsigned long lastPulseUpdateTime = 0;
-unsigned long lastCanFastTime = 0;
-unsigned long lastCanSlowTime = 0;
+unsigned long lastCanTime = 0;
 
 void loop() {
     unsigned long now = millis();
 
     // Poll CAN for mode-select frame
-    uint8_t canMode;
-    if (canBus.poll(canMode)) {
-        switch (canMode) {
-            case 0:
-                sensorHub.mut.target().setModeCalibration();
-                break;
-            case 1:
-                sensorHub.mut.target().setModeNormal();
-                break;
-            case 2:
-                sensorHub.mut.target().setModeRestricted();
-                break;
-            default:
-                break;
-        }
+    canController.poll();
+    switch (canController.rxData().etcMode) {
+        case EtcMode::CALIB:
+            sensorHub.mut.target().setModeCalibration();
+            break;
+        case EtcMode::NORMAL:
+            sensorHub.mut.target().setModeNormal();
+            break;
+        case EtcMode::RESTRICTED:
+            sensorHub.mut.target().setModeRestricted();
+            break;
+        case EtcMode::MOTOR_OFF:
+            if (motorController.isOn()) {
+                motorController.setMotorOff();
+                motorController.setMotorOff();
+                if (motorTimerRunning) {
+                    motorControlTimer.end();
+                    motorTimerRunning = false;
+                }
+            }
+        default:
+            break;
     }
 
     // Update pulse counters periodically
@@ -121,28 +127,10 @@ void loop() {
         }
     }
 
-    // CAN TX — fast frames (throttle, status) every 20ms
-    if (now - lastCanFastTime >= CAN_TX_FAST_INTERVAL_MS) {
-        lastCanFastTime = now;
-        canBus.sendThrottleFrame(sensorHub.apps1().convertedValue(), sensorHub.apps2().convertedValue(),
-                                 sensorHub.tps1().convertedValue(), sensorHub.tps2().convertedValue());
-        canBus.sendStatusFrame(sensorHub.target().getTarget(), sensorHub.bps().convertedValue(),
-                               plausibilityValidator.isValid() ? 0x0000 : 0x0001,
-                               canBus.modeStringToId(sensorHub.target().getModeString()));
-    }
-
-    // CAN TX — slow frames (wheel speed, engine/IMU, gyro) every 100ms
-    if (now - lastCanSlowTime >= CAN_TX_SLOW_INTERVAL_MS) {
-        lastCanSlowTime = now;
-        canBus.sendWheelSpeedFrame(sensorHub.wheelSpeedFL(), sensorHub.wheelSpeedFR(), sensorHub.wheelSpeedRL(),
-                                   sensorHub.wheelSpeedRR());
-        if (sensorHub.imu() != nullptr) {
-            canBus.sendEngineImuFrame(sensorHub.engineRpm(), sensorHub.imu()->accel[0], sensorHub.imu()->accel[1],
-                                      sensorHub.imu()->accel[2]);
-            canBus.sendGyroFrame(sensorHub.imu()->gyro[0], sensorHub.imu()->gyro[1], sensorHub.imu()->gyro[2]);
-        } else {
-            canBus.sendEngineImuFrame(sensorHub.engineRpm(), 0, 0, 0);
-        }
+    // CAN TX — 60Hz
+    if (now - lastCanTime >= CAN_TX_INTERVAL_MS) {
+        lastCanTime = now;
+        canController.send();
     }
 
     // Send sensor data via serial protocol (50Hz)

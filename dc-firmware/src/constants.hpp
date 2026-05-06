@@ -153,14 +153,12 @@
 /// CAN Settings ///
 ////////////////////
 
-#define CAN_BITRATE 1000000  // 1 Mbps
-#define CAN_TX_FAST_INTERVAL_MS 20
-#define CAN_TX_SLOW_INTERVAL_MS 100
-#define CAN_ID_THROTTLE 0x100
-#define CAN_ID_STATUS 0x101
-#define CAN_ID_WHEEL_SPEED 0x102
-#define CAN_ID_ENGINE_IMU 0x103
-#define CAN_ID_GYRO 0x104
+#define CAN_BITRATE 1000000       // 1 Mbps
+#define CAN_TX_INTERVAL_MS 16     // ~60Hz
+#define CAN_ID_GYRO_XY 0x600      // gx(float32) gy(float32)
+#define CAN_ID_GYRO_Z_GEAR 0x601  // gz(float32) gear(8)
+#define CAN_ID_ACCEL_XY 0x602     // ax(float32) ay(float32)
+#define CAN_ID_ACCEL_Z 0x603      // az(float32)
 #define CAN_ID_MODE_SELECT 0x200
 
 /////////////////////////////////
