@@ -4,7 +4,8 @@
 
 Configurator::Configurator(SensorHub& hub,
                            etc::MotorController& motorController,
-                           etc::PlausibilityValidator& plausibilityValidator)
+                           etc::PlausibilityValidator& plausibilityValidator,
+                           launch::LaunchController& launchController)
     : apps1(hub.mut.apps1()),
       apps2(hub.mut.apps2()),
       tps1(hub.mut.tps1()),
@@ -14,7 +15,8 @@ Configurator::Configurator(SensorHub& hub,
       gps(hub.mut.gps()),
       clutch(hub.mut.clutch()),
       motorController(motorController),
-      plausibilityValidator(plausibilityValidator) {}
+      plausibilityValidator(plausibilityValidator),
+      launchController(launchController) {}
 
 void Configurator::initialize() {
     flash.initialize();
@@ -80,6 +82,12 @@ void Configurator::calibrate() {
             gps.setTable(GPS_NORMAL_GEAR_COUNT, gears, raw);
         }
     }
+
+    if (config.has_launch) {
+        const dc_SensorCalib& sc = config.sensor_calib;
+        launchController.setConfig(config.launch, sc.engine_teeth, sc.wheel_rotor_teeth_front,
+                                   sc.wheel_rotor_teeth_rear);
+    }
 }
 
 void Configurator::loadConfigFromFlash() {
@@ -91,11 +99,14 @@ void Configurator::loadConfigFromFlash() {
         config.sensor_calib = loaded.sensor_calib;
     if (loaded.has_etc)
         config.etc = loaded.etc;
+    if (loaded.has_launch)
+        config.launch = loaded.launch;
 }
 
 void Configurator::calibrateFromFlash() {
     loadConfigFromFlash();
     calibrate();
+    launchController.begin(flash);
 }
 
 void Configurator::setAppsMin() {

@@ -26,6 +26,14 @@ enum class EtcMode : uint8_t {
 // Data received over CAN
 struct CanRxData {
     EtcMode etcMode = EtcMode::NORMAL;
+    bool launchActive = false;
+    unsigned long lastModeFrameMs = 0;    // MODE_SELECT を最後に受信した時刻 (millis)
+    unsigned long lastLaunchFrameMs = 0;  // LAUNCH_CTRL を最後に受信した時刻 (millis)
 
     void mergeFrame(const CAN_message_t& msg);
+    // 各フレームが一定時間途絶していたら安全側の値に戻す。
+    //   - LAUNCH_CTRL 途絶 → launchActive = false
+    //   - MODE_SELECT 途絶 → etcMode = NORMAL
+    // CAN 断・ECU 故障時のフェールセーフ。
+    void checkTimeouts(unsigned long nowMs);
 };

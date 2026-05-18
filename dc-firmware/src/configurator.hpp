@@ -2,6 +2,7 @@
 
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
+#include "launch/launch_controller.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
 #include "util/flash.hpp"
@@ -12,7 +13,8 @@ class Configurator {
    public:
     Configurator(SensorHub& hub,
                  etc::MotorController& motorController,
-                 etc::PlausibilityValidator& plausibilityValidator);
+                 etc::PlausibilityValidator& plausibilityValidator,
+                 launch::LaunchController& launchController);
     void initialize();
     void calibrateFromFlash();
 
@@ -41,6 +43,7 @@ class Configurator {
     ClutchSensor& clutch;
     etc::MotorController& motorController;
     etc::PlausibilityValidator& plausibilityValidator;
+    launch::LaunchController& launchController;
     bool configChanged = false;
 
    private:

@@ -44,5 +44,23 @@ void CanRxData::mergeFrame(const CAN_message_t& msg) {
                 etcMode = EtcMode::NORMAL;
                 break;
         }
+        lastModeFrameMs = millis();
+    }
+    if (msg.id == CAN_ID_LAUNCH_CTRL && msg.len >= 1) {
+        launchActive = (msg.buf[0] == 0x01);
+        lastLaunchFrameMs = millis();
+    }
+}
+
+void CanRxData::checkTimeouts(unsigned long nowMs) {
+    if (launchActive && (nowMs - lastLaunchFrameMs) > CAN_LAUNCH_TIMEOUT_MS) {
+        launchActive = false;
+    }
+    // 一度でも MODE_SELECT を受信していて、それが途絶した場合のみ NORMAL へフォールバック。
+    // lastModeFrameMs == 0 (起動以来未受信) は判定スキップ — デフォルトの NORMAL のまま。
+    // MOTOR_OFF は安全ラッチ: CAN 断で勝手にモーターを復帰させない。
+    if (etcMode != EtcMode::NORMAL && etcMode != EtcMode::MOTOR_OFF && lastModeFrameMs != 0 &&
+        (nowMs - lastModeFrameMs) > CAN_MODE_TIMEOUT_MS) {
+        etcMode = EtcMode::NORMAL;
     }
 }

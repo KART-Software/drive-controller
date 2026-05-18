@@ -160,6 +160,12 @@
 #define CAN_ID_ACCEL_XY 0x602     // ax(float32) ay(float32)
 #define CAN_ID_ACCEL_Z 0x603      // az(float32)
 #define CAN_ID_MODE_SELECT 0x200
+#define CAN_ID_LAUNCH_CTRL 0x300
+
+// LAUNCH_CTRL フレームが本値以上途絶したら launchActive を false に落とす (フェールセーフ)
+#define CAN_LAUNCH_TIMEOUT_MS 200
+// MODE_SELECT フレームが本値以上途絶したら etcMode を NORMAL に戻す (フェールセーフ)
+#define CAN_MODE_TIMEOUT_MS 200
 
 /////////////////////////////////
 /// Other Output Pin Settings ///

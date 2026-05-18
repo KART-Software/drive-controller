@@ -1,11 +1,12 @@
 #pragma once
 
 #include <Arduino.h>
-#include "constants.hpp"
 
 class PID {
    public:
-    PID(double kP = 0.0, double kI = 0.0, double kD = 0.0, int8_t direction = MOTOR_DIRECTION);
+    // direction: +1 でそのまま、-1 で出力符号反転。アクチュエータごとの方向は
+    // 呼び出し側 (例: etc::MotorController) で明示的に指定する。
+    PID(double kP = 0.0, double kI = 0.0, double kD = 0.0, int8_t direction = 1);
     double compute(double setPoint, double position);
     void setDirection(int8_t direction);
     void setGains(double kP, double kI, double kD);

@@ -7,6 +7,7 @@
 #include "constants.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
+#include "launch/launch_controller.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
@@ -26,7 +27,8 @@ etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
                                                  sensorHub.target(),
                                                  sensorHub.bps());
 etc::MotorController motorController(sensorHub.target(), sensorHub.tps1());
-Configurator configurator(sensorHub, motorController, plausibilityValidator);
+launch::LaunchController launchController(sensorHub);
+Configurator configurator(sensorHub, motorController, plausibilityValidator, launchController);
 CommandRouter commandRouter;
 CommandController commandController(configurator, motorController, sensorHub.mut.target());
 
@@ -131,6 +133,7 @@ void loop() {
     if (now - lastCanTime >= CAN_TX_INTERVAL_MS) {
         lastCanTime = now;
         canController.send();
+        launchController.update(canController.rxData().launchActive);
     }
 
     // Send sensor data via serial protocol (50Hz)

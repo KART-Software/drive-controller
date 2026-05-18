@@ -18,7 +18,7 @@ class MotorController {
 
    private:
     DcMotor dcMotor = DcMotor();
-    PID pid = PID();
+    PID pid{0.0, 0.0, 0.0, MOTOR_DIRECTION};
     const EtcTarget& target;
     const Tps& tps;
     const unsigned long cycleTime = MOTOR_CONTROLL_CYCLE_TIME;
