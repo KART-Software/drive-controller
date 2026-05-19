@@ -6,7 +6,8 @@
 #include "bite_point_file.hpp"
 #include "clutch_motor.hpp"
 #include "proto/drive_controller.pb.h"
-#include "sensor/sensor_hub.hpp"
+#include "sensor/pulse_counter.hpp"
+#include "sensor/sensors.hpp"
 #include "util/pid.hpp"
 
 namespace launch {
@@ -20,10 +21,17 @@ namespace launch {
 // Tire traction control is delegated entirely to the engine ECU.
 class LaunchController {
    public:
-    explicit LaunchController(const SensorHub& sensorHub);
+    LaunchController(const PulseCounter& engine,
+                     const PulseCounter& wheelRL,
+                     const PulseCounter& wheelRR,
+                     const ClutchSensor& clutch,
+                     Flash& flash);
 
+    // setConfig() / begin() は任意の順序で呼んで良い。begin() は保存値を
+    // flash からロード、setConfig() は実行時パラメータを適用する。
+    // どちらも複数回呼べる (例: SetConfigCmd で再適用)。
     void setConfig(const dc_LaunchConfig& cfg, uint32_t engineTeeth, uint32_t wheelTeethFront, uint32_t wheelTeethRear);
-    void begin(Flash& flash);
+    void begin();
     void update(bool launchRequested);
 
     enum class State { Idle, Ready, Approach, EngageControl, FullEngage };
@@ -31,10 +39,13 @@ class LaunchController {
 
    private:
     // -- sensors & actuator --
-    const SensorHub& hub_;
+    const PulseCounter& engine_;
+    const PulseCounter& wheelRL_;
+    const PulseCounter& wheelRR_;
+    const ClutchSensor& clutch_;
     ClutchMotor motor_;
+    BitePointFile bitePointFile_;
     BitePointEstimator bitePoint_;
-    BitePointFile* bitePointFile_ = nullptr;
 
     // -- config --
     float launchRpmThreshold_ = 3000.0f;

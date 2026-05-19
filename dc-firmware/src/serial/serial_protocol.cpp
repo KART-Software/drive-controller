@@ -145,7 +145,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
 
     st.has_sensor = true;
     dc_Sensor& s = st.sensor;
-    s.sps = hub.sps();
+    s.sps = hub.adc().sps();
     s.apps1_raw = hub.apps1().getRawValue();
     s.apps2_raw = hub.apps2().getRawValue();
     s.ittr_raw = hub.ittr().getRawValue();
@@ -171,17 +171,17 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
         s.gyro_z = hub.imu()->gyro[2];
     }
 
-    s.wheel_speed_fl = hub.wheelSpeedFL();
-    s.wheel_speed_fr = hub.wheelSpeedFR();
-    s.wheel_speed_rl = hub.wheelSpeedRL();
-    s.wheel_speed_rr = hub.wheelSpeedRR();
-    s.rpm = hub.engineRpm();
+    s.wheel_speed_fl = hub.pulseWheelFL().getFrequencyHz();
+    s.wheel_speed_fr = hub.pulseWheelFR().getFrequencyHz();
+    s.wheel_speed_rl = hub.pulseWheelRL().getFrequencyHz();
+    s.wheel_speed_rr = hub.pulseWheelRR().getFrequencyHz();
+    s.rpm = hub.pulseEngine().getFrequencyHz();
 
-    s.wheel_count_fl = hub.wheelCountFL();
-    s.wheel_count_fr = hub.wheelCountFR();
-    s.wheel_count_rl = hub.wheelCountRL();
-    s.wheel_count_rr = hub.wheelCountRR();
-    s.rpm_count = hub.rpmCount();
+    s.wheel_count_fl = hub.pulseWheelFL().count();
+    s.wheel_count_fr = hub.pulseWheelFR().count();
+    s.wheel_count_rl = hub.pulseWheelRL().count();
+    s.wheel_count_rr = hub.pulseWheelRR().count();
+    s.rpm_count = hub.pulseEngine().count();
 
     s.gps_raw = hub.gps().getRawValue();
     s.gear = hub.gps().getGear();

@@ -5,8 +5,8 @@
 
 namespace launch {
 
-// Thin wrapper around Flash that only permits reading/writing the bite point.
-// Prevents launch code from accessing arbitrary flash files.
+// Flash の特定ファイル ('/bite_point.pb') への入出力に限定したラッパ。
+// launch コード以外から flash に直接触らせないための封印。
 class BitePointFile {
    public:
     explicit BitePointFile(Flash& flash) : flash_(flash) {}

@@ -75,6 +75,15 @@
 
 #define MOTOR_CONTROLL_CYCLE_TIME 1  // ms
 
+///////////////////////////////
+/// Launch Control Settings ///
+///////////////////////////////
+
+// Launch FSM tick 周期。pulse counter (PULSE_UPDATE_INTERVAL_MS=100ms) と
+// 整合させつつ FSM 応答性を確保するため 50ms (20Hz) とする。
+// CAN_TX 周期 (16ms) からは切り離されている。
+#define LAUNCH_UPDATE_INTERVAL_MS 50
+
 ///////////////////////
 /// Sensor Settings ///
 ///////////////////////

@@ -11,11 +11,13 @@
 #include "sensor/sensor_hub.hpp"
 #include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
+#include "util/flash.hpp"
 #include "util/log/debug_logger.hpp"
 
 IntervalTimer motorControlTimer;
 IntervalTimer sensorSamplingTimer;
 
+Flash flash;
 SensorHub sensorHub;
 CanController canController(sensorHub);
 
@@ -27,8 +29,12 @@ etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
                                                  sensorHub.target(),
                                                  sensorHub.bps());
 etc::MotorController motorController(sensorHub.target(), sensorHub.tps1());
-launch::LaunchController launchController(sensorHub);
-Configurator configurator(sensorHub, motorController, plausibilityValidator, launchController);
+launch::LaunchController launchController(sensorHub.pulseEngine(),
+                                          sensorHub.pulseWheelRL(),
+                                          sensorHub.pulseWheelRR(),
+                                          sensorHub.clutch(),
+                                          flash);
+Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController);
 CommandRouter commandRouter;
 CommandController commandController(configurator, motorController, sensorHub.mut.target());
 
@@ -53,8 +59,9 @@ void setup() {
     sensorHub.begin();
 
     canController.begin();
-    configurator.initialize();
+    flash.initialize();
     configurator.calibrateFromFlash();
+    launchController.begin();
 
     // Default mode until CAN mode-select frame is received
     sensorHub.mut.target().setModeNormal();
@@ -78,6 +85,7 @@ void setup() {
 unsigned long lastLogTime = 0;
 unsigned long lastPulseUpdateTime = 0;
 unsigned long lastCanTime = 0;
+unsigned long lastLaunchTime = 0;
 
 void loop() {
     unsigned long now = millis();
@@ -127,6 +135,11 @@ void loop() {
     if (now - lastCanTime >= CAN_TX_INTERVAL_MS) {
         lastCanTime = now;
         canController.send();
+    }
+
+    // Launch FSM tick — 20Hz (pulse counter 周期 100ms と整合)
+    if (now - lastLaunchTime >= LAUNCH_UPDATE_INTERVAL_MS) {
+        lastLaunchTime = now;
         launchController.update(canController.rxData().launchActive);
     }
 

@@ -9,7 +9,9 @@ namespace launch {
 // and EMA to smooth the learned value across launches.
 class BitePointEstimator {
    public:
-    void begin(BitePointFile& file);
+    explicit BitePointEstimator(BitePointFile& file) : file_(file) {}
+
+    void begin();
 
     void setParams(float slipThreshold, uint32_t debounceTicks, float emaAlpha);
 
@@ -23,7 +25,7 @@ class BitePointEstimator {
     void reset();
 
    private:
-    BitePointFile* file_ = nullptr;
+    BitePointFile& file_;
     float bitePoint_ = 50.0f;
     bool detected_ = false;
 

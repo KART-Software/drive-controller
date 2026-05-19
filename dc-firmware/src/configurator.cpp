@@ -2,11 +2,13 @@
 #include "default_config.hpp"
 #include "serial/serial_protocol.hpp"
 
-Configurator::Configurator(SensorHub& hub,
+Configurator::Configurator(Flash& flash,
+                           SensorHub& hub,
                            etc::MotorController& motorController,
                            etc::PlausibilityValidator& plausibilityValidator,
                            launch::LaunchController& launchController)
-    : apps1(hub.mut.apps1()),
+    : flash(flash),
+      apps1(hub.mut.apps1()),
       apps2(hub.mut.apps2()),
       tps1(hub.mut.tps1()),
       tps2(hub.mut.tps2()),
@@ -17,10 +19,6 @@ Configurator::Configurator(SensorHub& hub,
       motorController(motorController),
       plausibilityValidator(plausibilityValidator),
       launchController(launchController) {}
-
-void Configurator::initialize() {
-    flash.initialize();
-}
 
 void Configurator::loadDefault() {
     config = DEFAULT_CONFIG;
@@ -111,7 +109,6 @@ void Configurator::loadConfigFromFlash() {
 void Configurator::calibrateFromFlash() {
     loadConfigFromFlash();
     calibrate();
-    launchController.begin(flash);
 }
 
 void Configurator::setAppsMin() {

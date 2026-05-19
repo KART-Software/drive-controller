@@ -23,17 +23,12 @@ class SensorHub {
     const GearPositionSensor& gps() const { return gps_; }
     const ClutchSensor& clutch() const { return clutch_; }
     const Imu* imu() const { return imu_; }
-    float wheelSpeedFL() const { return pulseWheelFL_.getFrequencyHz(); }
-    float wheelSpeedFR() const { return pulseWheelFR_.getFrequencyHz(); }
-    float wheelSpeedRL() const { return pulseWheelRL_.getFrequencyHz(); }
-    float wheelSpeedRR() const { return pulseWheelRR_.getFrequencyHz(); }
-    float engineRpm() const { return pulseEngine_.getFrequencyHz(); }
-    uint32_t wheelCountFL() const { return pulseWheelFL_.count(); }
-    uint32_t wheelCountFR() const { return pulseWheelFR_.count(); }
-    uint32_t wheelCountRL() const { return pulseWheelRL_.count(); }
-    uint32_t wheelCountRR() const { return pulseWheelRR_.count(); }
-    uint32_t rpmCount() const { return pulseEngine_.count(); }
-    uint32_t sps() const { return adc_.sps(); }
+    const Adc& adc() const { return adc_; }
+    const PulseCounter& pulseEngine() const { return pulseEngine_; }
+    const PulseCounter& pulseWheelFL() const { return pulseWheelFL_; }
+    const PulseCounter& pulseWheelFR() const { return pulseWheelFR_; }
+    const PulseCounter& pulseWheelRL() const { return pulseWheelRL_; }
+    const PulseCounter& pulseWheelRR() const { return pulseWheelRR_; }
 
     // ── mut: Configurator-only mutable access ──
     struct Mut {

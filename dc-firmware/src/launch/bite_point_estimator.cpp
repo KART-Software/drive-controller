@@ -2,9 +2,8 @@
 
 namespace launch {
 
-void BitePointEstimator::begin(BitePointFile& file) {
-    file_ = &file;
-    bitePoint_ = file.load();
+void BitePointEstimator::begin() {
+    bitePoint_ = file_.load();
     reset();
 }
 
@@ -34,8 +33,7 @@ bool BitePointEstimator::detect(float clutchPosition, float slip) {
             // EMA: blend new observation with stored value
             bitePoint_ = emaAlpha_ * firstSlipPos_ + (1.0f - emaAlpha_) * bitePoint_;
             detected_ = true;
-            if (file_)
-                file_->save(bitePoint_);
+            file_.save(bitePoint_);
             return true;
         }
     } else {

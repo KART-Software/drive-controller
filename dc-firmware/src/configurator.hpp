@@ -11,11 +11,11 @@
 
 class Configurator {
    public:
-    Configurator(SensorHub& hub,
+    Configurator(Flash& flash,
+                 SensorHub& hub,
                  etc::MotorController& motorController,
                  etc::PlausibilityValidator& plausibilityValidator,
                  launch::LaunchController& launchController);
-    void initialize();
     void calibrateFromFlash();
 
     void setAppsMin();
@@ -33,7 +33,7 @@ class Configurator {
     void save();
     void revert();
 
-    Flash flash;
+    Flash& flash;
     dc_Config config = dc_Config_init_zero;
     Apps &apps1, &apps2;
     Tps &tps1, &tps2;

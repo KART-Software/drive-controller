@@ -4,7 +4,17 @@
 
 namespace launch {
 
-LaunchController::LaunchController(const SensorHub& sensorHub) : hub_(sensorHub) {}
+LaunchController::LaunchController(const PulseCounter& engine,
+                                   const PulseCounter& wheelRL,
+                                   const PulseCounter& wheelRR,
+                                   const ClutchSensor& clutch,
+                                   Flash& flash)
+    : engine_(engine),
+      wheelRL_(wheelRL),
+      wheelRR_(wheelRR),
+      clutch_(clutch),
+      bitePointFile_(flash),
+      bitePoint_(bitePointFile_) {}
 
 void LaunchController::setConfig(const dc_LaunchConfig& cfg,
                                  uint32_t engineTeeth,
@@ -33,10 +43,8 @@ void LaunchController::setConfig(const dc_LaunchConfig& cfg,
     }
 }
 
-void LaunchController::begin(Flash& flash) {
-    static BitePointFile file(flash);
-    bitePointFile_ = &file;
-    bitePoint_.begin(file);
+void LaunchController::begin() {
+    bitePoint_.begin();
 }
 
 void LaunchController::update(bool launchRequested) {
@@ -62,7 +70,7 @@ void LaunchController::update(bool launchRequested) {
 // ── helpers ──────────────────────────────────────────────────────────
 
 float LaunchController::engineRps() const {
-    return hub_.engineRpm() / static_cast<float>(engineTeeth_);
+    return engine_.getFrequencyHz() / static_cast<float>(engineTeeth_);
 }
 
 float LaunchController::engineRpm() const {
@@ -71,7 +79,7 @@ float LaunchController::engineRpm() const {
 
 float LaunchController::wheelRpsAtEngine() const {
     // Average rear wheel Hz → RPS → multiply by total drive ratio
-    float hz = (hub_.wheelSpeedRL() + hub_.wheelSpeedRR()) * 0.5f;
+    float hz = (wheelRL_.getFrequencyHz() + wheelRR_.getFrequencyHz()) * 0.5f;
     float wheelRps = hz / static_cast<float>(wheelTeethRear_);
     return wheelRps * gearRatio_ * finalDriveRatio_;
 }
@@ -93,6 +101,9 @@ float LaunchController::engagement() const {
 }
 
 void LaunchController::transitionTo(State next) {
+    if (next == State::Idle) {
+        motor_.off();
+    }
     state_ = next;
 }
 
@@ -108,16 +119,14 @@ void LaunchController::handleIdle(bool launchRequested) {
 
 void LaunchController::handleReady(bool launchRequested) {
     if (!launchRequested) {
-        motor_.off();
         transitionTo(State::Idle);
         return;
     }
 
     bool engineHighEnough = engineRpm() >= launchRpmThreshold_;
-    bool clutchDepressed = hub_.clutch().convertedValue() < clutchDepressThreshold_;
+    bool clutchDepressed = clutch_.convertedValue() < clutchDepressThreshold_;
     if (engineHighEnough && clutchDepressed) {
-        // Start approach from current clutch sensor position
-        approachPos_ = static_cast<float>(hub_.clutch().convertedValue());
+        approachPos_ = static_cast<float>(clutch_.convertedValue());
         lastUpdateMs_ = millis();
         bitePoint_.reset();
         transitionTo(State::Approach);
@@ -126,7 +135,6 @@ void LaunchController::handleReady(bool launchRequested) {
 
 void LaunchController::handleApproach(bool launchRequested) {
     if (!launchRequested) {
-        motor_.off();
         transitionTo(State::Idle);
         return;
     }
@@ -135,8 +143,6 @@ void LaunchController::handleApproach(bool launchRequested) {
     float dtS = static_cast<float>(now - lastUpdateMs_) * 0.001f;
     lastUpdateMs_ = now;
 
-    // Phase 1: fast ramp toward (bitePoint - margin)
-    // Phase 2: creep forward once margin target reached
     float marginTarget = bitePoint_.bitePoint() - bitePointMargin_;
     if (marginTarget < 0.0f)
         marginTarget = 0.0f;
@@ -148,10 +154,7 @@ void LaunchController::handleApproach(bool launchRequested) {
         approachPos_ = 100.0f;
     motor_.write(approachPos_);
 
-    // Detect clutch engagement onset — update bite point via EMA and transition
-    float eng = engagement();
-    // BitePointEstimator detects slip (1-engagement), so pass slip value
-    if (bitePoint_.detect(approachPos_, 1.0f - eng)) {
+    if (bitePoint_.detect(approachPos_, clutchSlip())) {
         engageControlElapsed_ = 0.0f;
         lastUpdateMs_ = millis();
         transitionTo(State::EngageControl);
@@ -160,7 +163,6 @@ void LaunchController::handleApproach(bool launchRequested) {
 
 void LaunchController::handleEngageControl(bool launchRequested) {
     if (!launchRequested) {
-        motor_.off();
         transitionTo(State::Idle);
         return;
     }
@@ -170,7 +172,6 @@ void LaunchController::handleEngageControl(bool launchRequested) {
     lastUpdateMs_ = now;
     engageControlElapsed_ += dtS;
 
-    // Target engagement ramps from initialEngagement toward 1.0
     float targetEng = initialEngagement_ + engagementRampRate_ * engageControlElapsed_;
     if (targetEng > 1.0f)
         targetEng = 1.0f;
@@ -188,7 +189,6 @@ void LaunchController::handleEngageControl(bool launchRequested) {
         posCmd = 100.0f;
     motor_.write(posCmd);
 
-    // Complete when fully engaged
     if (targetEng >= 1.0f && actual > 0.98f) {
         transitionTo(State::FullEngage);
     }
@@ -196,17 +196,13 @@ void LaunchController::handleEngageControl(bool launchRequested) {
 
 void LaunchController::handleFullEngage(bool launchRequested) {
     if (!launchRequested) {
-        motor_.off();
         transitionTo(State::Idle);
         return;
     }
 
-    // Drive clutch fully engaged
     motor_.write(100.0f);
 
-    // Complete when clutch sensor reports near-full engagement
-    if (hub_.clutch().convertedValue() >= 99.0) {
-        motor_.off();
+    if (clutch_.convertedValue() >= 99.0) {
         transitionTo(State::Idle);
     }
 }
