@@ -28,6 +28,11 @@ class SensorHub {
     float wheelSpeedRL() const { return pulseWheelRL_.getFrequencyHz(); }
     float wheelSpeedRR() const { return pulseWheelRR_.getFrequencyHz(); }
     float engineRpm() const { return pulseEngine_.getFrequencyHz(); }
+    uint32_t wheelCountFL() const { return pulseWheelFL_.count(); }
+    uint32_t wheelCountFR() const { return pulseWheelFR_.count(); }
+    uint32_t wheelCountRL() const { return pulseWheelRL_.count(); }
+    uint32_t wheelCountRR() const { return pulseWheelRR_.count(); }
+    uint32_t rpmCount() const { return pulseEngine_.count(); }
     uint32_t sps() const { return adc_.sps(); }
 
     // ── mut: Configurator-only mutable access ──

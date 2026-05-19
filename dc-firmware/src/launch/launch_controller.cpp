@@ -177,7 +177,8 @@ void LaunchController::handleEngageControl(bool launchRequested) {
 
     float actual = engagement();
 
-    // PID: error = target - actual; positive → need more engagement → increase clutch pos
+    // PID 規約: error = actual - target (現在値 - 目標値)
+    // actual < target → error 負 → output 正 → クラッチ位置を上げ engagement を増やす
     double output = engagementPid_.compute(targetEng, actual);
 
     float posCmd = bitePoint_.bitePoint() + static_cast<float>(output);

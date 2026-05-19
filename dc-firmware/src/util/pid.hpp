@@ -10,6 +10,9 @@ class PID {
     double compute(double setPoint, double position);
     void setDirection(int8_t direction);
     void setGains(double kP, double kI, double kD);
+    // 積分項の出力寄与 |kI * errorSum| を limit 以下にクランプ (anti-windup)。
+    // limit <= 0 で無効化 (デフォルト無効)。
+    void setIntegralLimit(double limit) { integralLimit = limit; }
 
    private:
     double kP, kI, kD;
@@ -17,4 +20,5 @@ class PID {
     double lastError;
     unsigned long lastTime = 0;
     int8_t direction;
+    double integralLimit = -1.0;  // <= 0 で無効
 };

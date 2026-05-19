@@ -30,7 +30,7 @@ class Sensor {
     uint16_t getRawValue() const;
 
    protected:
-    MovingAverage mvgAvg = MovingAverage(60);
+    MovingAverage<60> mvgAvg;
     uint16_t rawValue;
     uint16_t rawMinValue, rawMaxValue;
     const double minValue, maxValue;
@@ -103,7 +103,7 @@ class GearPositionSensor {
     uint16_t setCurrentAsGear(int8_t gear);
 
    private:
-    MovingAverage mvgAvg_ = MovingAverage(60);
+    MovingAverage<60> mvgAvg_;
     uint16_t rawValue_ = 0;
     uint8_t gearCount_ = 0;
     int8_t gears_[GPS_MAX_GEARS] = {};

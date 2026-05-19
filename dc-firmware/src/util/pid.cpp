@@ -32,6 +32,13 @@ double PID::compute(double setPoint, double position)
         double timeDelta = (now - lastTime) / 1000000.0; // sec
         differential = (error - lastError) / timeDelta;
         errorSum += error * timeDelta;
+
+        // Anti-windup: |kI * errorSum| を integralLimit 以下にクランプ
+        if (integralLimit > 0.0 && kI != 0.0) {
+            double maxSum = integralLimit / fabs(kI);
+            if (errorSum >  maxSum) errorSum =  maxSum;
+            if (errorSum < -maxSum) errorSum = -maxSum;
+        }
     }
     lastTime = now;
     lastError = error;

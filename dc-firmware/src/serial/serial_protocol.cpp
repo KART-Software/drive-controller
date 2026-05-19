@@ -177,11 +177,11 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     s.wheel_speed_rr = hub.wheelSpeedRR();
     s.rpm = hub.engineRpm();
 
-    s.wheel_count_fl = 0;
-    s.wheel_count_fr = 0;
-    s.wheel_count_rl = 0;
-    s.wheel_count_rr = 0;
-    s.rpm_count = 0;
+    s.wheel_count_fl = hub.wheelCountFL();
+    s.wheel_count_fr = hub.wheelCountFR();
+    s.wheel_count_rl = hub.wheelCountRL();
+    s.wheel_count_rr = hub.wheelCountRR();
+    s.rpm_count = hub.rpmCount();
 
     s.gps_raw = hub.gps().getRawValue();
     s.gear = hub.gps().getGear();

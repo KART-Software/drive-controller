@@ -41,7 +41,8 @@ void CanRxData::mergeFrame(const CAN_message_t& msg) {
                 etcMode = static_cast<CanEtcMode>(msg.buf[0]);
                 break;
             default:
-                etcMode = CanEtcMode::NORMAL;
+                // UNSPECIFIED (0) や未知値: モードは変更しない (現在値を維持)。
+                // フレーム自体は受信できているので lastModeFrameMs だけ更新する。
                 break;
         }
         lastModeFrameMs = millis();
