@@ -90,8 +90,8 @@
 
 #define ITTR_MARGIN 0
 
-#define BPS_RAW_MAX 4.5 * 65535 / 5.12  // 4.5V
-#define BPS_RAW_MIN 5000                // 0.5V
+#define BPS_RAW_MAX (4.5 * 65535 / 5.12)  // 4.5V
+#define BPS_RAW_MIN 5000                  // 0.5V
 
 #define BPS_MAX 1000                     // psi
 #define BPS_MIN 0                        // psi
@@ -123,14 +123,6 @@
     { 1, 0, 2, 3, 4, 5, 6 }
 
 #define GPS_MAX_GEARS 7  // max(IST=5, Normal=7)
-
-///////////////////////
-/// Button Settings ///
-///////////////////////
-
-#define BUTTON_1_PIN 24
-#define BUTTON_2_PIN 25
-#define BUTTON_3_PIN 26
 
 //////////////////////////
 /// IMU Settings (SPI1) //

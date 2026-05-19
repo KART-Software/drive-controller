@@ -1,6 +1,5 @@
 #pragma once
 #include <Arduino.h>
-#include <constants.hpp>
 
 #define SWITCH_DURATION 100 // ms
 
@@ -38,7 +37,7 @@ public:
         Second,
         Third
     };
-    SelectSwitch3Pin(uint8_t pin1 = BUTTON_1_PIN, uint8_t pin2 = BUTTON_2_PIN, uint8_t pin3 = BUTTON_3_PIN);
+    SelectSwitch3Pin(uint8_t pin1, uint8_t pin2, uint8_t pin3);
     void initialize();
     void read();
     bool changed();
