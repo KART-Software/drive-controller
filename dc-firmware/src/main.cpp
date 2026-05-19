@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#include "can_controller.hpp"
+#include "can/can_controller.hpp"
 #include "commands/command_controller.hpp"
 #include "commands/command_router.hpp"
 #include "configurator.hpp"
