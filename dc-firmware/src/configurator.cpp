@@ -90,17 +90,22 @@ void Configurator::calibrate() {
     }
 }
 
+void Configurator::overlayConfig(const dc_Config& src) {
+    if (src.has_sensor_calib)
+        config.sensor_calib = src.sensor_calib;
+    if (src.has_etc)
+        config.etc = src.etc;
+    if (src.has_launch)
+        config.launch = src.launch;
+    // 新トップレベルメッセージ (例: traction) はここに追加
+}
+
 void Configurator::loadConfigFromFlash() {
     loadDefault();
     dc_Config loaded = dc_Config_init_zero;
     if (!flash.readProto(CONFIG_FILE_NAME, dc_Config_fields, &loaded))
         return;
-    if (loaded.has_sensor_calib)
-        config.sensor_calib = loaded.sensor_calib;
-    if (loaded.has_etc)
-        config.etc = loaded.etc;
-    if (loaded.has_launch)
-        config.launch = loaded.launch;
+    overlayConfig(loaded);
 }
 
 void Configurator::calibrateFromFlash() {
@@ -210,7 +215,8 @@ void Configurator::setGpsGear(int8_t gear) {
 }
 
 bool Configurator::importConfig(const dc_Config& cfg) {
-    config = cfg;
+    // 部分 Config が渡されたときに既存設定をゼロで上書きしないよう has_* チェック経由で反映
+    overlayConfig(cfg);
     calibrate();
     configChanged = true;
     save();

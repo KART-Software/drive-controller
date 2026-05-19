@@ -194,6 +194,13 @@ void EtcTarget::setModeRestricted() {
     maxValue = restrictedMaxValue;
 }
 
+void EtcTarget::setModeMotorOff() {
+    mode = Mode::MotorOff;
+    // min/max は意味を持たないが、getTarget() が呼ばれた場合に備えて idling 相当に
+    minValue = idlingValue;
+    maxValue = idlingValue;
+}
+
 void EtcTarget::setIdlingValue(double val) {
     idlingValue = val;
 }
@@ -230,9 +237,10 @@ const char* EtcTarget::getModeString() const {
             return "Normal";
         case EtcTarget::Mode::Restricted:
             return "Restrict";
-        default:
-            return "";
+        case EtcTarget::Mode::MotorOff:
+            return "MotorOff";
     }
+    return "";
 }
 
 bool EtcTarget::setManual() {

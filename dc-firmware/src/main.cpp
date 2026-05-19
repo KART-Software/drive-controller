@@ -58,21 +58,16 @@ void setup() {
 
     // Default mode until CAN mode-select frame is received
     sensorHub.mut.target().setModeNormal();
-    bool motorOnAllowed = true;
     motorController.initialize();
-    if (motorOnAllowed) {
-        motorController.setMotorOn();
-        motorControlTimer.begin(motorControlISR, MOTOR_CONTROLL_CYCLE_TIME * 1000);  // ms -> us
-        motorTimerRunning = true;
-    }
+    motorController.setMotorOn();
+    motorControlTimer.begin(motorControlISR, MOTOR_CONTROLL_CYCLE_TIME * 1000);  // ms -> us
+    motorTimerRunning = true;
 
     // Start 8kHz sensor sampling ISR
     sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
 
     // NVIC priority: motor ISR (highest=0) > sensor ISR (lower=16)
-    if (motorTimerRunning) {
-        motorControlTimer.priority(0);
-    }
+    motorControlTimer.priority(0);
     sensorSamplingTimer.priority(16);
 
     plausibilityValidator.initialize();
@@ -90,25 +85,24 @@ void loop() {
     // Poll CAN for mode-select frame
     canController.poll();
     switch (canController.rxData().etcMode) {
-        case EtcMode::CALIB:
+        case CanEtcMode::CALIB:
             sensorHub.mut.target().setModeCalibration();
             break;
-        case EtcMode::NORMAL:
+        case CanEtcMode::NORMAL:
             sensorHub.mut.target().setModeNormal();
             break;
-        case EtcMode::RESTRICTED:
+        case CanEtcMode::RESTRICTED:
             sensorHub.mut.target().setModeRestricted();
             break;
-        case EtcMode::MOTOR_OFF:
+        case CanEtcMode::MOTOR_OFF:
+            sensorHub.mut.target().setModeMotorOff();
             if (motorController.isOn()) {
-                motorController.setMotorOff();
                 motorController.setMotorOff();
                 if (motorTimerRunning) {
                     motorControlTimer.end();
                     motorTimerRunning = false;
                 }
             }
-        default:
             break;
     }
 

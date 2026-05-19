@@ -4,7 +4,6 @@
 #include <pb_encode.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "cobs.hpp"
 #include "crc16.hpp"
@@ -14,15 +13,16 @@ uint8_t rxBuf[DC_MAX_FRAME];
 size_t rxLen = 0;
 
 dc_EtcMode targetModeToProto(const EtcTarget& t) {
-    const char* s = t.getModeString();
-    if (strcmp(s, "Calib") == 0)
-        return dc_EtcMode_ETC_MODE_CALIB;
-    if (strcmp(s, "Normal") == 0)
-        return dc_EtcMode_ETC_MODE_NORMAL;
-    if (strcmp(s, "Restrict") == 0)
-        return dc_EtcMode_ETC_MODE_RESTRICT;
-    if (strcmp(s, "MotorOff") == 0)
-        return dc_EtcMode_ETC_MODE_MOTOR_OFF;
+    switch (t.getMode()) {
+        case EtcTarget::Mode::Calibration:
+            return dc_EtcMode_ETC_MODE_CALIB;
+        case EtcTarget::Mode::Normal:
+            return dc_EtcMode_ETC_MODE_NORMAL;
+        case EtcTarget::Mode::Restricted:
+            return dc_EtcMode_ETC_MODE_RESTRICT;
+        case EtcTarget::Mode::MotorOff:
+            return dc_EtcMode_ETC_MODE_MOTOR_OFF;
+    }
     return dc_EtcMode_ETC_MODE_UNSPECIFIED;
 }
 

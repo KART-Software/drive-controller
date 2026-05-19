@@ -33,15 +33,15 @@ void CanTxData::toFrames(CAN_message_t (&out)[FRAME_COUNT]) const {
 
 void CanRxData::mergeFrame(const CAN_message_t& msg) {
     if (msg.id == CAN_ID_MODE_SELECT && msg.len >= 1) {
-        switch (static_cast<EtcMode>(msg.buf[0])) {
-            case EtcMode::CALIB:
-            case EtcMode::NORMAL:
-            case EtcMode::RESTRICTED:
-            case EtcMode::MOTOR_OFF:
-                etcMode = static_cast<EtcMode>(msg.buf[0]);
+        switch (static_cast<CanEtcMode>(msg.buf[0])) {
+            case CanEtcMode::CALIB:
+            case CanEtcMode::NORMAL:
+            case CanEtcMode::RESTRICTED:
+            case CanEtcMode::MOTOR_OFF:
+                etcMode = static_cast<CanEtcMode>(msg.buf[0]);
                 break;
             default:
-                etcMode = EtcMode::NORMAL;
+                etcMode = CanEtcMode::NORMAL;
                 break;
         }
         lastModeFrameMs = millis();
@@ -59,8 +59,8 @@ void CanRxData::checkTimeouts(unsigned long nowMs) {
     // 一度でも MODE_SELECT を受信していて、それが途絶した場合のみ NORMAL へフォールバック。
     // lastModeFrameMs == 0 (起動以来未受信) は判定スキップ — デフォルトの NORMAL のまま。
     // MOTOR_OFF は安全ラッチ: CAN 断で勝手にモーターを復帰させない。
-    if (etcMode != EtcMode::NORMAL && etcMode != EtcMode::MOTOR_OFF && lastModeFrameMs != 0 &&
+    if (etcMode != CanEtcMode::NORMAL && etcMode != CanEtcMode::MOTOR_OFF && lastModeFrameMs != 0 &&
         (nowMs - lastModeFrameMs) > CAN_MODE_TIMEOUT_MS) {
-        etcMode = EtcMode::NORMAL;
+        etcMode = CanEtcMode::NORMAL;
     }
 }

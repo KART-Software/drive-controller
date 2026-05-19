@@ -50,4 +50,7 @@ class Configurator {
     void loadDefault();
     void loadConfigFromFlash();
     void calibrate();
+    // src の has_* が立っているサブメッセージのみを config に上書きする。
+    // proto に新しいトップレベルを追加した時はここに 1 行追加するだけ。
+    void overlayConfig(const dc_Config& src);
 };

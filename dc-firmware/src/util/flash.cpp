@@ -6,9 +6,11 @@
 bool Flash::initialize() {
     for (int i = 0; i < BEGIN_FS_LIMIT_TIMES; i++) {
         if (fs.begin(256 * 1024)) {
+            // 容量警告のみ出す。設定が消える自動フォーマットは行わない。
+            // 容量が逼迫した場合はホストから明示的に消去すること。
             if (fs.totalSize() > 0 && fs.usedSize() > fs.totalSize() * 9 / 10) {
-                DebugLogger::log("LittleFS nearly full, formatting...");
-                fs.quickFormat();
+                DebugLogger::log("LittleFS nearly full: %u/%u bytes",
+                                 (unsigned)fs.usedSize(), (unsigned)fs.totalSize());
             }
             return true;
         }

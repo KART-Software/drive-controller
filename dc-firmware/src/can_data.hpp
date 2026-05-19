@@ -16,7 +16,8 @@ struct CanTxData {
     void toFrames(CAN_message_t (&out)[FRAME_COUNT]) const;
 };
 
-enum class EtcMode : uint8_t {
+// CAN 受信フレーム由来の ETC モード (proto の dc_EtcMode とは独立)
+enum class CanEtcMode : uint8_t {
     CALIB = 1u,
     NORMAL = 2u,
     RESTRICTED = 3u,
@@ -25,7 +26,7 @@ enum class EtcMode : uint8_t {
 
 // Data received over CAN
 struct CanRxData {
-    EtcMode etcMode = EtcMode::NORMAL;
+    CanEtcMode etcMode = CanEtcMode::NORMAL;
     bool launchActive = false;
     unsigned long lastModeFrameMs = 0;    // MODE_SELECT を最後に受信した時刻 (millis)
     unsigned long lastLaunchFrameMs = 0;  // LAUNCH_CTRL を最後に受信した時刻 (millis)

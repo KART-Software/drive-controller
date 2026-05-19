@@ -112,11 +112,15 @@ class GearPositionSensor {
 
 class EtcTarget {
    public:
+    enum class Mode { Calibration, Normal, Restricted, MotorOff };
+
     EtcTarget(Apps& apps, Ittr& ittr);
     double getTarget() const;
     void setModeCalibration();
     void setModeNormal();
     void setModeRestricted();
+    void setModeMotorOff();
+    Mode getMode() const { return mode; }
     bool isIttr() const;
     void setIttr(bool isIttr);
     void setIdlingValue(double val);
@@ -133,8 +137,7 @@ class EtcTarget {
     void setTargetCurve(const TargetCurve& curve);
 
    private:
-    enum class Mode { Calibration, Normal, Restricted };
-    Mode mode;
+    Mode mode = Mode::Normal;
     Apps& apps;
     Ittr& ittr;
     bool _isIttr;

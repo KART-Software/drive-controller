@@ -19,6 +19,10 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .target_tp_idling = 15,
             .target_tp_normal_max = 100,
             .target_tp_restricted_max = 60,
+            // パルスカウンタの 1 回転あたりパルス数 (実機の歯数に合わせて要設定)
+            .wheel_rotor_teeth_front = 1,
+            .wheel_rotor_teeth_rear = 1,
+            .engine_teeth = 1,
             .clutch_min = 5000,
             .clutch_max = 60000,
             .has_gps = true,
