@@ -138,9 +138,13 @@ void loop() {
     }
 
     // Launch FSM tick — 20Hz (pulse counter 周期 100ms と整合)
+    // Plausibility 違反 / MOTOR_OFF 時は launchRequested を強制 false にして
+    // FSM を Idle に戻す (handler 側の !launchRequested パスで motor_.off() 経由)。
     if (now - lastLaunchTime >= LAUNCH_UPDATE_INTERVAL_MS) {
         lastLaunchTime = now;
-        launchController.update(canController.rxData().launchActive);
+        bool safe = plausibilityValidator.isCurrentlyValid() &&
+                    canController.rxData().etcMode != CanEtcMode::MOTOR_OFF;
+        launchController.update(safe && canController.rxData().launchActive);
     }
 
     // Send sensor data via serial protocol (50Hz)

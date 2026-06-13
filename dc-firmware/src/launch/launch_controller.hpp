@@ -51,7 +51,6 @@ class LaunchController {
     float launchRpmThreshold_ = 3000.0f;
     float clutchDepressThreshold_ = 20.0f;
     float approachSpeedPctPerS_ = 50.0f;
-    float initialEngagement_ = 0.5f;
     float engagementRampRate_ = 0.3f;
     float bitePointMargin_ = 5.0f;
     float creepSpeedPctPerS_ = 10.0f;
@@ -67,6 +66,9 @@ class LaunchController {
     float approachPos_ = 0.0f;
     unsigned long lastUpdateMs_ = 0;
     float engageControlElapsed_ = 0.0f;
+    // EngageControl 突入時の actual engagement を target ramp の起点に使う
+    // (continuous start: target ジャンプを避ける)
+    float engageControlStartEng_ = 0.0f;
 
     // -- helpers --
     float engineRps() const;

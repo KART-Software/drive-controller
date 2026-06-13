@@ -16,6 +16,7 @@ void MotorController::cycle() {
 }
 
 void MotorController::setMotorOn() {
+    pid.reset();
     dcMotor.on();
 }
 

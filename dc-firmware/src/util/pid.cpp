@@ -52,3 +52,10 @@ void PID::setGains(double kP, double kI, double kD)
     this->kI = kI;
     this->kD = kD;
 }
+
+void PID::reset()
+{
+    errorSum = 0.0;
+    lastError = 0.0;
+    lastTime = 0;
+}

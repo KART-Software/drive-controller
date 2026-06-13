@@ -23,7 +23,7 @@ void LaunchController::setConfig(const dc_LaunchConfig& cfg,
     launchRpmThreshold_ = cfg.launch_rpm_threshold;
     clutchDepressThreshold_ = cfg.clutch_depress_threshold;
     approachSpeedPctPerS_ = cfg.approach_speed_pct_per_s;
-    initialEngagement_ = cfg.initial_engagement;
+    // cfg.initial_engagement は continuous start 化により未使用 (C-1 で proto から除去予定)
     engagementRampRate_ = cfg.engagement_ramp_rate;
     bitePointMargin_ = cfg.bite_point_margin;
     creepSpeedPctPerS_ = cfg.creep_speed_pct_per_s;
@@ -86,8 +86,11 @@ float LaunchController::wheelRpsAtEngine() const {
 
 float LaunchController::clutchSlip() const {
     float eRps = engineRps();
+    // エンジン停止 / 極低回転時は計測無効。「完全に滑っている」扱い (1.0) を返し、
+    // engagement() を 0 にする。0 を返すと engagement=1 になり EngageControl 中に
+    // 誤って FullEngage 遷移してしまうため避ける。
     if (eRps < 0.1f)
-        return 0.0f;
+        return 1.0f;
     float slip = (eRps - wheelRpsAtEngine()) / eRps;
     if (slip < 0.0f)
         return 0.0f;
@@ -150,12 +153,19 @@ void LaunchController::handleApproach(bool launchRequested) {
     float speed = (approachPos_ < marginTarget) ? approachSpeedPctPerS_ : creepSpeedPctPerS_;
     float delta = speed * dtS;
     approachPos_ += delta;
-    if (approachPos_ > 100.0f)
-        approachPos_ = 100.0f;
+    // bitePoint + margin を超えて creep しない。bitePoint 推定が低めに外れた
+    // 場合の保険であって、ここでハングしたら A-1 のタイムアウト側で抜ける。
+    float maxApproachPos = bitePoint_.bitePoint() + bitePointMargin_;
+    if (maxApproachPos > 100.0f)
+        maxApproachPos = 100.0f;
+    if (approachPos_ > maxApproachPos)
+        approachPos_ = maxApproachPos;
     motor_.write(approachPos_);
 
     if (bitePoint_.detect(approachPos_, clutchSlip())) {
         engageControlElapsed_ = 0.0f;
+        engageControlStartEng_ = engagement();
+        engagementPid_.reset();
         lastUpdateMs_ = millis();
         transitionTo(State::EngageControl);
     }
@@ -172,7 +182,7 @@ void LaunchController::handleEngageControl(bool launchRequested) {
     lastUpdateMs_ = now;
     engageControlElapsed_ += dtS;
 
-    float targetEng = initialEngagement_ + engagementRampRate_ * engageControlElapsed_;
+    float targetEng = engageControlStartEng_ + engagementRampRate_ * engageControlElapsed_;
     if (targetEng > 1.0f)
         targetEng = 1.0f;
 
@@ -189,7 +199,12 @@ void LaunchController::handleEngageControl(bool launchRequested) {
         posCmd = 100.0f;
     motor_.write(posCmd);
 
-    if (targetEng >= 1.0f && actual > 0.98f) {
+    // FullEngage 遷移条件: actual が target を追いつくか、ハングプリベントの
+    // タイムアウト (target=1 到達後一定時間) を超えた場合。
+    const float kEngageMaxDurationS = 3.0f;
+    bool reached = targetEng >= 1.0f && actual > 0.98f;
+    bool timedOut = engageControlElapsed_ > kEngageMaxDurationS;
+    if (reached || timedOut) {
         transitionTo(State::FullEngage);
     }
 }
