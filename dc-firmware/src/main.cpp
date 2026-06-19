@@ -9,6 +9,7 @@
 #include "etc/plausibility_validator.hpp"
 #include "launch/launch_controller.hpp"
 #include "sensor/sensor_hub.hpp"
+#include "shift/auto_shifter.hpp"
 #include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
 #include "util/flash.hpp"
@@ -34,7 +35,12 @@ launch::LaunchController launchController(sensorHub.pulseEngine(),
                                           sensorHub.pulseWheelRR(),
                                           sensorHub.clutch(),
                                           flash);
-Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController);
+shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
+                               sensorHub.pulseWheelFL(),
+                               sensorHub.pulseWheelFR(),
+                               sensorHub.gps(),
+                               sensorHub.apps1());
+Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController, autoShifter);
 CommandRouter commandRouter;
 CommandController commandController(configurator, motorController, sensorHub.mut.target());
 
@@ -64,6 +70,7 @@ void setup() {
 #if defined(LAUNCH_CONTROL_ENABLED)
     launchController.begin();
 #endif
+    autoShifter.begin();
 
     // Default mode until CAN mode-select frame is received
     sensorHub.mut.target().setModeNormal();
@@ -150,6 +157,13 @@ void loop() {
         launchController.update(safe && canController.rxData().launchActive);
     }
 #endif
+
+    // Auto-shifter — 毎イテレーション (passthrough レイテンシ最小化, パルス計時は内部 millis)
+    // CAN ON かつ plausibility OK のときだけ auto。それ以外は OFF(manual=ドライバー入力スルー整形)。
+    {
+        bool autoOn = canController.rxData().autoShiftActive && plausibilityValidator.isCurrentlyValid();
+        autoShifter.update(autoOn);
+    }
 
     // Send sensor data via serial protocol (50Hz)
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {

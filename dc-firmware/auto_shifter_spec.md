@@ -128,16 +128,19 @@ pulseWidthFor(gear, dir, moving):
 ```
 if !autoOn:                                 // OFF (manual)
     requestDir = pollDriverEdge()           // ドライバー判断。本機は整形のみ
-else if stopped && gear in {N, 1, 2}:       // ON だが低速ギア帯で停車 → manual
-    requestDir = pollDriverEdge()           // 1 / N / 2 を手動でナビゲート (auto 停止)
+else if stopped && gear <= 2:               // ON だが低速ギア帯/不明で停車 → manual
+    requestDir = pollDriverEdge()           // 不明 / N / 1 / 2 を手動でナビゲート (auto 停止)
 else:                                       // ON (auto)
     requestDir = evaluate()
 ```
 
-> `stopped = vWheelHz < min_wheel_hz`。停車中の低速ギア帯（N・1速・2速）は
-> **auto を停止してドライバーに渡す**。理由: §4 で「停車中 2速DOWN = N(25ms)」と
-> 決めているため、ここで auto が 2→1 ダウンシフトすると意図と競合する。N の出入りは
-> この帯でドライバーが管理する。
+> `stopped = vWheelHz < min_wheel_hz`。`gear <= 2` は **不明(-1) / N(0) / 1速 / 2速** を含む。
+> 停車中のこの帯は **auto を停止してドライバーに渡す**。理由は 2 つ:
+> - §4 で「停車中 2速DOWN = N(25ms)」と決めているため、ここで auto が 2→1 ダウンシフト
+>   すると意図と競合する。N の出入りはこの帯でドライバーが管理する。
+> - ギア不明(-1)を含めるのは、ギアセンサがノイズ/未キャリブで -1 のときに手動シフトを
+>   殺さない（デッドゾーン回避）ため。auto は不明ギアでは何もしない (§6) ので、停車中は
+>   ドライバーに委ねる。
 
 ### OFF (manual)
 
@@ -150,9 +153,9 @@ else:                                       // ON (auto)
 ### ON (auto)
 
 - 通常はドライバー入力を**読まない / 無視**し、`evaluate()`（§7）に従う。
-- **例外（manual フォールバック）**: **停車中（`vWheelHz < min_wheel_hz`）かつ gear ∈
-  {N, 1速, 2速}** のときは auto を停止し、ドライバーのエッジを受理する。この帯では
-  1速 / N / 2速 を手動でナビゲートできる:
+- **例外（manual フォールバック）**: **停車中（`vWheelHz < min_wheel_hz`）かつ gear <= 2
+  （不明 -1 / N / 1速 / 2速）** のときは auto を停止し、ドライバーのエッジを受理する。
+  この帯では 1速 / N / 2速 を手動でナビゲートでき、ギア不明時も手動シフトが殺されない:
   - N → 1速（N 脱出。NORMAL は DOWN、IST は UP）
   - 1速 → N（NORMAL は UP=25ms、IST は DOWN=`ist_pulse_ms`）
   - 2速 → N（NORMAL は DOWN=25ms。IST は N が隣接しないので 2→1→N と 2 タップ）
@@ -179,7 +182,9 @@ effectiveAutoOn = canAutoShiftActive && plausibilityValidator.isCurrentlyValid()
 
 ### `evaluate()` が `None` を返す（自動シフトしない）条件
 
-`evaluate()` は §5 の auto 経路（manual 帯でない）でのみ呼ばれる。その上で:
+`evaluate()` は §5 の auto 経路（manual 帯でない）でのみ呼ばれる。停車中の gear <= 2
+（不明 / N / 1 / 2）は manual 帯なので、`evaluate()` が不明ギアを見るのは「走行中の -1」
+（センサノイズ等）に限られ、その場合 None を返して何もしない。その上で:
 
 - ギア不明（`getGear() == -1`）/ ニュートラル（gear == 0）— 自動で N を出入りしない
 - UP: `gear < 1` / `gear >= maxGear`（最上段で UP しない。maxGear は IST=4 / NORMAL=6）

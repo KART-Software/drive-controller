@@ -28,13 +28,16 @@ enum class CanEtcMode : uint8_t {
 struct CanRxData {
     CanEtcMode etcMode = CanEtcMode::NORMAL;
     bool launchActive = false;
-    unsigned long lastModeFrameMs = 0;    // MODE_SELECT を最後に受信した時刻 (millis)
-    unsigned long lastLaunchFrameMs = 0;  // LAUNCH_CTRL を最後に受信した時刻 (millis)
+    bool autoShiftActive = false;            // AUTO_SHIFT: true=ON(auto) / false=OFF(manual)
+    unsigned long lastModeFrameMs = 0;       // MODE_SELECT を最後に受信した時刻 (millis)
+    unsigned long lastLaunchFrameMs = 0;     // LAUNCH_CTRL を最後に受信した時刻 (millis)
+    unsigned long lastAutoShiftFrameMs = 0;  // AUTO_SHIFT を最後に受信した時刻 (millis)
 
     void mergeFrame(const CAN_message_t& msg);
     // 各フレームが一定時間途絶していたら安全側の値に戻す。
     //   - LAUNCH_CTRL 途絶 → launchActive = false
     //   - MODE_SELECT 途絶 → etcMode = NORMAL
+    //   - AUTO_SHIFT 途絶 → autoShiftActive = false (OFF/manual)
     // CAN 断・ECU 故障時のフェールセーフ。
     void checkTimeouts(unsigned long nowMs);
 };

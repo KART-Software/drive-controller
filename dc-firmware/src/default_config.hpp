@@ -88,4 +88,17 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .gear_ratio = 3.0f,
             .final_drive_ratio = 3.5f,
         },
+    .has_auto_shift = true,
+    .auto_shift =
+        {
+            // RPM しきい値はエンジン特性依存。要実機調整。
+            .upshift_rpm = 11000.0f,
+            .downshift_rpm = 6000.0f,
+            .min_wheel_hz = 5.0f,  // 停止/走行 境界。実機の wheel teeth に合わせて要調整
+            .cooldown_ms = 250,
+            .ist_pulse_ms = 15,
+            .normal_drive_pulse_ms = 100,
+            .normal_neutral_pulse_ms = 25,
+            .throttle_on_pct = 50.0f,
+        },
 };

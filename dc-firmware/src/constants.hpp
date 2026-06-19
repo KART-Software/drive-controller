@@ -162,11 +162,27 @@
 #define CAN_ID_ACCEL_Z 0x603      // az(float32)
 #define CAN_ID_MODE_SELECT 0x200
 #define CAN_ID_LAUNCH_CTRL 0x300
+#define CAN_ID_AUTO_SHIFT 0x400  // byte0: 0x01=ON(auto) / それ以外=OFF(manual)
 
 // LAUNCH_CTRL フレームが本値以上途絶したら launchActive を false に落とす (フェールセーフ)
 #define CAN_LAUNCH_TIMEOUT_MS 200
 // MODE_SELECT フレームが本値以上途絶したら etcMode を NORMAL に戻す (フェールセーフ)
 #define CAN_MODE_TIMEOUT_MS 200
+// AUTO_SHIFT フレームが本値以上途絶したら OFF(manual) に戻す (フェールセーフ)
+#define CAN_AUTO_SHIFT_TIMEOUT_MS 200
+
+///////////////////////////////
+/// Auto Shifter (GPIO)     ///
+///////////////////////////////
+
+#define AUTO_SHIFT_UP_IN_PIN 24     // TODO: 実配線に合わせる (ドライバー UP 入力)
+#define AUTO_SHIFT_DOWN_IN_PIN 25   // TODO: 実配線に合わせる (ドライバー DOWN 入力)
+#define AUTO_SHIFT_UP_OUT_PIN 26    // TODO: 実配線に合わせる (UP 出力 → IST コントローラ)
+#define AUTO_SHIFT_DOWN_OUT_PIN 27  // TODO: 実配線に合わせる (DOWN 出力 → IST コントローラ)
+// 入力はプルアップ前提 (押下=LOW)。出力はアサート=HIGH。
+#define AUTO_SHIFT_IN_ACTIVE LOW
+#define AUTO_SHIFT_OUT_ACTIVE HIGH
+#define AUTO_SHIFT_OUT_INACTIVE LOW
 
 /////////////////////////////////
 /// Other Output Pin Settings ///

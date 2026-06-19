@@ -22,6 +22,6 @@ void CanController::send() {
 void CanController::poll() {
     // rxData_ は前回値を保持し、受信フレームのみ mergeFrame() で上書きする
     bus_.poll(rxData_);
-    // LAUNCH_CTRL フレームが途絶したら launchActive を落とす (CAN 断対策)
+    // LAUNCH_CTRL / MODE_SELECT / AUTO_SHIFT フレーム途絶時に各々を安全側へフォールバック (CAN 断対策)
     rxData_.checkTimeouts(millis());
 }

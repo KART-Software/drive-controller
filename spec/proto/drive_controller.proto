@@ -107,16 +107,29 @@ message LaunchConfig {
 message TractionConfig {
 }
 
+// オートシフター設定。詳細は dc-firmware/auto_shifter_spec.md。
+message AutoShiftConfig {
+  float  upshift_rpm             = 1;  // UP しきい値 (RPM)
+  float  downshift_rpm           = 2;  // DOWN しきい値 (RPM)
+  float  min_wheel_hz            = 3;  // 停止/走行 境界 (兼 ON 時の停車抑止しきい)
+  uint32 cooldown_ms             = 4;  // シフト間ロックアウト (両モード)
+  uint32 ist_pulse_ms            = 5;  // IST: 全シフト共通パルス幅 (ms)
+  uint32 normal_drive_pulse_ms   = 6;  // NORMAL 走行中/通常: N スキップ (ms)
+  uint32 normal_neutral_pulse_ms = 7;  // NORMAL 停車中 1速UP/2速DOWN: N 入れ (ms)
+  float  throttle_on_pct         = 8;  // この APPS% 以上=アクセルオン(UP可) / 未満=オフ(DOWN可)
+}
+
 // Stored separately in /bite_point.pb — learned clutch meet point
 message BitePoint {
   float position = 1;  // 0-100%
 }
 
 message Config {
-  SensorCalib    sensor_calib = 1;
-  EtcConfig      etc          = 2;
-  LaunchConfig   launch       = 3;
-  TractionConfig traction     = 4;
+  SensorCalib     sensor_calib = 1;
+  EtcConfig       etc          = 2;
+  LaunchConfig    launch       = 3;
+  TractionConfig  traction     = 4;
+  AutoShiftConfig auto_shift   = 5;
 }
 
 // ---------------------------------------------------------------------

@@ -51,6 +51,10 @@ void CanRxData::mergeFrame(const CAN_message_t& msg) {
         launchActive = (msg.buf[0] == 0x01);
         lastLaunchFrameMs = millis();
     }
+    if (msg.id == CAN_ID_AUTO_SHIFT && msg.len >= 1) {
+        autoShiftActive = (msg.buf[0] == 0x01);
+        lastAutoShiftFrameMs = millis();
+    }
 }
 
 void CanRxData::checkTimeouts(unsigned long nowMs) {
@@ -63,5 +67,9 @@ void CanRxData::checkTimeouts(unsigned long nowMs) {
     if (etcMode != CanEtcMode::NORMAL && etcMode != CanEtcMode::MOTOR_OFF && lastModeFrameMs != 0 &&
         (nowMs - lastModeFrameMs) > CAN_MODE_TIMEOUT_MS) {
         etcMode = CanEtcMode::NORMAL;
+    }
+    // AUTO_SHIFT 途絶 → OFF(manual)。手動シフトが残る方が安全。
+    if (autoShiftActive && (nowMs - lastAutoShiftFrameMs) > CAN_AUTO_SHIFT_TIMEOUT_MS) {
+        autoShiftActive = false;
     }
 }
