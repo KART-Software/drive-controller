@@ -61,7 +61,9 @@ void setup() {
     canController.begin();
     flash.initialize();
     configurator.calibrateFromFlash();
+#if defined(LAUNCH_CONTROL_ENABLED)
     launchController.begin();
+#endif
 
     // Default mode until CAN mode-select frame is received
     sensorHub.mut.target().setModeNormal();
@@ -137,6 +139,7 @@ void loop() {
         canController.send();
     }
 
+#if defined(LAUNCH_CONTROL_ENABLED)
     // Launch FSM tick — 20Hz (pulse counter 周期 100ms と整合)
     // Plausibility 違反 / MOTOR_OFF 時は launchRequested を強制 false にして
     // FSM を Idle に戻す (handler 側の !launchRequested パスで motor_.off() 経由)。
@@ -146,6 +149,7 @@ void loop() {
                     canController.rxData().etcMode != CanEtcMode::MOTOR_OFF;
         launchController.update(safe && canController.rxData().launchActive);
     }
+#endif
 
     // Send sensor data via serial protocol (50Hz)
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {
