@@ -6,7 +6,7 @@
 
 2 つの連携サブプロジェクトが `spec/proto/` の Protobuf スキーマを共有しています:
 
-- `dc-firmware/` — Teensy 4.1 ファームウェア (PlatformIO + Arduino framework)。ETC (電子スロットル)、Launch Control、センサーサンプリング、CAN、シリアルプロトコルを担当。
+- `dc-firmware/` — Teensy 4.1 ファームウェア (PlatformIO + Arduino framework)。ETC (電子スロットル)、オートシフター、Launch Control (現在凍結)、センサーサンプリング、CAN、シリアルプロトコルを担当。
 - `dc-console/` — Preact + Vite の Web アプリ。Web Serial API 経由でファームウェアと USB シリアル通信し、ライブモニタリング・キャリブレーションを行う。
 - `spec/proto/drive_controller.proto` — ホスト ↔ デバイス間ワイヤフォーマットおよび永続化 `Config` の単一ソース。
 
@@ -55,7 +55,7 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 1. **モーター制御 ISR** — `IntervalTimer`, 周期 1 ms, NVIC 優先度 **0 (最高)**。センサー状態を読み、PID を回し、PWM を書き出す。`motor_controller.cycle()`。
 2. **センサーサンプリング ISR** — `IntervalTimer`, 周期 125 µs (8 kHz), NVIC 優先度 **16**。ADS8688 ADC を SPI で読み、移動平均を更新する。`sensor_hub.read()`。
-3. **`loop()`** — 非 ISR: CAN poll/send (60 Hz)、パルスカウンタ集計、プラウシビリティチェック、シリアルプロトコル、コマンドディスパッチ、launch FSM tick。
+3. **`loop()`** — 非 ISR: CAN poll/send (60 Hz)、パルスカウンタ集計、プラウシビリティチェック、シリアルプロトコル、コマンドディスパッチ、オートシフター tick (毎イテレーション)、launch FSM tick (凍結時はビルドから除外)。
 
 ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は既に `sum` の読み取りを `noInterrupts()` で守っている — このパターンを踏襲すること。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
 
@@ -66,17 +66,30 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### CAN
 
-- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): `MODE_SELECT (0x200)` で ETC モード選択、`LAUNCH_CTRL (0x300)` で launch を切り替え。
-- `CanRxData::checkTimeouts()` が安全層。フレーム受信時刻を `lastXFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
+- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): `MODE_SELECT (0x200)` で ETC モード選択、`LAUNCH_CTRL (0x300)` で launch を切り替え、`AUTO_SHIFT (0x400)` でオートシフター ON/OFF を切り替え (byte0=0x01 で ON)。
+- `CanRxData::checkTimeouts()` が安全層。フレーム受信時刻を `lastXFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false に、autoShift を false (OFF=手動) にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
 - `MODE_SELECT` で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastModeFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
 
-### Launch Control
+### オートシフター
+
+`shift::AutoShifter` (`dc-firmware/src/shift/`) — クイックシフター/シーケンシャル
+ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/auto_shifter_spec.md` が一次ソース。
+
+- ON/OFF は CAN `AUTO_SHIFT (0x400)` で切替。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。
+- 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。
+- パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
+- ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
+- 4 層構成: 判断ロジック (`evaluate`, 将来の拡張点) / 調停 / 出力整形 / I/O。
+- `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る。`update()` は `loop()` から毎イテレーション呼ばれ、`autoOn = CAN active && plausibilityOK`。
+- シフト機構制御 (クラッチ/点火カット/ブリッピング/オーバーレブ保護) は IST コントローラ責務。
+
+### Launch Control (現在凍結)
+
+**`-DLAUNCH_CONTROL_ENABLED` が未定義の通常ビルドでは凍結中。** `main.cpp` の `launchController.begin()` と FSM tick が `#if defined(LAUNCH_CONTROL_ENABLED)` でガードされ、`update()` が呼ばれないため FSM は Idle のまま (clutch motor 停止)。インスタンスと参照はビルドに残るので、フラグ ON ビルド (CI 等) で腐敗検知できる。CAN `LAUNCH_CTRL` は受信し続けるが何も起きない。
 
 `launch::LaunchController` は FSM `Idle → Ready → Approach → EngageControl → FullEngage → Idle`。制御量は **エンゲージ率** (`wheel_rps_at_engine / engine_rps`) で、外側 PID がクラッチ位置指令を出す。内側 PID は `ClutchMotor` 内でクラッチセンサに対するクローズドループを構成する想定 — proto/config 上は配線済みだがアクチュエータ側はハード待ち (TODO.md A-2 参照)。
 
-`BitePointEstimator` は Approach 中にクラッチミートポイントを学習する (走行毎に EMA)。`BitePointFile` は `Config` とは別に flash に保存される (`/bite_point.pb`)。
-
-呼び出しタイミング: `update()` は `loop()` から CAN TX 周期で呼ばれている。独立タイマー化の TODO あり (A-7)。
+`BitePointEstimator` は Approach 中にクラッチミートポイントを学習する (走行毎に EMA)。`BitePointFile` は `Config` とは別に flash に保存される (`/bite_point.pb`)。有効時の `update()` は `LAUNCH_UPDATE_INTERVAL_MS` (50ms, 20Hz) の独立タイミングで呼ばれる (CAN TX 周期から分離済み)。
 
 ### 設定 / Flash 永続化
 
@@ -100,7 +113,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ## 規約
 
-- C++ namespace はサブシステム単位: `etc::` (スロットル), `launch::` (Launch Control)。センサーと共通ユーティリティはグローバル。
+- C++ namespace はサブシステム単位: `etc::` (スロットル), `launch::` (Launch Control), `shift::` (オートシフター)。センサーと共通ユーティリティはグローバル。
 - コメントは日本語の箇所が多い。新規コードは英語でも可だが、修正時は周囲のファイルに合わせる。
 - 実行時テレメトリを `Serial` に直接出力しない。`SerialProtocol::sendDebugf` 経由で出す (COBS フレーミングを通る)。素の `Serial.printf` はワイヤフォーマットをフレーム途中で破壊する。
 - `dc-firmware/test/` ディレクトリは存在するが現在空。テストランナーは未セットアップ。
