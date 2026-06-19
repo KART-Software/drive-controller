@@ -23,7 +23,6 @@ void LaunchController::setConfig(const dc_LaunchConfig& cfg,
     launchRpmThreshold_ = cfg.launch_rpm_threshold;
     clutchDepressThreshold_ = cfg.clutch_depress_threshold;
     approachSpeedPctPerS_ = cfg.approach_speed_pct_per_s;
-    // cfg.initial_engagement は continuous start 化により未使用 (C-1 で proto から除去予定)
     engagementRampRate_ = cfg.engagement_ramp_rate;
     bitePointMargin_ = cfg.bite_point_margin;
     creepSpeedPctPerS_ = cfg.creep_speed_pct_per_s;

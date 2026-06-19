@@ -74,7 +74,6 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .launch_rpm_threshold = 3000.0f,
             .clutch_depress_threshold = 20.0f,
             .approach_speed_pct_per_s = 50.0f,
-            .initial_engagement = 0.5f,
             .engagement_ramp_rate = 0.3f,
             .has_engagement_pid = true,
             .engagement_pid = {.k_p = 50.0f, .k_i = 0.0f, .k_d = 10.0f},
@@ -82,7 +81,8 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .inner_pid = {.k_p = 2.0f, .k_i = 0.5f, .k_d = 0.0f},
             .bite_point_margin = 5.0f,
             .creep_speed_pct_per_s = 10.0f,
-            .slip_detect_threshold = 0.01f,
+            // pulse 分解能 (100ms 窓で数パルス) で検出可能な現実的な値。1% は分解能以下で不可。
+            .slip_detect_threshold = 0.05f,
             .slip_detect_debounce = 3,
             .bite_point_ema_alpha = 0.3f,
             .gear_ratio = 3.0f,

@@ -88,11 +88,12 @@ message EtcConfig {
 }
 
 message LaunchConfig {
+  reserved 4;                            // 旧 initial_engagement (continuous start 化で廃止)
+  reserved "initial_engagement";
   float  launch_rpm_threshold     = 1;  // Ready→Approach: エンジン回転数閾値 (RPM)
   float  clutch_depress_threshold = 2;  // Ready→Approach: クラッチ位置 < この値 (0-100%)
   float  approach_speed_pct_per_s = 3;  // Approach: クラッチ締結速度 (%/s)
-  float  initial_engagement       = 4;  // SlipControl開始時の締結率目標 (0.0-1.0)
-  float  engagement_ramp_rate     = 5;  // 目標締結率の上昇速度 (/s)
+  float  engagement_ramp_rate     = 5;  // 目標締結率の上昇速度 (/s)。EngageControl 突入時の実締結率から ramp
   EtcPid engagement_pid           = 6;  // 締結率誤差 → クラッチ位置指令
   EtcPid inner_pid                = 7;  // クラッチ位置指令 → モーター (ClutchMotor内)
   float  bite_point_margin        = 8;  // Approach目標 = bitePoint - margin (%)
