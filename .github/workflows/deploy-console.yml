@@ -6,7 +6,7 @@ on:
       # - main
       - develop
     paths:
-      - "etc-console/**"
+      - "dc-console/**"
 
 permissions:
   contents: read
@@ -34,10 +34,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: etc-console/pnpm-lock.yaml
+          cache-dependency-path: dc-console/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: etc-console
+        working-directory: dc-console
         run: pnpm install --frozen-lockfile
 
       - name: Determine base path
@@ -52,7 +52,7 @@ jobs:
           fi
 
       - name: Build
-        working-directory: etc-console
+        working-directory: dc-console
         run: pnpm build
         env:
           VITE_BASE: ${{ steps.base.outputs.path }}
@@ -98,11 +98,11 @@ jobs:
           # fi
           DEST="${{ steps.base.outputs.dest }}"
           if [ "$DEST" = "." ]; then
-            rsync -a --exclude='dev' etc-console/dist/ _site/
+            rsync -a --exclude='dev' dc-console/dist/ _site/
           else
             rm -rf "_site/$DEST"
             mkdir -p "_site/$DEST"
-            cp -r etc-console/dist/* "_site/$DEST/"
+            cp -r dc-console/dist/* "_site/$DEST/"
           fi
 
       - uses: actions/upload-pages-artifact@v3
