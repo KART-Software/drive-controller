@@ -355,6 +355,10 @@ message SetGpsGearCmd {
   sint32 gear = 1;  // which gear position to calibrate (0=N, 1-6)
 }
 
+message SetClutchMinCmd {}  // 現在のクラッチ位置を clutch_min としてキャプチャ
+
+message SetClutchMaxCmd {}  // 現在のクラッチ位置を clutch_max としてキャプチャ
+
 message Command {
   uint32 id = 1;
   oneof body {
@@ -378,6 +382,8 @@ message Command {
     RevertCmd                  revert                 = 27;
     SetRtcCmd                  set_rtc                = 28;
     SetGpsGearCmd              set_gps_gear           = 29;
+    SetClutchMinCmd            set_clutch_min         = 30;
+    SetClutchMaxCmd            set_clutch_max         = 31;
   }
 }
 

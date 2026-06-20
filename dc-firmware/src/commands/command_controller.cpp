@@ -220,6 +220,18 @@ void setGpsGear(void* ctx, const dc_Command& cmd) {
     SerialProtocol::sendResponseWithGpsGear(cmd.id, true, p);
 }
 
+void setClutchMin(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    c->configurator.setClutchMin();
+    sendConfigResponse(c, cmd.id, true);
+}
+
+void setClutchMax(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    c->configurator.setClutchMax();
+    sendConfigResponse(c, cmd.id, true);
+}
+
 }  // namespace
 
 CommandController::CommandController(Configurator& configurator,
@@ -248,4 +260,6 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_revert_tag, revert, &container);
     router.on(dc_Command_set_rtc_tag, setRtc, nullptr);
     router.on(dc_Command_set_gps_gear_tag, setGpsGear, &container);
+    router.on(dc_Command_set_clutch_min_tag, setClutchMin, &container);
+    router.on(dc_Command_set_clutch_max_tag, setClutchMax, &container);
 }

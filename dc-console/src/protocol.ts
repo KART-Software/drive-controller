@@ -78,6 +78,22 @@ function toAppSensor(st: PbState): SensorData {
     v: e?.valid ?? false,
     err: e?.errors ?? 0,
     sps: s?.sps,
+    // ── ドライブトレイン (非 ETC) ──
+    gear: s?.gear,
+    gpsRaw: s?.gpsRaw,
+    clutch: s?.clutch,
+    clutchRaw: s?.clutchRaw,
+    wheelFL: s?.wheelSpeedFl,
+    wheelFR: s?.wheelSpeedFr,
+    wheelRL: s?.wheelSpeedRl,
+    wheelRR: s?.wheelSpeedRr,
+    rpm: s?.rpm,
+    ax: s?.accelX,
+    ay: s?.accelY,
+    az: s?.accelZ,
+    gx: s?.gyroX,
+    gy: s?.gyroY,
+    gz: s?.gyroZ,
   };
 }
 
@@ -113,10 +129,11 @@ function handleFramePayload(payload: Uint8Array): void {
       const data = r.data;
       let normalized: Record<string, unknown> | undefined;
       if (data.case === "config") {
-        normalized = toDeviceConfig(data.value) as unknown as Record<
-          string,
-          unknown
-        >;
+        // data.value は ConfigResponse { config, changed }
+        normalized = {
+          ...(toDeviceConfig(data.value.config) as unknown as Record<string, unknown>),
+          configChanged: data.value.changed,
+        };
       } else if (data.case) {
         normalized = data.value as unknown as Record<string, unknown>;
       }
@@ -141,9 +158,10 @@ function resolvePending(msg: ResponseMessage): void {
   entry.resolve(msg);
 }
 
-function toDeviceConfig(cfg: PbConfig): DeviceConfig {
-  const sv = cfg.sensorValues;
-  const ec = cfg.etcConfig;
+function toDeviceConfig(cfg: PbConfig | undefined): DeviceConfig {
+  const sv = cfg?.sensorCalib;
+  const ec = cfg?.etc;
+  const as = cfg?.autoShift;
   return {
     sensorValues: {
       apps1Min: sv?.apps1Min ?? 0,
@@ -159,6 +177,19 @@ function toDeviceConfig(cfg: PbConfig): DeviceConfig {
       idling: sv?.targetTpIdling ?? 0,
       normalMax: sv?.targetTpNormalMax ?? 0,
       restrictedMax: sv?.targetTpRestrictedMax ?? 0,
+      clutchMin: sv?.clutchMin ?? 0,
+      clutchMax: sv?.clutchMax ?? 0,
+    },
+    gpsType: sv?.gps?.type ?? 0,
+    autoShift: {
+      upshiftRpm: as?.upshiftRpm ?? 0,
+      downshiftRpm: as?.downshiftRpm ?? 0,
+      minWheelHz: as?.minWheelHz ?? 0,
+      cooldownMs: as?.cooldownMs ?? 0,
+      istPulseMs: as?.istPulseMs ?? 0,
+      normalDrivePulseMs: as?.normalDrivePulseMs ?? 0,
+      normalNeutralPulseMs: as?.normalNeutralPulseMs ?? 0,
+      throttleOnPct: as?.throttleOnPct ?? 0,
     },
     plausibilityFlags: ec?.plausibilityCheckFlags
       ? {
@@ -194,22 +225,24 @@ function buildConfigFromObject(obj: unknown): PbConfig | undefined {
   const sv = o.sensorValues;
   const pf = o.plausibilityFlags;
   return create(ConfigSchema, {
-    sensorValues: sv
+    sensorCalib: sv
       ? {
           ...sv,
           targetTpIdling: sv.idling ?? sv.targetTpIdling ?? 0,
           targetTpNormalMax: sv.normalMax ?? sv.targetTpNormalMax ?? 0,
           targetTpRestrictedMax:
             sv.restrictedMax ?? sv.targetTpRestrictedMax ?? 0,
+          clutchMin: sv.clutchMin ?? 0,
+          clutchMax: sv.clutchMax ?? 0,
         }
       : undefined,
-    etcConfig: {
-      plausibilityCheckFlags: pf ?? o.etcConfig?.plausibilityCheckFlags,
-      useIttr: o.useIttr ?? o.etcConfig?.useIttr ?? false,
-      pid: o.pid ?? o.etcConfig?.pid,
-      targetCurve: o.targetCurve ?? o.etcConfig?.targetCurve,
+    etc: {
+      plausibilityCheckFlags: pf ?? o.etc?.plausibilityCheckFlags,
+      useIttr: o.useIttr ?? o.etc?.useIttr ?? false,
+      pid: o.pid ?? o.etc?.pid,
+      targetCurve: o.targetCurve ?? o.etc?.targetCurve,
     },
-    configChanged: !!o.configChanged,
+    autoShift: o.autoShift ?? undefined,
   });
 }
 
@@ -339,6 +372,44 @@ function buildCommand(
       return create(CommandSchema, { id, body: { case: "reboot", value: {} } });
     case "revert":
       return create(CommandSchema, { id, body: { case: "revert", value: {} } });
+    case "set_gps_gear":
+      return create(CommandSchema, {
+        id,
+        body: { case: "setGpsGear", value: { gear: params.gear } },
+      });
+    case "set_clutch_min":
+      return create(CommandSchema, {
+        id,
+        body: { case: "setClutchMin", value: {} },
+      });
+    case "set_clutch_max":
+      return create(CommandSchema, {
+        id,
+        body: { case: "setClutchMax", value: {} },
+      });
+    case "set_auto_shift":
+      // auto_shift のみを設定した部分 Config を送る。firmware overlayConfig が
+      // has_auto_shift だけを見て他セクションを温存する (CLAUDE.md の不変条件)。
+      return create(CommandSchema, {
+        id,
+        body: {
+          case: "setConfig",
+          value: {
+            config: create(ConfigSchema, {
+              autoShift: {
+                upshiftRpm: params.upshiftRpm,
+                downshiftRpm: params.downshiftRpm,
+                minWheelHz: params.minWheelHz,
+                cooldownMs: params.cooldownMs,
+                istPulseMs: params.istPulseMs,
+                normalDrivePulseMs: params.normalDrivePulseMs,
+                normalNeutralPulseMs: params.normalNeutralPulseMs,
+                throttleOnPct: params.throttleOnPct,
+              },
+            }),
+          },
+        },
+      });
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }

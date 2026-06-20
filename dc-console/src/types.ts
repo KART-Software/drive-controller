@@ -20,6 +20,23 @@ export interface SensorData {
   v: boolean;
   err: number;
   sps?: number;
+
+  // ── ドライブトレイン (非 ETC) ──
+  gear?: number; // -1=不明, 0=N, 1-6
+  gpsRaw?: number;
+  clutch?: number; // 0-100%
+  clutchRaw?: number;
+  wheelFL?: number; // Hz
+  wheelFR?: number;
+  wheelRL?: number;
+  wheelRR?: number;
+  rpm?: number; // engine pulse Hz (歯数換算前)
+  ax?: number;
+  ay?: number;
+  az?: number;
+  gx?: number;
+  gy?: number;
+  gz?: number;
 }
 
 export interface DebugMessage {
@@ -37,6 +54,17 @@ export interface ResponseMessage {
 
 export type Message = SensorData | DebugMessage | ResponseMessage;
 
+export interface AutoShiftConfigT {
+  upshiftRpm: number;
+  downshiftRpm: number;
+  minWheelHz: number;
+  cooldownMs: number;
+  istPulseMs: number;
+  normalDrivePulseMs: number;
+  normalNeutralPulseMs: number;
+  throttleOnPct: number;
+}
+
 export interface DeviceConfig {
   sensorValues: {
     apps1Min: number;
@@ -52,9 +80,14 @@ export interface DeviceConfig {
     idling: number;
     normalMax: number;
     restrictedMax: number;
+    clutchMin: number;
+    clutchMax: number;
   };
   plausibilityFlags: Record<string, boolean>;
   useIttr: boolean;
   pid: { kP: number; kI: number; kD: number };
   targetCurve: { a4: number; a3: number; a2: number; a1: number };
+  // ── 非 ETC ──
+  gpsType: number; // 0=IST, 1=NORMAL
+  autoShift: AutoShiftConfigT;
 }

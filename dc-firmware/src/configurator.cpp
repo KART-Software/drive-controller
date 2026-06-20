@@ -152,6 +152,16 @@ void Configurator::setIdling() {
     configChanged = true;
 }
 
+void Configurator::setClutchMin() {
+    config.sensor_calib.clutch_min = clutch.setCurrentValRawMin();
+    configChanged = true;
+}
+
+void Configurator::setClutchMax() {
+    config.sensor_calib.clutch_max = clutch.setCurrentValRawMax();
+    configChanged = true;
+}
+
 void Configurator::setTargetBound(float idling, float normalMax, float restrictedMax) {
     config.sensor_calib.target_tp_idling = idling;
     config.sensor_calib.target_tp_normal_max = normalMax;

@@ -7,6 +7,7 @@ import {
   StateSchema,
   SensorSchema,
   EtcStateSchema,
+  ConfigSchema,
   EtcMode,
 } from "./proto/drive_controller_pb";
 import type {
@@ -60,10 +61,22 @@ const sensorValues = {
 };
 const pidGains = { kP: 3.0, kI: 0.4, kD: 0.0 };
 const targetCurve = { a4: 0, a3: 0, a2: 0.0087, a1: 0.13 };
+const clutchCalib = { min: 5000, max: 60000 };
+const gpsRawValues = [32768, 32768, 32768, 32768, 32768]; // IST: N,1,2,3,4
+const autoShift = {
+  upshiftRpm: 11000,
+  downshiftRpm: 6000,
+  minWheelHz: 5,
+  cooldownMs: 250,
+  istPulseMs: 15,
+  normalDrivePulseMs: 100,
+  normalNeutralPulseMs: 25,
+  throttleOnPct: 50,
+};
 
 function getFullConfig(): PbConfig {
-  return {
-    sensorValues: {
+  return create(ConfigSchema, {
+    sensorCalib: {
       apps1Min: sensorValues.apps1Min,
       apps1Max: sensorValues.apps1Max,
       apps2Min: sensorValues.apps2Min,
@@ -77,15 +90,18 @@ function getFullConfig(): PbConfig {
       targetTpIdling: sensorValues.idling,
       targetTpNormalMax: sensorValues.normalMax,
       targetTpRestrictedMax: sensorValues.restrictedMax,
+      clutchMin: clutchCalib.min,
+      clutchMax: clutchCalib.max,
+      gps: { type: 0, istRawValues: [...gpsRawValues] },
     },
-    etcConfig: {
+    etc: {
       plausibilityCheckFlags: { ...flags },
       useIttr,
       pid: { ...pidGains },
       targetCurve: { ...targetCurve },
     },
-    configChanged,
-  } as PbConfig;
+    autoShift: { ...autoShift },
+  });
 }
 
 function emitFrame(env: DeviceToHost): void {
@@ -117,6 +133,10 @@ function sensorTick() {
   const ittr = base * 0.8 + noise();
   const bpsVal = 14.7 + Math.sin(elapsed * 0.3) * 2 + noise() * 0.5;
 
+  // ── 非 ETC モック ──
+  const speed = Math.max(0, Math.sin(elapsed * 0.25) * 30 + 30); // 車輪 Hz
+  const rpmHz = Math.max(0, base * 1.2 + 20 + noise()); // engine pulse Hz
+  const mockGear = (Math.floor(elapsed / 4) % 5); // 0..4 を巡回
   const sensor = create(SensorSchema, {
     sps: 50,
     apps1Raw: Math.round(a1 * 36 + 200),
@@ -132,6 +152,21 @@ function sensorTick() {
     tps2: +t2.toFixed(2),
     bps: +bpsVal.toFixed(2),
     targetTp: +tgt.toFixed(2),
+    wheelSpeedFl: +(speed + noise()).toFixed(2),
+    wheelSpeedFr: +(speed + noise()).toFixed(2),
+    wheelSpeedRl: +(speed + noise() + 1).toFixed(2),
+    wheelSpeedRr: +(speed + noise() + 1).toFixed(2),
+    rpm: +rpmHz.toFixed(2),
+    gear: mockGear,
+    gpsRaw: gpsRawValues[mockGear] ?? 32768,
+    clutch: +Math.max(0, Math.min(100, base)).toFixed(1),
+    clutchRaw: Math.round(clutchCalib.min + (base / 100) * (clutchCalib.max - clutchCalib.min)),
+    accelX: +(noise() * 0.5).toFixed(2),
+    accelY: +(noise() * 0.5).toFixed(2),
+    accelZ: +(9.8 + noise() * 0.2).toFixed(2),
+    gyroX: +(noise() * 5).toFixed(2),
+    gyroY: +(noise() * 5).toFixed(2),
+    gyroZ: +(Math.sin(elapsed) * 20).toFixed(2),
   });
   const etc = create(EtcStateSchema, {
     mode: MOCK_MODES[Math.floor(elapsed / 3) % MOCK_MODES.length],
@@ -163,7 +198,7 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, {
             id,
             ok: true,
-            data: { case: "config", value: getFullConfig() },
+            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
           }),
         );
         break;
@@ -174,7 +209,7 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, {
             id,
             ok: true,
-            data: { case: "config", value: getFullConfig() },
+            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
           }),
         );
         break;
@@ -372,8 +407,8 @@ function handleCommand(cmd: Command): void {
       case "setConfig": {
         const cfg = body.value.config;
         if (cfg) {
-          if (cfg.sensorValues) {
-            const sv = cfg.sensorValues;
+          if (cfg.sensorCalib) {
+            const sv = cfg.sensorCalib;
             sensorValues.apps1Min = sv.apps1Min ?? sensorValues.apps1Min;
             sensorValues.apps1Max = sv.apps1Max ?? sensorValues.apps1Max;
             sensorValues.apps2Min = sv.apps2Min ?? sensorValues.apps2Min;
@@ -390,17 +425,49 @@ function handleCommand(cmd: Command): void {
             sensorValues.restrictedMax =
               sv.targetTpRestrictedMax ?? sensorValues.restrictedMax;
           }
-          if (cfg.etcConfig) {
-            if (cfg.etcConfig.plausibilityCheckFlags)
-              Object.assign(flags, cfg.etcConfig.plausibilityCheckFlags);
-            if (cfg.etcConfig.pid) Object.assign(pidGains, cfg.etcConfig.pid);
-            if (cfg.etcConfig.targetCurve)
-              Object.assign(targetCurve, cfg.etcConfig.targetCurve);
-            useIttr = cfg.etcConfig.useIttr;
+          if (cfg.etc) {
+            if (cfg.etc.plausibilityCheckFlags)
+              Object.assign(flags, cfg.etc.plausibilityCheckFlags);
+            if (cfg.etc.pid) Object.assign(pidGains, cfg.etc.pid);
+            if (cfg.etc.targetCurve)
+              Object.assign(targetCurve, cfg.etc.targetCurve);
+            useIttr = cfg.etc.useIttr;
           }
+          if (cfg.autoShift) Object.assign(autoShift, cfg.autoShift);
           configChanged = true;
         }
         emitResponse(create(ResponseSchema, { id, ok: !!cfg }));
+        break;
+      }
+      case "setGpsGear": {
+        const g = body.value.gear;
+        gpsRawValues[g] = 30000 + Math.round(Math.random() * 5000);
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: {
+              case: "gpsGear",
+              value: { gear: g, rawValues: [...gpsRawValues], gears: [0, 1, 2, 3, 4] },
+            },
+          }),
+        );
+        break;
+      }
+      case "setClutchMin":
+      case "setClutchMax": {
+        const cur = 20000 + Math.round(Math.random() * 5000);
+        if (body.case === "setClutchMin") clutchCalib.min = cur;
+        else clutchCalib.max = cur;
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
+          }),
+        );
         break;
       }
       case "reboot":

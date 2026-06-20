@@ -25,6 +25,8 @@ class Configurator {
     void setTpsMin();
     void setTpsMax();
     void setIdling();
+    void setClutchMin();
+    void setClutchMax();
     void setTargetBound(float idling, float normalMax, float restrictedMax);
     void setPlausibilityFlags(const dc_EtcPlausibilityCheckFlags& flags);
     void setIttrFlag(bool val);

@@ -655,3 +655,64 @@ button.danger:hover:not(:disabled) { background: var(--err); color: white; }
 .pid-row {
   margin-top: 8px;
 }
+
+/* ── Page navigation (ETC / Drivetrain) ── */
+.page-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 16px;
+}
+.nav-tab {
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+.nav-tab:hover { color: var(--text); background: #2a3a60; }
+.nav-tab.active { color: #000; background: var(--accent); }
+
+/* ── Drivetrain page layout ── */
+.dt-main {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "monitor calib"
+    "chart   chart"
+    "log     log";
+  gap: 10px;
+}
+.dt-monitor { grid-area: monitor; }
+.dt-calib   { grid-area: calib; display: flex; flex-direction: column; gap: 10px; }
+.dt-chart   { grid-area: chart; }
+.dt-log     { grid-area: log; }
+
+@media (max-width: 768px) {
+  .dt-main {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "monitor"
+      "calib"
+      "chart"
+      "log";
+  }
+}
+
+/* ── Calibration / AutoShift ── */
+.calib-hint { font-size: 0.85rem; margin-bottom: 6px; }
+.gear-raw { color: var(--text-dim); font-weight: 400; font-size: 0.75rem; }
+.controls-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.autoshift-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+@media (max-width: 768px) {
+  .autoshift-grid { grid-template-columns: repeat(2, 1fr); }
+}
