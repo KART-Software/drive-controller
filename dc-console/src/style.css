@@ -716,3 +716,9 @@ button.danger:hover:not(:disabled) { background: var(--err); color: white; }
 @media (max-width: 768px) {
   .autoshift-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── Transmission toggle (gear calib) ── */
+.tx-toggle { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.tx-label { font-size: 0.8rem; color: var(--text-dim); margin-right: 4px; }
+.tx-btn { padding: 4px 12px; font-size: 0.8rem; }
+.tx-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }

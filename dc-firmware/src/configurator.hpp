@@ -33,6 +33,7 @@ class Configurator {
     void setPid(float kP, float kI, float kD);
     void setTargetCurve(const dc_EtcTargetCurve& curve);
     void setGpsGear(int8_t gear);
+    void setTransmissionType(dc_TransmissionType type);
     bool importConfig(const dc_Config& cfg);
     void save();
     void revert();

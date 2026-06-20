@@ -230,6 +230,15 @@ void Configurator::setGpsGear(int8_t gear) {
     configChanged = true;
 }
 
+void Configurator::setTransmissionType(dc_TransmissionType type) {
+    config.sensor_calib.gps.type = type;
+    config.sensor_calib.has_gps = true;
+    // ギアテーブルと auto-shifter (maxGear / パルス幅ロジック) を新しい type で再適用。
+    // ist/normal の raw 値は別フィールドで保持されるため切替で失われない。
+    calibrate();
+    configChanged = true;
+}
+
 bool Configurator::importConfig(const dc_Config& cfg) {
     // 部分 Config が渡されたときに既存設定をゼロで上書きしないよう has_* チェック経由で反映
     overlayConfig(cfg);

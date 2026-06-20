@@ -387,6 +387,11 @@ function buildCommand(
         id,
         body: { case: "setClutchMax", value: {} },
       });
+    case "set_transmission":
+      return create(CommandSchema, {
+        id,
+        body: { case: "setTransmissionType", value: { type: params.type } },
+      });
     case "set_auto_shift":
       // auto_shift のみを設定した部分 Config を送る。firmware overlayConfig が
       // has_auto_shift だけを見て他セクションを温存する (CLAUDE.md の不変条件)。

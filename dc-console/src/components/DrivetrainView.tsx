@@ -24,7 +24,7 @@ export function DrivetrainView({ config, setConfig, addLog, setDirty, logs }: Pr
       <div class="dt-monitor"><DrivetrainMonitor /></div>
       <div class="dt-chart"><DrivetrainChart /></div>
       <div class="dt-calib">
-        <GearCalibration config={config} addLog={addLog} onDirty={() => setDirty(true)} />
+        <GearCalibration config={config} addLog={addLog} onDirty={() => setDirty(true)} onConfigUpdate={(c) => setConfig(c)} />
         <ClutchCalibration
           config={config}
           addLog={addLog}

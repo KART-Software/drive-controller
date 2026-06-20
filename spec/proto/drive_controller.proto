@@ -359,6 +359,10 @@ message SetClutchMinCmd {}  // 現在のクラッチ位置を clutch_min とし�
 
 message SetClutchMaxCmd {}  // 現在のクラッチ位置を clutch_max としてキャプチャ
 
+message SetTransmissionTypeCmd {
+  TransmissionType type = 1;  // IST / NORMAL を切替 (ギアテーブル・オートシフター挙動も切替わる)
+}
+
 message Command {
   uint32 id = 1;
   oneof body {
@@ -384,6 +388,7 @@ message Command {
     SetGpsGearCmd              set_gps_gear           = 29;
     SetClutchMinCmd            set_clutch_min         = 30;
     SetClutchMaxCmd            set_clutch_max         = 31;
+    SetTransmissionTypeCmd     set_transmission_type  = 32;
   }
 }
 

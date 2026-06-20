@@ -62,6 +62,7 @@ const sensorValues = {
 const pidGains = { kP: 3.0, kI: 0.4, kD: 0.0 };
 const targetCurve = { a4: 0, a3: 0, a2: 0.0087, a1: 0.13 };
 const clutchCalib = { min: 5000, max: 60000 };
+let gpsType = 0; // 0=IST, 1=NORMAL
 const gpsRawValues = [32768, 32768, 32768, 32768, 32768]; // IST: N,1,2,3,4
 const autoShift = {
   upshiftRpm: 11000,
@@ -92,7 +93,7 @@ function getFullConfig(): PbConfig {
       targetTpRestrictedMax: sensorValues.restrictedMax,
       clutchMin: clutchCalib.min,
       clutchMax: clutchCalib.max,
-      gps: { type: 0, istRawValues: [...gpsRawValues] },
+      gps: { type: gpsType, istRawValues: [...gpsRawValues] },
     },
     etc: {
       plausibilityCheckFlags: { ...flags },
@@ -460,6 +461,18 @@ function handleCommand(cmd: Command): void {
         const cur = 20000 + Math.round(Math.random() * 5000);
         if (body.case === "setClutchMin") clutchCalib.min = cur;
         else clutchCalib.max = cur;
+        configChanged = true;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
+          }),
+        );
+        break;
+      }
+      case "setTransmissionType": {
+        gpsType = body.value.type;
         configChanged = true;
         emitResponse(
           create(ResponseSchema, {

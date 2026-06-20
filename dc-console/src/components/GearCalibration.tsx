@@ -7,6 +7,7 @@ interface Props {
   config: DeviceConfig | null;
   addLog: (msg: string) => void;
   onDirty: () => void;
+  onConfigUpdate: (cfg: DeviceConfig) => void;
 }
 
 // シフトパターン (物理順)。gear id: 0=N, 1-6
@@ -17,9 +18,26 @@ function gearName(g: number): string {
   return g === 0 ? "N" : String(g);
 }
 
-export function GearCalibration({ config, addLog, onDirty }: Props) {
+export function GearCalibration({ config, addLog, onDirty, onConfigUpdate }: Props) {
   const [live, setLive] = useState<SensorData | null>(null);
   const [rawByGear, setRawByGear] = useState<Record<number, number>>({});
+
+  async function switchType(type: number) {
+    if (config?.gpsType === type) return;
+    try {
+      const resp = await protocol.sendCommand("set_transmission", { type });
+      if (resp.ok && resp.data) {
+        onConfigUpdate(resp.data as unknown as DeviceConfig);
+        setRawByGear({});
+        addLog(`Transmission → ${type === 1 ? "NORMAL" : "IST"}`);
+        onDirty();
+      } else {
+        addLog("Transmission switch failed");
+      }
+    } catch (err) {
+      addLog("Transmission error: " + (err as Error).message);
+    }
+  }
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -55,10 +73,14 @@ export function GearCalibration({ config, addLog, onDirty }: Props) {
   return (
     <section>
       <h2>Gear Calibration</h2>
+      <div class="tx-toggle">
+        <span class="tx-label">Transmission</span>
+        <button class={`tx-btn${config?.gpsType !== 1 ? " active" : ""}`} onClick={() => switchType(0)}>IST</button>
+        <button class={`tx-btn${config?.gpsType === 1 ? " active" : ""}`} onClick={() => switchType(1)}>NORMAL</button>
+      </div>
       <p class="calib-hint">
         現在ギア: <b>{live?.gear != null && live.gear >= 0 ? gearName(live.gear) : "?"}</b>
         {"　"}raw: <b>{live?.gpsRaw ?? "-"}</b>
-        {"　"}({config?.gpsType === 1 ? "NORMAL" : "IST"})
       </p>
       <p class="calib-hint" style={{ color: "var(--text-dim)" }}>
         各ギア位置にシフトした状態でボタンを押すと、現在の raw 値をそのギアとして登録します。
