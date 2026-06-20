@@ -104,6 +104,11 @@ jobs:
             mkdir -p "_site/$DEST"
             cp -r dc-console/dist/* "_site/$DEST/"
           fi
+          # SPA フォールバック: history ルーティングの直リンク/リロード時、
+          # GitHub Pages はサイトルートの 404.html を返す。デプロイした index.html
+          # (asset は絶対 base 参照) を複製しておけば、404.html でもアプリが起動し
+          # location.pathname からクライアント側でルーティングされる。
+          cp dc-console/dist/index.html _site/404.html
 
       - uses: actions/upload-pages-artifact@v3
         with:

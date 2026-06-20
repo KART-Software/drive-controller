@@ -15,8 +15,19 @@ const isMock = new URLSearchParams(window.location.search).has("mock");
 
 type Route = "etc" | "drivetrain";
 
-function routeFromHash(): Route {
-  return window.location.hash.replace(/^#\/?/, "") === "drivetrain" ? "drivetrain" : "etc";
+// Vite の base ("/" or "/etc/dev/" 等)。末尾は必ず "/"。
+const BASE = import.meta.env.BASE_URL;
+
+function routeFromPath(): Route {
+  let p = window.location.pathname;
+  if (p.startsWith(BASE)) p = p.slice(BASE.length);
+  p = p.replace(/^\/+|\/+$/g, "");
+  return p === "drivetrain" ? "drivetrain" : "etc";
+}
+
+function pathForRoute(r: Route): string {
+  // クエリ (?mock 等) は保持する
+  return BASE + (r === "drivetrain" ? "drivetrain" : "") + window.location.search;
 }
 
 export function App() {
@@ -25,13 +36,22 @@ export function App() {
   const [config, setConfig] = useState<DeviceConfig | null>(null);
   const [dirty, setDirty] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [route, setRoute] = useState<Route>(routeFromHash());
+  const [route, setRoute] = useState<Route>(routeFromPath());
 
   useEffect(() => {
-    const onHash = () => setRoute(routeFromHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    const onPop = () => setRoute(routeFromPath());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  function navTo(e: MouseEvent, r: Route) {
+    // 修飾クリック (Ctrl/⌘/Shift/中クリック) は「新規タブで開く」等に任せる。
+    // 通常クリックのみ pushState で SPA 内遷移 → 接続を維持したままページ切替。
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    window.history.pushState(null, "", pathForRoute(r));
+    setRoute(r);
+  }
 
   const addLog = useCallback((msg: string, ts?: number) => {
     const tsStr = ts != null ? (ts / 1000).toFixed(1) + "s" : new Date().toLocaleTimeString();
@@ -124,8 +144,8 @@ export function App() {
       <header>
         <h1>Drive Controller</h1>
         <nav class="page-nav">
-          <a class={`nav-tab${route === "etc" ? " active" : ""}`} href="#/">ETC</a>
-          <a class={`nav-tab${route === "drivetrain" ? " active" : ""}`} href="#/drivetrain">Drivetrain</a>
+          <a class={`nav-tab${route === "etc" ? " active" : ""}`} href={pathForRoute("etc")} onClick={(e) => navTo(e, "etc")}>ETC</a>
+          <a class={`nav-tab${route === "drivetrain" ? " active" : ""}`} href={pathForRoute("drivetrain")} onClick={(e) => navTo(e, "drivetrain")}>Drivetrain</a>
         </nav>
         <div class="header-actions">
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("motor_off").catch((err: Error) => addLog("Command error: " + err.message))}>Motor OFF</button>
