@@ -177,10 +177,12 @@
 /// Auto Shifter (GPIO)     ///
 ///////////////////////////////
 
+// 注意: ピン 26/27 は SPI1 の MOSI/SCK (IMU 用)。ここに割り当てると autoShifter.begin()
+// の pinMode で SPI1 が壊れ IMU read がハングする。SPI1(0,1,26,27) と被らない空きピンを使う。
 #define AUTO_SHIFT_UP_IN_PIN 24     // TODO: 実配線に合わせる (ドライバー UP 入力)
 #define AUTO_SHIFT_DOWN_IN_PIN 25   // TODO: 実配線に合わせる (ドライバー DOWN 入力)
-#define AUTO_SHIFT_UP_OUT_PIN 26    // TODO: 実配線に合わせる (UP 出力 → IST コントローラ)
-#define AUTO_SHIFT_DOWN_OUT_PIN 27  // TODO: 実配線に合わせる (DOWN 出力 → IST コントローラ)
+#define AUTO_SHIFT_UP_OUT_PIN 28    // TODO: 実配線に合わせる (UP 出力 → IST コントローラ)
+#define AUTO_SHIFT_DOWN_OUT_PIN 29  // TODO: 実配線に合わせる (DOWN 出力 → IST コントローラ)
 // 入力はプルアップ前提 (押下=LOW)。出力はアサート=HIGH。
 #define AUTO_SHIFT_IN_ACTIVE LOW
 #define AUTO_SHIFT_OUT_ACTIVE HIGH
