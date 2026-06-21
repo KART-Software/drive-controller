@@ -78,3 +78,4 @@ COBS( proto_bytes ‖ crc16_le ) 0x00
 | Console → FW | `HostToDevice.command` | コマンド送信 |
 
 スキーマ定義は `spec/proto/drive_controller.proto` を参照。
+
