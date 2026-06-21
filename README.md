@@ -1,103 +1,77 @@
-# ETC
+# Drive Controller
 
-全日本学生フォーミュラ大会　電子制御スロットル(Electronic throttle control)
+全日本学生フォーミュラ大会 ドライブコントローラ。Teensy 4.1 上で電子制御スロットル
+(ETC)・オートシフター・各種センサー処理を担い、Web コンソールからライブモニタリングと
+キャリブレーションを行う。
 
-This project is created with [PlatformIO](https://platformio.org/)
+## サブシステム
+
+- **ETC (電子スロットル)** — APPS / ITTR(IST コントローラ指令) からターゲット開度を決め、
+  PID でスロットルモーターを制御。モード (Normal / Restricted / Calibration / MotorOff) は
+  CAN `MODE_SELECT` で選択。
+- **オートシフター** — クイックシフター/シーケンシャルの UP/DOWN を制御。CAN `AUTO_SHIFT`
+  で ON(自動)/OFF(手動) 切替。設計は [`dc-firmware/auto_shifter_spec.md`](./dc-firmware/auto_shifter_spec.md)。
+- **Launch Control** — 現在ビルドフラグ (`-DLAUNCH_CONTROL_ENABLED`) で **凍結中**。
 
 ## 使い方
 
-### 基本的な使い方
+キャリブレーション・設定・モニタリングは Web コンソールから行う。
 
-1. 電源を入れると自動的に起動します。
-1. コックピットスイッチのノブが左下になっていると `0% ~ 100%`、左上になっていると `アイドリング ~ 95%`、上になっていると `アイドリング ~ 60%` の範囲でスロットルが開閉します。
+1. **Chrome / Edge** でコンソールのページを開く。
+2. ボックスと PC を USB 接続し、**Connect** でポートを選択。
+3. ヘッダーの **ETC / Drivetrain** タブでページ切替 (接続は維持される)。
 
-### シリアルモニタの見方
+| ページ | 内容 |
+|---|---|
+| **ETC** | APPS/TPS/ITTR/BPS/Target のモニタ・時系列チャート、プラウシビリティフラグ、APPS/TPS/アイドリングのキャリブレーション、PID・ターゲットカーブ・モード設定 |
+| **Drivetrain** | ギア/クラッチ/車輪速/エンジン RPM/IMU のモニタ・チャート、ギア・クラッチのキャリブレーション、IST/NORMAL ミッション切替、オートシフター設定 |
 
-1. ボックスと PC を USB ケーブルでつないで、シリアルモニターを開いてください。（シリアルモニタは好きなものを使ってください。）
+- キャリブレーションは各センサーを所定位置にした状態でボタン押下 → 現在値をキャプチャ。
+- 変更は上部の **Save** で flash に永続化 (`Revert` で取消)。再起動後も保持される。
+- `?mock` を URL に付けると実機なしでモックデータで動作確認できる。
 
-   シリアルモニタの例
+> ⚠️ キャリブレーション中もモーターは動作する (電スロが動く)。スロットルに指を入れる際は
+> モーター電源を切る等、細心の注意を払うこと。
 
-   - https://learn.microsoft.com/ja-jp/cpp/embedded/serial-monitor?view=msvc-170&tabs=visual-studio
-   - https://teratermproject.github.io/
+---
 
-   VSCode の PlatformIO 拡張機能にはシリアルモニターが含まれているのでそれを使っても構いません。
+## 開発者向け
 
-1. `Baud Rate` を `115200`、ポートを `Silicon Labs CP210x ...`に指定して、モニターを開始してください。
-1. 左半分が生のセンサーの値、右半分が変換後の％表示です。（BPS だけは psi）（IST Controller からくるスロットル指令値は "ITTR" で表示されています）
+### リポジトリ構成
 
-### センサーのキャリブレーション、その他設定
+2 つの連携サブプロジェクトが `spec/proto/` の Protobuf スキーマを共有する:
 
-簡単な操作で設定を変更することができます。
+| ディレクトリ | 内容 |
+|---|---|
+| `dc-firmware/` | Teensy 4.1 ファームウェア (PlatformIO + Arduino)。ETC、オートシフター、Launch Control (凍結中)、センサーサンプリング、CAN、シリアルプロトコル |
+| `dc-console/` | Preact + Vite の Web アプリ。Web Serial API で USB シリアル通信し、ライブモニタ・キャリブレーション |
+| `spec/proto/drive_controller.proto` | ホスト ↔ デバイス間ワイヤフォーマットと永続化 `Config` の単一ソース |
 
-1. シリアルモニターを開始して`s`を入力すると `---- Calibration Start ----` と表示されて、キャリブレーションモードに入ります。
+ホスト ↔ デバイスのワイヤフォーマットは `COBS( protobuf_bytes ‖ crc16_le ) 0x00`。
 
-   注：　キャリブレーション中もモーターは動いています。（電スロの動作をしています。）
+> アーキテクチャ・並行性モデル・各サブシステムの設計の詳細は [`CLAUDE.md`](./CLAUDE.md) を参照。
 
-1. 各設定項目
+### ビルド
 
-   - 以下を入力して、センサー値を設定します。
+ファームウェア (PlatformIO):
 
-     - `1` $\cdot\cdot\cdot$ アクセルペダル全閉時 (`APPS1_MIN`, `APPS2_MIN`, `ITTR_MIN`)
-     - `2` $\cdot\cdot\cdot$ アクセルペダル全開時 (`APPS1_MAX`, `APPS2_MAX`, `ITTR_MAX`)
-     - `3` $\cdot\cdot\cdot$ スロットル全閉時 (`TPS1_MIN`, `TPS2_MIN`)
-     - `4` $\cdot\cdot\cdot$ スロットル全開時 (`TPS1_MAX`, `TPS2_MAX`)
-     - `5` $\cdot\cdot\cdot$ アイドリング時 (`APPS_IDLING`)
+```bash
+git submodule update --init --recursive      # FlexCAN_T4 取得 (初回)
+pio run -d dc-firmware -e teensy41            # ビルド
+pio run -d dc-firmware -e teensy41 -t upload  # アップロード
+```
 
-     例えば、アクセルペダル全閉時のセンサー値を設定したいときは、アクセルペダル全閉の状態で `1` を入力します。
+コンソール (Vite + Preact):
 
-   - 以下を入力して、Plausibility Check の有無を設定します。（押すたびに`true`と`false`が入れ替わります）
+```bash
+cd dc-console
+pnpm install
+pnpm dev      # 開発サーバー
+pnpm build    # tsc --noEmit && vite build → dist/
+```
 
-     - `q` $\cdot\cdot\cdot$ APPS1 と APPS2 の値の整合性 (`APPS_CHECK_FLAG`)
-     - `w` $\cdot\cdot\cdot$ TPS1 と TPS2 の値の整合性 (`BPS_CHECK_FLAG`)
-     - `e` $\cdot\cdot\cdot$ APPS1 の値が範囲内にあるか (`APPS1_CHECK_FLAG`)
-     - `r` $\cdot\cdot\cdot$ APPS2 の値が範囲内にあるか (`APPS2_CHECK_FLAG`)
-     - `t` $\cdot\cdot\cdot$ TPS1 の値が範囲内にあるか (`TPS1_CHECK_FLAG`)
-     - `y` $\cdot\cdot\cdot$ TPS2 の値が範囲内にあるか (`TPS2_CHECK_FLAG`)
-     - `u` $\cdot\cdot\cdot$ APPS と TPS の値に矛盾がないか（スロットルがターゲットポジションに正確に動いているか） (`TARGET_CHECK_FLAG`)
-     - `i` $\cdot\cdot\cdot$ BPS の値が範囲内に存在するか (`BPS_CHECK_FLAG`)
-     - `o` $\cdot\cdot\cdot$ BPS と TPS の値が同時に大きくなっていないか（ブレーキを踏んでいてかつスロットルが開いている状況は ☓） (`BPSTPS_CHECK_FLAG`)
-
-   - 以下を入力して、IST コントローラーからのスロットルポジション指令値を使用するかどうかを設定します。（FLAG が`false`のときは APPS、`true`のときは IST からの指令値を使用します）
-
-     - `x` $\cdot\cdot\cdot$ IST コントローラーを用いるかどうか (`IST_CONTROLLER_CHECK_FLAG`)
-
-   - その使用可能なキー
-
-     - `v` $\cdot\cdot\cdot$ ターゲット信号として，キーボード入力を使用するようにする（マニュアルモード）（この設定は保存されず，再起動するともとに戻る）
-     - `b` $\cdot\cdot\cdot$ マニュアルモードのターゲット値を`0.1`下げる
-     - `n` $\cdot\cdot\cdot$ マニュアルモードのターゲット値を`0.1`上げる
-
-   - 必要であれば以下のキーも使用します。
-     - `m` $\cdot\cdot\cdot$ モーターの電源 OFF
-     - `z` $\cdot\cdot\cdot$ 再起動
-
-1. `f` を入力すると `---- Calibration Finish ----`、`---- Saved ----` と表示されてキャリブレーションモードが終了します。
-   ここで保存されたセンサー値は再起動しても保存されているので、一度キャリブレーションをすれば次回からする必要はありません。
-
-#### キャリブレーションの方法
-
-注：　キャリブレーション中もモーターは動いているので、モーターの電源を切らずにスロットルに指をいれる際は細心の注意を払ってください。最悪指がなくなります。
-
-##### APPS の設定
-
-1. シリアルモニタを起動して、`s`を入力してキャリブレーションモードに入ります。
-1. アクセルペダル全閉の状態で`1`、全開の状態で`2`を入力します。
-1. `f`を入力して、保存してキャリブレーションモードを抜けます。
-
-##### TPS の設定
-
-TPS の MIN, MAX がだいたいあっている場合は、4 番からスタートしても OK。
-
-1. シリアルモニタを起動して、`s`を入力してキャリブレーションモードに入ります。
-1. `m`を入力してモーターの電源を切ります。この状態で手動でスロットルを全開、全閉の位置にセットして、`3`、`4`キーを入力して`TPS_MIN`、`TPS_MAX`をセットします。
-
-   注：　ここで手動でスロットルをセットした場合、スロットルのギアにはバックラッシがあるので、手動でスロットルを動かしてちょうど全閉（or 全開）にしたときのセンサー値とモーターが動いてちょうど全閉（or 全開）になるときのセンサー値はバックラッシ分異なります。なので、手動セットだけでは不十分です。
-
-1. `f`, `s`, `z`と順に入力します。（一度保存してキャリブレーションモードを抜けた後、もう一度キャリブレーションモードに入って再起動）
-1. 再起動後、もう一度`s`を押してキャリブレーションモードに入り、`v`を押してマニュアルモードに入ります。この状態で`b`,`n`を押すことでスロットル開度を 0.1%ずつ上げ下げすることができます。`b`,`n`キーでスロットルをちょうど全閉、ちょうど全開に合わせて、それぞれ`3`,`4`キーを入力して`TPS_MIN`、`TPS_MAX`をセットします。
-1. もう一度`v`を押してマニュアルモードを抜けたあと、`f`を押して保存，キャリブレーションモードを抜けます。
-
-   注：　キャリブレーション後に設定が反映されているか、PC を繋がずに車両のキルスイッチを入り切りして確認してください。
+`spec/proto/drive_controller.proto` を編集したら両側で再生成が必要 (firmware は
+再ビルドで自動、console は `pnpm run gen:proto`)。詳細は `CLAUDE.md`。
 
 ## ハードウェア
 
