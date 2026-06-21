@@ -90,4 +90,7 @@ export interface DeviceConfig {
   // ── 非 ETC ──
   gpsType: number; // 0=IST, 1=NORMAL
   autoShift: AutoShiftConfigT;
+  // ── FS 使用量 (ConfigResponse 由来, 任意) ──
+  fsUsed?: number;
+  fsTotal?: number;
 }

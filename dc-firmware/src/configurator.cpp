@@ -262,3 +262,13 @@ void Configurator::revert() {
     calibrateFromFlash();
     configChanged = false;
 }
+
+bool Configurator::formatFs() {
+    // 現在の config は RAM(this->config) に保持済み。FS を消去してから無条件で書き戻す。
+    // save() は configChanged を見るためここでは使わず直接書き込む (フォーマットで消えるため)。
+    if (!flash.format())
+        return false;
+    bool ok = flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config);
+    configChanged = false;
+    return ok;
+}

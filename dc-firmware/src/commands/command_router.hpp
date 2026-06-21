@@ -2,7 +2,7 @@
 
 #include "proto/drive_controller.pb.h"
 
-#define MAX_ROUTES 24
+#define MAX_ROUTES 32
 
 // `which_body` is the dc_Command oneof tag identifying the sub-message.
 using CommandHandler = void (*)(void* ctx, const dc_Command& cmd);

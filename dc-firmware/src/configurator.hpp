@@ -37,6 +37,7 @@ class Configurator {
     bool importConfig(const dc_Config& cfg);
     void save();
     void revert();
+    bool formatFs();  // FS を消去し現在の config を必ず書き戻す (設定保持フォーマット)
 
     Flash& flash;
     dc_Config config = dc_Config_init_zero;

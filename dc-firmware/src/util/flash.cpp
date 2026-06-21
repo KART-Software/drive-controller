@@ -61,3 +61,12 @@ bool Flash::readProto(const char* fileName, const pb_msgdesc_t* fields, void* ms
 void Flash::remove(const char* fileName) {
     fs.remove(fileName);
 }
+
+bool Flash::format() {
+    // LittleFS を消去。保持したいデータ (config 等) は呼び出し側が事前に RAM 保持し、
+    // フォーマット後に書き戻すこと。
+    bool ok = fs.quickFormat();
+    if (!ok)
+        DebugLogger::log("Flash format failed");
+    return ok;
+}

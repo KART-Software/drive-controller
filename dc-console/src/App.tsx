@@ -37,6 +37,9 @@ export function App() {
   const [dirty, setDirty] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [route, setRoute] = useState<Route>(routeFromPath());
+  const [fs, setFs] = useState<{ used: number; total: number } | null>(null);
+  const [fsDialogOpen, setFsDialogOpen] = useState(false);
+  const fsDismissed = useRef(false);
 
   useEffect(() => {
     const onPop = () => setRoute(routeFromPath());
@@ -60,6 +63,42 @@ export function App() {
       return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
     });
   }, []);
+
+  // ConfigResponse (get_config / save / revert / format_fs) を一括反映。
+  // FS 使用量も取り込み、90% 以上なら (未 dismiss なら) フォーマットダイアログを開く。
+  function applyConfigResp(data: Record<string, unknown>) {
+    setConfig(data as unknown as DeviceConfig);
+    setDirty(!!data.configChanged);
+    const used = data.fsUsed as number | undefined;
+    const total = data.fsTotal as number | undefined;
+    if (typeof used === "number" && typeof total === "number" && total > 0) {
+      setFs({ used, total });
+      if (used >= total * 0.9 && !fsDismissed.current) setFsDialogOpen(true);
+    }
+  }
+
+  function handleFormatFs() {
+    addLog("Formatting FS (keeping config)...");
+    protocol.sendCommand("format_fs")
+      .then((resp) => {
+        if (resp.ok && resp.data) {
+          applyConfigResp(resp.data as Record<string, unknown>);
+          addLog("FS formatted, config preserved");
+        } else {
+          addLog("FS format failed");
+        }
+        setFsDialogOpen(false);
+        fsDismissed.current = false;
+      })
+      .catch((err: Error) => addLog("Format error: " + err.message));
+  }
+
+  function handleRtcSync() {
+    const epoch = Math.floor(Date.now() / 1000);
+    protocol.sendCommand("set_rtc", { epoch })
+      .then(() => addLog(`RTC synced: ${new Date().toLocaleString()}`))
+      .catch((err: Error) => addLog("RTC sync error: " + err.message));
+  }
 
   // Wire protocol callbacks once
   useEffect(() => {
@@ -92,13 +131,13 @@ export function App() {
       sensorStore.startSession();
       drivetrainStore.reset();
       setConnected(true);
+      fsDismissed.current = false;  // 新規接続ごとに FS フル警告を再評価
       addLog("Connected");
       setTimeout(async () => {
         try {
           const resp = await protocol.sendCommand("get_config");
           if (resp.ok && resp.data) {
-            setConfig(resp.data as unknown as DeviceConfig);
-            setDirty(!!(resp.data as Record<string, unknown>).configChanged);
+            applyConfigResp(resp.data as Record<string, unknown>);
             addLog("Config loaded from device");
           }
         } catch {}
@@ -118,10 +157,7 @@ export function App() {
   function handleSave() {
     protocol.sendCommand("save")
       .then((resp) => {
-        if (resp.ok && resp.data) {
-          setConfig(resp.data as unknown as DeviceConfig);
-          setDirty(!!(resp.data as Record<string, unknown>).configChanged);
-        }
+        if (resp.ok && resp.data) applyConfigResp(resp.data as Record<string, unknown>);
         addLog("Config saved");
       })
       .catch((err: Error) => addLog("Save error: " + err.message));
@@ -130,10 +166,7 @@ export function App() {
   function handleRevert() {
     protocol.sendCommand("revert")
       .then((resp) => {
-        if (resp.ok && resp.data) {
-          setConfig(resp.data as unknown as DeviceConfig);
-          setDirty(!!(resp.data as Record<string, unknown>).configChanged);
-        }
+        if (resp.ok && resp.data) applyConfigResp(resp.data as Record<string, unknown>);
         addLog("Config reverted");
       })
       .catch((err: Error) => addLog("Revert error: " + err.message));
@@ -150,6 +183,7 @@ export function App() {
         <div class="header-actions">
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("motor_off").catch((err: Error) => addLog("Command error: " + err.message))}>Motor OFF</button>
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("reboot").catch((err: Error) => addLog("Command error: " + err.message))}>Reboot</button>
+          <button disabled={!connected} onClick={handleRtcSync} title="デバイスのRTCをこのPCの現在時刻に同期">RTC Sync</button>
           <button disabled={sensorStore.totalRows === 0} onClick={async () => {
             try {
               const blob = await sensorStore.exportCsv();
@@ -189,6 +223,40 @@ export function App() {
         <section style={{ margin: "10px" }}>
           <p style={{ color: "var(--err)" }}>Web Serial API is not available. Use Chrome or Edge.</p>
         </section>
+      )}
+
+      {fsDialogOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => { setFsDialogOpen(false); fsDismissed.current = true; }}
+        >
+          <div
+            style={{
+              background: "var(--surface)", color: "var(--text)",
+              border: "1px solid var(--border)", borderRadius: "10px",
+              padding: "20px 22px", maxWidth: "440px", margin: "16px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, color: "var(--warn)" }}>ストレージ (FS) がいっぱいです</h2>
+            <p style={{ color: "var(--text-dim)" }}>
+              使用量: {fs ? `${fs.used} / ${fs.total} bytes (${Math.round((fs.used / fs.total) * 100)}%)` : "-"}
+            </p>
+            <p>
+              現在の設定を保持したまま FS をフォーマットして空き容量を回復します。
+              設定は自動で書き戻されます (フォーマット中は一瞬書き込みが止まります)。
+            </p>
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "18px" }}>
+              <button onClick={() => { setFsDialogOpen(false); fsDismissed.current = true; }}>キャンセル</button>
+              <button class="danger" disabled={!connected} onClick={handleFormatFs}>設定を保持してフォーマット</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

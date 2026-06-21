@@ -10,6 +10,8 @@ void sendConfigResponse(CommandContainer* c, uint32_t id, bool ok) {
     cfgResp.has_config = true;
     cfgResp.config = c->configurator.config;
     cfgResp.changed = c->configurator.configChanged;
+    cfgResp.fs_used = (uint32_t)c->configurator.flash.usedSize();
+    cfgResp.fs_total = (uint32_t)c->configurator.flash.totalSize();
     SerialProtocol::sendResponseWithConfig(id, ok, cfgResp);
 }
 
@@ -238,6 +240,12 @@ void setTransmissionType(void* ctx, const dc_Command& cmd) {
     sendConfigResponse(c, cmd.id, true);
 }
 
+void formatFs(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    bool ok = c->configurator.formatFs();  // FS 消去 → 現在の config を書き戻す
+    sendConfigResponse(c, cmd.id, ok);     // 更新後の fs_used/fs_total を返す
+}
+
 }  // namespace
 
 CommandController::CommandController(Configurator& configurator,
@@ -269,4 +277,5 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_set_clutch_min_tag, setClutchMin, &container);
     router.on(dc_Command_set_clutch_max_tag, setClutchMax, &container);
     router.on(dc_Command_set_transmission_type_tag, setTransmissionType, &container);
+    router.on(dc_Command_format_fs_tag, formatFs, &container);
 }

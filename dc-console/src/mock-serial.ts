@@ -105,6 +105,18 @@ function getFullConfig(): PbConfig {
   });
 }
 
+let mockFsTotal = 262144;
+let mockFsUsed = 250000; // 初期を満杯近くにして FS フルダイアログを mock で確認できるように
+
+function configRespValue() {
+  return {
+    config: getFullConfig(),
+    changed: configChanged,
+    fsUsed: mockFsUsed,
+    fsTotal: mockFsTotal,
+  };
+}
+
 function emitFrame(env: DeviceToHost): void {
   const pb = toBinary(DeviceToHostSchema, env);
   onBytes?.(cobsCrcEncode(pb));
@@ -200,7 +212,7 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, {
             id,
             ok: true,
-            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
+            data: { case: "config", value: configRespValue() },
           }),
         );
         break;
@@ -211,7 +223,21 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, {
             id,
             ok: true,
-            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
+            data: { case: "config", value: configRespValue() },
+          }),
+        );
+        break;
+      case "setRtc":
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
+      case "formatFs":
+        mockFsUsed = 700; // フォーマットで空き容量回復、設定は保持
+        configChanged = false;
+        emitResponse(
+          create(ResponseSchema, {
+            id,
+            ok: true,
+            data: { case: "config", value: configRespValue() },
           }),
         );
         break;
@@ -467,7 +493,7 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, {
             id,
             ok: true,
-            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
+            data: { case: "config", value: configRespValue() },
           }),
         );
         break;
@@ -479,7 +505,7 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, {
             id,
             ok: true,
-            data: { case: "config", value: { config: getFullConfig(), changed: configChanged } },
+            data: { case: "config", value: configRespValue() },
           }),
         );
         break;

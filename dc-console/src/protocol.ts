@@ -129,10 +129,12 @@ function handleFramePayload(payload: Uint8Array): void {
       const data = r.data;
       let normalized: Record<string, unknown> | undefined;
       if (data.case === "config") {
-        // data.value は ConfigResponse { config, changed }
+        // data.value は ConfigResponse { config, changed, fsUsed, fsTotal }
         normalized = {
           ...(toDeviceConfig(data.value.config) as unknown as Record<string, unknown>),
           configChanged: data.value.changed,
+          fsUsed: data.value.fsUsed,
+          fsTotal: data.value.fsTotal,
         };
       } else if (data.case) {
         normalized = data.value as unknown as Record<string, unknown>;
@@ -370,6 +372,16 @@ function buildCommand(
     }
     case "reboot":
       return create(CommandSchema, { id, body: { case: "reboot", value: {} } });
+    case "set_rtc":
+      return create(CommandSchema, {
+        id,
+        body: { case: "setRtc", value: { epoch: params.epoch } },
+      });
+    case "format_fs":
+      return create(CommandSchema, {
+        id,
+        body: { case: "formatFs", value: {} },
+      });
     case "revert":
       return create(CommandSchema, { id, body: { case: "revert", value: {} } });
     case "set_gps_gear":
