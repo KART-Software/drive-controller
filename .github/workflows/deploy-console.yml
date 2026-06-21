@@ -44,10 +44,10 @@ jobs:
         id: base
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "path=/etc/" >> "$GITHUB_OUTPUT"
+            echo "path=/drive-controller/" >> "$GITHUB_OUTPUT"
             echo "dest=." >> "$GITHUB_OUTPUT"
           else
-            echo "path=/etc/dev/" >> "$GITHUB_OUTPUT"
+            echo "path=/drive-controller/dev/" >> "$GITHUB_OUTPUT"
             echo "dest=dev" >> "$GITHUB_OUTPUT"
           fi
 
