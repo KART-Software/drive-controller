@@ -7,6 +7,9 @@ on:
       - develop
     paths:
       - "dc-console/**"
+      - "spec/proto/**"
+      - ".github/workflows/deploy-console.yml"
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -39,6 +42,12 @@ jobs:
       - name: Install dependencies
         working-directory: dc-console
         run: pnpm install --frozen-lockfile
+
+      # 生成 proto (src/proto/drive_controller_pb.ts) は gitignore のため
+      # checkout には含まれない。build (tsc) の前に必ず再生成する。
+      - name: Generate proto
+        working-directory: dc-console
+        run: pnpm run gen:proto
 
       - name: Determine base path
         id: base
