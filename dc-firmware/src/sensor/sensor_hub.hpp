@@ -9,8 +9,13 @@
 class SensorHub {
    public:
     void begin();
-    void read();         // ISR (8kHz): adc + sensors + imu
+    void read();         // 非DMA: adc(ブロッキング) + sensors + imu (loop から)
     void updatePulse();  // loop: PulseCounter x5
+#ifdef ADC_DMA
+    void sampleAdcDmaIsr();  // 8kHz ISR: 前回 DMA 結果を averages に反映し次を kick (非ブロッキング)
+    void readImu();          // loop: IMU のみ (DMA 経路では adc と分離)
+    uint32_t adcDmaCount() const { return adc_.dmaCount(); }
+#endif
 
     // ── const getters (read-only) ──
     const Apps& apps1() const { return apps1_; }

@@ -51,7 +51,10 @@ void motorControlISR() {
 }
 
 void sensorSamplingISR() {
-    sensorHub.read();
+#ifdef ADC_DMA
+    // 非ブロッキング: 前回 DMA 結果を averages に反映し次の DMA を kick するだけ (~数 us)
+    sensorHub.sampleAdcDmaIsr();
+#endif
 }
 
 void setup() {
@@ -80,12 +83,16 @@ void setup() {
     motorTimerRunning = true;
     motorControlTimer.priority(0);  // motor ISR を最高優先
 
-    // NOTE: 8kHz サンプリング ISR は ADC/IMU の SPI ブロッキングで USB(低優先割込)
-    // を枯渇させ、列挙されてもシリアルポートが開けなくなる。known-good の etc と
-    // 同様に sensorHub.read() は loop() (スレッドレベル) で呼ぶ。高レートサンプリングが
-    // 必要なら非ブロッキング/DMA SPI 化してから ISR 化すること。
-    // sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
-    // sensorSamplingTimer.priority(16);
+#ifdef ADC_DMA
+    // ADC は DMA 駆動。8kHz ISR は非ブロッキング (DMA 結果の反映 + 次 kick のみ) なので
+    // USB を枯渇させない。IMU は loop で読む (sensorHub.readImu)。
+    sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
+    sensorSamplingTimer.priority(16);
+#else
+    // 非DMA: sensorHub.read() (ADC ブロッキング + IMU) を loop() で呼ぶ。
+    // 8kHz ISR でブロッキング SPI を回すと USB(低優先) を枯渇させポートが開けなくなるため
+    // ISR 化はしない (DMA 化が前提)。
+#endif
 
     plausibilityValidator.initialize();
 
@@ -100,8 +107,11 @@ unsigned long lastLaunchTime = 0;
 void loop() {
     unsigned long now = millis();
 
-    // センサー読み (ADC + sensor.update + IMU)。8kHz ISR ではなく loop で行う (上記 NOTE)。
-    sensorHub.read();
+#ifdef ADC_DMA
+    sensorHub.readImu();  // ADC は 8kHz DMA ISR でサンプリング済み。loop は IMU のみ
+#else
+    sensorHub.read();     // 非DMA: ADC(ブロッキング) + sensor.update + IMU を loop で
+#endif
 
     // Poll CAN for mode-select frame
     canController.poll();

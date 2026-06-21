@@ -23,6 +23,25 @@ void SensorHub::read() {
     imu_impl_.read();
 }
 
+#ifdef ADC_DMA
+void SensorHub::sampleAdcDmaIsr() {
+    adc_.latchDma();  // 前回 kick した DMA の結果 (value[]) を確定
+    apps1_.update(adc_.value[APPS_1_CH]);
+    apps2_.update(adc_.value[APPS_2_CH]);
+    ittr_.update(adc_.value[ITTR_CH]);
+    tps1_.update(adc_.value[TPS_1_CH]);
+    tps2_.update(adc_.value[TPS_2_CH]);
+    bps_.update(adc_.value[BPS_CH]);
+    gps_.update(adc_.value[GPS_CH]);
+    clutch_.update(adc_.value[CLUTCH_CH]);
+    adc_.startDma();  // 次の 8ch 転送を kick (非ブロッキング)
+}
+
+void SensorHub::readImu() {
+    imu_impl_.read();
+}
+#endif
+
 void SensorHub::updatePulse() {
     pulseWheelFL_.update();
     pulseWheelFR_.update();

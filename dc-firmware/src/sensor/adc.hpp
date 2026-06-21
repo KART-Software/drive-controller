@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#ifdef ADC_DMA
+#include <DMAChannel.h>
+#endif
 #include "constants.hpp"
 #include "sensor/frequency_meter.hpp"
 
@@ -46,10 +49,19 @@ class _adc {
     _adc(uint8_t csPin = ADC_CS_PIN, SPIClass& spi = SPI);
 
     void begin();
-    void read();
+    void read();  // ブロッキング読み (非DMA経路 / フォールバック)
     uint16_t value[NUM_DEV * ADC_NUM_CH] = {};
     const uint16_t* deviceValue(size_t device) const { return &value[device * ADC_NUM_CH]; }
     uint32_t sps() const { return freqMeter_.hz(); }
+
+#ifdef ADC_DMA
+    // DMA 経路 (8kHz ISR から非ブロッキングで叩く)。NUM_DEV==1 (32bit フレーム) 専用。
+    static_assert(NUM_DEV == 1, "ADC_DMA は単一デバイス(32bit フレーム)のみ対応");
+    void beginDma();    // DMA チャネル + LPSPI DMA を一度だけ設定
+    void startDma();    // 前回完了分はそのまま、次の 8ch 転送を kick (非ブロッキング)
+    void latchDma();    // rxBuf_ -> value[] (averages 更新の直前に呼ぶ)
+    uint32_t dmaCount() const { return dmaCount_; }  // デバッグ: kick 回数
+#endif
 
    private:
     SPIClass& spi;
@@ -59,6 +71,14 @@ class _adc {
 
     void writeRegister(uint8_t addr, uint8_t value);
     void transferCommand(uint16_t cmd, uint16_t* out);
+
+#ifdef ADC_DMA
+    DMAChannel txDma_;
+    DMAChannel rxDma_;
+    volatile uint32_t txCmds_[NUM_DEV * ADC_NUM_CH];
+    volatile uint32_t rxBuf_[NUM_DEV * ADC_NUM_CH];
+    volatile uint32_t dmaCount_ = 0;
+#endif
 };
 
 // TODO[bench]: 2 台目の ADS8688 を接続したら _adc<2> に戻す。

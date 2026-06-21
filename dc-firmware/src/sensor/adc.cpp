@@ -27,7 +27,57 @@ void _adc<NUM_DEV>::begin() {
     writeRegister(AUTO_SEQ_EN_ADDR, 0xFF);    // 全ch自動シーケンス
     uint16_t dummy[NUM_DEV];
     transferCommand(AUTO_RST, dummy);  // 初期化用ダミー
+#ifdef ADC_DMA
+    beginDma();
+#endif
 }
+
+#ifdef ADC_DMA
+// DMA 経路: 8kHz ISR から startDma() を kick し、while ビジーウェイトなしで 8ch を取得。
+// CS フレーミングは非DMA経路と同じく 32bit フレーム/フレーム毎 (CONT=0)。
+template <size_t NUM_DEV>
+void _adc<NUM_DEV>::beginDma() {
+    // 送信コマンド列: ch0..6=NO_OP, 末尾=AUTO_RST (ブロッキング read() と同じ並び)
+    for (size_t i = 0; i < NUM_DEV * ADC_NUM_CH; ++i)
+        txCmds_[i] = (uint32_t)NO_OP << 16;
+    txCmds_[NUM_DEV * ADC_NUM_CH - 1] = (uint32_t)AUTO_RST << 16;
+
+    // LPSPI を 32bit フレーム + TX/RX DMA リクエスト有効に設定 (endTransaction しない=保持)
+    spi.beginTransaction(spiSettings);
+    IMXRT_LPSPI4_S.TCR = (IMXRT_LPSPI4_S.TCR & 0xFFFFF000) | LPSPI_TCR_FRAMESZ(31);
+    IMXRT_LPSPI4_S.FCR = LPSPI_FCR_RXWATER(0) | LPSPI_FCR_TXWATER(0);
+    IMXRT_LPSPI4_S.DER = LPSPI_DER_TDDE | LPSPI_DER_RDDE;
+
+    rxDma_.disable();
+    rxDma_.source(*(volatile uint32_t*)&IMXRT_LPSPI4_S.RDR);
+    rxDma_.destinationBuffer((uint32_t*)rxBuf_, sizeof(rxBuf_));
+    rxDma_.triggerAtHardwareEvent(DMAMUX_SOURCE_LPSPI4_RX);
+    rxDma_.disableOnCompletion();
+
+    txDma_.disable();
+    txDma_.sourceBuffer((uint32_t*)txCmds_, sizeof(txCmds_));
+    txDma_.destination(*(volatile uint32_t*)&IMXRT_LPSPI4_S.TDR);
+    txDma_.triggerAtHardwareEvent(DMAMUX_SOURCE_LPSPI4_TX);
+    txDma_.disableOnCompletion();
+}
+
+template <size_t NUM_DEV>
+void _adc<NUM_DEV>::startDma() {
+    freqMeter_.tick();
+    // 前回転送は disableOnCompletion で停止済み。count を戻して再 enable。
+    rxDma_.destinationBuffer((uint32_t*)rxBuf_, sizeof(rxBuf_));
+    txDma_.sourceBuffer((uint32_t*)txCmds_, sizeof(txCmds_));
+    rxDma_.enable();  // RX を先に arm
+    txDma_.enable();  // TX enable で LPSPI が TDR 要求 → 転送開始
+    dmaCount_++;
+}
+
+template <size_t NUM_DEV>
+void _adc<NUM_DEV>::latchDma() {
+    for (size_t i = 0; i < NUM_DEV * ADC_NUM_CH; ++i)
+        value[i] = rxBuf_[i] & 0xFFFF;
+}
+#endif  // ADC_DMA
 
 template <size_t NUM_DEV>
 void _adc<NUM_DEV>::writeRegister(uint8_t addr, uint8_t value) {
@@ -97,4 +147,5 @@ void _adc<NUM_DEV>::read() {
 }
 
 template class _adc<1>;
-template class _adc<2>;
+// _adc<2> は現在未使用 (using Adc = _adc<1>)。2 台構成に戻す際は再度実体化する。
+// ADC_DMA は単一デバイス専用のため _adc<2> を実体化すると static_assert で落ちる。
