@@ -87,7 +87,10 @@ void setup() {
     // ADC は DMA 駆動。8kHz ISR は非ブロッキング (DMA 結果の反映 + 次 kick のみ) なので
     // USB を枯渇させない。IMU は loop で読む (sensorHub.readImu)。
     sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
-    sensorSamplingTimer.priority(16);
+    // USB(既定 ~128) より低い優先度にして、ISR が USB の送受信(コマンド処理)を
+    // 阻害しないようにする。ISR は kick+反映のみの軽処理なのでサンプリングへの影響は小。
+    // (motor ISR は priority 0 のまま最優先)
+    sensorSamplingTimer.priority(208);
 #else
     // 非DMA: sensorHub.read() (ADC ブロッキング + IMU) を loop() で呼ぶ。
     // 8kHz ISR でブロッキング SPI を回すと USB(低優先) を枯渇させポートが開けなくなるため

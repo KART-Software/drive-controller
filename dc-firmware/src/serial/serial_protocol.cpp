@@ -99,7 +99,10 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
     return !w->overflow;
 }
 
-bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct) {
+// droppable=true のフレーム(=高頻度テレメトリ)は、USB TX バッファに空きが無ければ
+// 送らずに捨てる。これがないと Serial.write がバッファ満杯でブロックし、loop() が止まって
+// コマンド受信/応答(commandRouter.poll)が滞り、ホスト側が 3s タイムアウトする。
+bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, bool droppable = false) {
     uint8_t frame[DC_MAX_FRAME];
     CobsCrcWriter writer;
     writer.init(frame, sizeof(frame));
@@ -112,12 +115,15 @@ bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct) {
     if (len == 0)
         return false;
 
+    if (droppable && (size_t)Serial.availableForWrite() < len)
+        return false;  // ホストの取り込みが追いつかない: テレメトリをドロップ (loop を止めない)
+
     Serial.write(frame, len);
     return true;
 }
 
-void sendDeviceMessage(const dc_DeviceToHost& msg) {
-    encodeAndWrite(dc_DeviceToHost_fields, &msg);
+void sendDeviceMessage(const dc_DeviceToHost& msg, bool droppable = false) {
+    encodeAndWrite(dc_DeviceToHost_fields, &msg, droppable);
 }
 
 void sendResponseInternal(const dc_Response& resp) {
