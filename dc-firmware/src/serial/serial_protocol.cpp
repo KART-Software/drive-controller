@@ -199,6 +199,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     dc_EtcState& e = st.etc;
     e.mode = targetModeToProto(hub.target());
     e.manual = hub.target().isManual();
+    e.ittr = hub.target().isIttr();
     e.valid = isValid;
 
     // Build error bitmask

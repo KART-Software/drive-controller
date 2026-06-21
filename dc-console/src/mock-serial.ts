@@ -172,6 +172,7 @@ function sensorTick() {
   const etc = create(EtcStateSchema, {
     mode: MOCK_MODES[Math.floor(elapsed / 3) % MOCK_MODES.length],
     manual: manualMode,
+    ittr: useIttr,
     valid: true,
     errors: 0,
   });

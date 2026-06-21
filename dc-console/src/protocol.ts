@@ -74,7 +74,7 @@ function toAppSensor(st: PbState): SensorData {
     tgt: s?.targetTp ?? 0,
     m: modeToString(e?.mode ?? EtcMode.UNSPECIFIED),
     manual: e?.manual ?? false,
-    tgt_ittr: false,
+    tgt_ittr: e?.ittr ?? false,
     v: e?.valid ?? false,
     err: e?.errors ?? 0,
     sps: s?.sps,

@@ -142,6 +142,7 @@ message EtcState{
   bool    manual = 2;
   bool    valid  = 3;
   uint32  errors = 4;  // bitmask: bit0=apps, 1=tps, 2=apps1, 3=apps2, 4=tps1, 5=tps2, 6=target, 7=bps, 8=bps_tps
+  bool    ittr   = 5;  // ターゲットが ITTR(CAN指令)由来か (false=APPS)。console のライブ表示用
 }
 
 message Sensor{
