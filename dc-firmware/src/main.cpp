@@ -78,13 +78,14 @@ void setup() {
     motorController.setMotorOn();
     motorControlTimer.begin(motorControlISR, MOTOR_CONTROLL_CYCLE_TIME * 1000);  // ms -> us
     motorTimerRunning = true;
+    motorControlTimer.priority(0);  // motor ISR を最高優先
 
-    // Start 8kHz sensor sampling ISR
-    sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
-
-    // NVIC priority: motor ISR (highest=0) > sensor ISR (lower=16)
-    motorControlTimer.priority(0);
-    sensorSamplingTimer.priority(16);
+    // NOTE: 8kHz サンプリング ISR は ADC/IMU の SPI ブロッキングで USB(低優先割込)
+    // を枯渇させ、列挙されてもシリアルポートが開けなくなる。known-good の etc と
+    // 同様に sensorHub.read() は loop() (スレッドレベル) で呼ぶ。高レートサンプリングが
+    // 必要なら非ブロッキング/DMA SPI 化してから ISR 化すること。
+    // sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
+    // sensorSamplingTimer.priority(16);
 
     plausibilityValidator.initialize();
 
@@ -98,6 +99,9 @@ unsigned long lastLaunchTime = 0;
 
 void loop() {
     unsigned long now = millis();
+
+    // センサー読み (ADC + sensor.update + IMU)。8kHz ISR ではなく loop で行う (上記 NOTE)。
+    sensorHub.read();
 
     // Poll CAN for mode-select frame
     canController.poll();
