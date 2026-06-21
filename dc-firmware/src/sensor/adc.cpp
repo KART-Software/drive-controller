@@ -1,5 +1,11 @@
 #include "adc.hpp"
 
+// LPSPI RX 待ちの最大スピン時間 (us)。ADC 無応答時に 8kHz ISR (NVIC 優先度16) が
+// 固まって USB 等の低優先割り込みを枯渇させるのを防ぐ。
+// read() は 1 回の ISR で transferCommand を 8 回呼ぶため、最悪 8×timeout が
+// ISR 周期 125us を超えないこと。1 フレーム転送は ~3us (@10MHz) なので 10us で十分。
+static constexpr uint32_t ADC_SPI_TIMEOUT_US = 10;
+
 template <size_t NUM_DEV>
 _adc<NUM_DEV>::_adc(uint8_t csPin, SPIClass& spi) : spi(spi), csPin(csPin) {
     for (size_t i = 0; i < NUM_DEV * ADC_NUM_CH; ++i) {
@@ -38,7 +44,10 @@ void _adc<NUM_DEV>::writeRegister(uint8_t addr, uint8_t value) {
         IMXRT_LPSPI4_S.TDR = (uint32_t)(tx >> 32);
     }
     IMXRT_LPSPI4_S.TDR = (uint32_t)(tx & 0xFFFFFFFF);
+    uint32_t t0 = micros();
     while (IMXRT_LPSPI4_S.RSR & LPSPI_RSR_RXEMPTY) {
+        if ((uint32_t)(micros() - t0) > ADC_SPI_TIMEOUT_US)
+            break;
     }
     (void)IMXRT_LPSPI4_S.RDR;
     spi.endTransaction();
@@ -56,7 +65,10 @@ void _adc<NUM_DEV>::transferCommand(uint16_t cmd, uint16_t* out) {
         IMXRT_LPSPI4_S.TDR = (uint32_t)(tx >> 32);
     }
     IMXRT_LPSPI4_S.TDR = (uint32_t)(tx & 0xFFFFFFFF);
+    uint32_t t0 = micros();
     while (IMXRT_LPSPI4_S.RSR & LPSPI_RSR_RXEMPTY) {
+        if ((uint32_t)(micros() - t0) > ADC_SPI_TIMEOUT_US)
+            break;
     }
     uint64_t rx = 0;
     if (frameBits > 32) {
