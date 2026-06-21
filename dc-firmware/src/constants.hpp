@@ -12,8 +12,10 @@
 #define ITTR_CH 2           // IST Throttle Position Target Receiver (ITTR)
 #define BPS_CH 3            // Brake Pressure Sensor
 #define MOTOR_CURRENT_CH 4  // Connected to motor driver's CS PIN.The voltage is about 20 mV/A plus a 50 mV offset.
-#define GPS_CH 8            // Gear Position Sensor (2nd ADS8688 CH0)
-#define CLUTCH_CH 9         // Clutch Position Sensor (2nd ADS8688 CH1)
+// TODO[bench]: 2 台目 ADS8688 接続時に GPS_CH=8 / CLUTCH_CH=9 (2nd dev) へ戻す。
+// 現在は 1 台 (_adc<1>, ch0-7) のみのため範囲外参照を避けて空き ch5 に退避。
+#define GPS_CH 5            // Gear Position Sensor (本来 2nd ADS8688 CH0 = 8)
+#define CLUTCH_CH 5         // Clutch Position Sensor (本来 2nd ADS8688 CH1 = 9)
 
 /////////////////////////
 /// Sampling Settings ///

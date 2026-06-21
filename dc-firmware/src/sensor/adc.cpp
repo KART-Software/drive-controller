@@ -84,4 +84,5 @@ void _adc<NUM_DEV>::read() {
     }
 }
 
+template class _adc<1>;
 template class _adc<2>;

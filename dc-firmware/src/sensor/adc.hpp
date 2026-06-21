@@ -61,5 +61,7 @@ class _adc {
     void transferCommand(uint16_t cmd, uint16_t* out);
 };
 
-using Adc = _adc<2>;
+// TODO[bench]: 2 台目の ADS8688 を接続したら _adc<2> に戻す。
+// 現在はベンチで 1 台のみ接続のため _adc<1>。
+using Adc = _adc<1>;
 
