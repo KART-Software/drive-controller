@@ -114,7 +114,13 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### プラウシビリティ / エラーハンドリング
 
-`PlausibilityValidator` は `loop()` 毎にチェックされる。失敗時はモーターを OFF し、同時にモーター ISR も停止 (`motorControlTimer.end()`)。再アーミングは自動では行われず、電源再投入か明示的キャリブレーションフローが必要。(燃料ポンプ制御はこのボードから削除済み — 燃料カットはエンジン ECU 側の責務。)
+`PlausibilityValidator` は `loop()` 毎にチェックされる。ETC のアーミング (モーター ON/OFF) は loop の **SHUTDOWN 安全層**が一元管理する。ETC を止める要因は独立に 3 つ:
+
+- **① プラウシビリティ違反** → ETC 停止 + `SHUTDOWN_RELAY_PIN`=LOW (点火系 SHUTDOWN 回路を遮断、**復帰不可ラッチ**)。
+- **② `SHUTDOWN_SIG_IN_PIN`=LOW** (外部 AND 回路が開いた) → ETC 停止 (RELAY は HIGH 維持、SIG が HIGH に戻れば**自動再開**)。
+- **③ CAN `MOTOR_OFF` モード** → ETC 停止 (RELAY 維持)。
+
+ETC 停止 = モーター OFF + モーター ISR 停止 (`motorControlTimer.end()`)、再開 = `setMotorOn()` (内部で `pid.reset()`) + ISR 再起動。① は復帰不可で電源再投入が必要。詳細ロジックは `main.cpp` の「ETC アーミング」コメントが一次ソース。**`SHUTDOWN_RELAY_PIN`(点火系) を落とすのは①だけ**で、`DcMotor` が持つモーター電源リレー `DC_MOTOR_RELAY_PIN` とは別系統。(燃料ポンプ制御は削除済み — 燃料カットはエンジン ECU 責務。)
 
 ### ピンアサイン
 

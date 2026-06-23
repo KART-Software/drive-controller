@@ -9,6 +9,7 @@ void SensorHub::begin() {
     pulseWheelRR_.begin();
     pulseEngine_.begin();
     pulseClutchRpm_.begin();
+    shutdownSig_.initialize();
 }
 
 void SensorHub::read() {
@@ -22,6 +23,7 @@ void SensorHub::read() {
     gps_.update(adc_.value[GPS_CH]);
     clutch_.update(adc_.value[CLUTCH_CH]);
     imu_impl_.read();
+    shutdownSig_.read();  // SHUTDOWN 回路出力をデバウンス更新 (毎ループ)
 }
 
 #ifdef ADC_DMA
@@ -40,6 +42,7 @@ void SensorHub::sampleAdcDmaIsr() {
 
 void SensorHub::readImu() {
     imu_impl_.read();
+    shutdownSig_.read();  // SHUTDOWN 回路出力をデバウンス更新 (毎ループ)
 }
 #endif
 

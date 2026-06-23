@@ -44,8 +44,6 @@ Configurator configurator(flash, sensorHub, motorController, plausibilityValidat
 CommandRouter commandRouter;
 CommandController commandController(configurator, motorController, sensorHub.mut.target());
 
-volatile bool motorTimerRunning = false;
-
 void motorControlISR() {
     motorController.cycle();
 }
@@ -57,11 +55,35 @@ void sensorSamplingISR() {
 #endif
 }
 
+// ETC (モーター制御) を開始/停止する。冪等 (既にその状態なら何もしない)。
+//   停止 = setMotorOff() (PWM=0 + モーター電源リレー/SLP を LOW) + モーター ISR 停止。
+//   開始 = setMotorOn() (内部で pid.reset() = PID ワインドアップ解消) + モーター ISR 再起動。
+// SHUTDOWN による停止→再開はこの 2 つで行うため、再開時に PID は必ずリセットされる。
+// IntervalTimer に稼働状態の getter は無いが、タイマーとモーターは必ずここで同時に
+// 切り替えるので motorController.isOn() を「ETC 稼働中か」の単一の真実とする。
+void startEtc() {
+    if (motorController.isOn())
+        return;
+    motorController.setMotorOn();  // pid.reset() を含む
+    motorControlTimer.begin(motorControlISR, MOTOR_CONTROLL_CYCLE_TIME * 1000);  // ms -> us
+    motorControlTimer.priority(0);  // motor ISR を最高優先
+}
+void stopEtc() {
+    if (!motorController.isOn())
+        return;
+    motorController.setMotorOff();  // 先に PWM=0/出力停止 (cycle の write は _isOn=false で no-op)
+    motorControlTimer.end();        // その後 ISR を止める
+}
+
 void setup() {
     SerialProtocol::initialize();
 
     static SerialDebugWriter serialDebugWriter;
     DebugLogger::addWriter(&serialDebugWriter);
+
+    // SHUTDOWN 回路: 通常 RELAY=HIGH (点火系許可)。SIG_IN は SensorHub が ToggleSwitch で読む。
+    pinMode(SHUTDOWN_RELAY_PIN, OUTPUT);
+    digitalWrite(SHUTDOWN_RELAY_PIN, HIGH);
 
     sensorHub.begin();
 
@@ -76,10 +98,8 @@ void setup() {
     // Default mode until CAN mode-select frame is received
     sensorHub.mut.target().setModeNormal();
     motorController.initialize();
-    motorController.setMotorOn();
-    motorControlTimer.begin(motorControlISR, MOTOR_CONTROLL_CYCLE_TIME * 1000);  // ms -> us
-    motorTimerRunning = true;
-    motorControlTimer.priority(0);  // motor ISR を最高優先
+    // モーターは起動時に回さない。SIG_IN=HIGH かつプラウシビリティ違反ラッチなし
+    // かつ MOTOR_OFF でない場合に loop() の ETC アーミングが startEtc() で ON にする。
 
 #ifdef ADC_DMA
     // ADC は DMA 駆動。8kHz ISR は非ブロッキング (DMA 結果の反映 + 次 kick のみ) なので
@@ -127,14 +147,8 @@ void loop() {
             sensorHub.mut.target().setModeRestricted();
             break;
         case CanEtcMode::MOTOR_OFF:
+            // target モードのみ設定。実際の ETC 停止は下の ETC アーミングで行う。
             sensorHub.mut.target().setModeMotorOff();
-            if (motorController.isOn()) {
-                motorController.setMotorOff();
-                if (motorTimerRunning) {
-                    motorControlTimer.end();
-                    motorTimerRunning = false;
-                }
-            }
             break;
     }
 
@@ -144,14 +158,26 @@ void loop() {
         sensorHub.updatePulse();
     }
 
-    if (!plausibilityValidator.isCurrentlyValid()) {
-        if (motorController.isOn()) {
-            motorController.setMotorOff();
-            if (motorTimerRunning) {
-                motorControlTimer.end();
-                motorTimerRunning = false;
-            }
-        }
+    // ── ETC アーミング / SHUTDOWN 安全層 ─────────────────────────────────
+    // ETC を止める要因は独立に 3 つあり、SHUTDOWN_RELAY(点火系, pin2)を落とすのは①だけ。
+    //   ① プラウシビリティ違反 : ETC 停止 + SHUTDOWN_RELAY=LOW + 復帰不可(ラッチ)
+    //   ② SIG_IN=LOW (外部)     : ETC 停止 / RELAY=HIGH 維持 / SIG_IN=HIGH 復帰で ETC 再開
+    //   ③ CAN MOTOR_OFF モード  : ETC 停止 / RELAY=HIGH (落とさない)
+    // ① が RELAY を LOW にすると AND 回路が開いて SIG_IN も LOW になるが、① ラッチを
+    // 最優先で判定するので ②(復帰可) の経路には入らない = 復帰不可を維持する。
+    // ここで落とすのは点火系 SHUTDOWN リレーであって、DcMotor が持つモーター電源リレー
+    // (DC_MOTOR_RELAY_PIN=pin3) とは別系統。
+    // ① のラッチは PlausibilityValidator::isValid() 自身が保持する (一度でも違反すると
+    // 永続 false、起動後 500ms は猶予で常に valid) ので、専用フラグは持たず直接判定する。
+    // SIG_IN は SensorHub が毎ループ read 済みなのでここでは状態を読むだけ。
+    if (!plausibilityValidator.isValid()) {
+        digitalWrite(SHUTDOWN_RELAY_PIN, LOW);  // ① 点火系を遮断 (恒久)
+        stopEtc();
+    } else if (!sensorHub.shutdownSig().isOn() ||
+               canController.rxData().etcMode == CanEtcMode::MOTOR_OFF) {
+        stopEtc();  // ② SIG_IN=LOW または ③ MOTOR_OFF → ETC 停止 (RELAY は HIGH のまま)
+    } else {
+        startEtc();  // SIG_IN=HIGH かつ違反なしかつ MOTOR_OFF でない → ETC 動作 (停止中なら再開)
     }
 
     // CAN TX — 60Hz

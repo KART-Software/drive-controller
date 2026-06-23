@@ -198,4 +198,17 @@
 /// Other Output Pin Settings ///
 /////////////////////////////////
 
-#define DC_MOTOR_RELAY_PIN 3
+#define DC_MOTOR_RELAY_PIN 3  // モーター電源リレー (DcMotor が制御。SHUTDOWN 回路とは別物)
+
+// ── SHUTDOWN 回路 (点火系の AND 安全回路) ──────────────────────────────
+// 車両の燃料/点火系は、複数のリレー/スイッチの AND (= SHUTDOWN 回路) が閉じている
+// ときのみ起動する。drive-controller はその AND の 1 要素となるリレー
+// (SHUTDOWN_RELAY_PIN) を制御し、AND 全体の結果を SHUTDOWN_SIG_IN_PIN で受け取る。
+//   - SHUTDOWN_RELAY_PIN: OUTPUT。HIGH=リレーClose=点火系許可。通常 HIGH。
+//       プラウシビリティ違反時のみ LOW に落とす (= 点火系遮断、復帰不可ラッチ)。
+//   - SHUTDOWN_SIG_IN_PIN: INPUT (外部で PULLDOWN 済みなので素の INPUT)。
+//       AND 回路の出力。HIGH=ETC 動作許可 / LOW=ETC 停止。ToggleSwitch でデバウンス。
+// 注意: ここで落とすのは点火系リレーであって、上の DC_MOTOR_RELAY_PIN(モーター電源)
+//       とは別系統。MOTOR_OFF モード等では SHUTDOWN_RELAY は落とさない。
+#define SHUTDOWN_RELAY_PIN 2
+#define SHUTDOWN_SIG_IN_PIN 16

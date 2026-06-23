@@ -5,6 +5,7 @@
 #include "icm45686.hpp"
 #include "pulse_counter.hpp"
 #include "sensors.hpp"
+#include "util/toggle_switch.hpp"
 #include "wheel_speed.hpp"
 
 class SensorHub {
@@ -36,6 +37,10 @@ class SensorHub {
     const WheelSpeedSensor& pulseWheelFR() const { return pulseWheelFR_; }
     const WheelSpeedSensor& pulseWheelRL() const { return pulseWheelRL_; }
     const WheelSpeedSensor& pulseWheelRR() const { return pulseWheelRR_; }
+
+    // SHUTDOWN 回路出力 (点火系 AND の結果)。read()/readImu() で毎ループ更新。
+    // isOn()==true で ETC 許可。他センサー同様 const 参照で返す。
+    const ToggleSwitch& shutdownSig() const { return shutdownSig_; }
 
     // ── mut: Configurator-only mutable access ──
     struct Mut {
@@ -73,4 +78,7 @@ class SensorHub {
     WheelSpeedSensor pulseWheelRR_{PULSE_WHEEL_RR_PIN};
     PulseCounter pulseEngine_{PULSE_ENGINE_PIN};
     PulseCounter pulseClutchRpm_{PULSE_CLUTCH_RPM_PIN};
+
+    // SHUTDOWN 回路出力。アクティブHIGH + 外部 PULLDOWN (素の INPUT)。
+    ToggleSwitch shutdownSig_{SHUTDOWN_SIG_IN_PIN, HIGH, ToggleSwitch::InputMode::External};
 };

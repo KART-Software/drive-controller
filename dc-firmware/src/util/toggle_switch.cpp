@@ -1,10 +1,28 @@
 #include "toggle_switch.hpp"
 
-ToggleSwitch::ToggleSwitch(uint8_t pin) : pin(pin) {}
+namespace {
+// InputMode (入力系限定) を Arduino の pinMode 定数へ解決する。
+uint8_t toPinMode(ToggleSwitch::InputMode m) {
+    switch (m) {
+        case ToggleSwitch::InputMode::PullDown:
+            return INPUT_PULLDOWN;
+        case ToggleSwitch::InputMode::External:
+            return INPUT;
+        case ToggleSwitch::InputMode::PullUp:
+        default:
+            return INPUT_PULLUP;
+    }
+}
+}  // namespace
+
+ToggleSwitch::ToggleSwitch(uint8_t pin) : pin(pin), onState(LOW), mode(INPUT_PULLUP) {}
+
+ToggleSwitch::ToggleSwitch(uint8_t pin, uint8_t onState, InputMode inputMode)
+    : pin(pin), onState(onState), mode(toPinMode(inputMode)) {}
 
 void ToggleSwitch::initialize()
 {
-    pinMode(pin, INPUT_PULLUP);
+    pinMode(pin, mode);
     state = digitalRead(pin);
     lastState = state;
     _isOn = state == onState;
@@ -32,22 +50,22 @@ void ToggleSwitch::read()
     }
 }
 
-bool ToggleSwitch::isOn()
+bool ToggleSwitch::isOn() const
 {
     return _isOn;
 }
 
-bool ToggleSwitch::switched()
+bool ToggleSwitch::switched() const
 {
     return _switched;
 }
 
-bool ToggleSwitch::switchedToOn()
+bool ToggleSwitch::switchedToOn() const
 {
     return _switched && _isOn;
 }
 
-bool ToggleSwitch::switchedToOff()
+bool ToggleSwitch::switchedToOff() const
 {
     return _switched && !_isOn;
 }
