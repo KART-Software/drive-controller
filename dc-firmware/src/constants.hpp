@@ -198,5 +198,4 @@
 /// Other Output Pin Settings ///
 /////////////////////////////////
 
-#define FUEL_PUMP_PIN 32       // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_RELAY_PIN 33  // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_RELAY_PIN 3

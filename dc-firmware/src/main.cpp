@@ -63,8 +63,6 @@ void setup() {
     static SerialDebugWriter serialDebugWriter;
     DebugLogger::addWriter(&serialDebugWriter);
 
-    pinMode(FUEL_PUMP_PIN, OUTPUT);
-    digitalWrite(FUEL_PUMP_PIN, HIGH);
     sensorHub.begin();
 
     canController.begin();
@@ -153,7 +151,6 @@ void loop() {
                 motorControlTimer.end();
                 motorTimerRunning = false;
             }
-            digitalWrite(FUEL_PUMP_PIN, LOW);
         }
     }
 
