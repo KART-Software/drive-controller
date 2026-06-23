@@ -6,6 +6,7 @@
 #include "proto/drive_controller.pb.h"
 #include "sensor/pulse_counter.hpp"
 #include "sensor/sensors.hpp"
+#include "sensor/wheel_speed.hpp"
 
 namespace shift {
 
@@ -22,8 +23,8 @@ namespace shift {
 class AutoShifter {
    public:
     AutoShifter(const PulseCounter& engine,
-                const PulseCounter& wheelFL,
-                const PulseCounter& wheelFR,
+                const WheelSpeedSensor& wheelFL,
+                const WheelSpeedSensor& wheelFR,
                 const GearPositionSensor& gps,
                 const Apps& apps);
 
@@ -39,8 +40,8 @@ class AutoShifter {
 
     // -- 入力 (SensorHub 全体ではなく必要分だけ const 参照) --
     const PulseCounter& engine_;
-    const PulseCounter& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
-    const PulseCounter& wheelFR_;
+    const WheelSpeedSensor& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
+    const WheelSpeedSensor& wheelFR_;
     const GearPositionSensor& gps_;
     const Apps& apps_;  // ドライバーのアクセル開度 (スロットルゲート)
 

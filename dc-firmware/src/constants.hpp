@@ -50,10 +50,10 @@
 #endif
 
 #ifdef G2_18V17
-#define DC_MOTOR_SLP_PIN 4   // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_PWM_PIN 16  // TODO: Teensy 4.1 の PWM 対応ピンに変更
-#define DC_MOTOR_DIR_PIN 17  // TODO: Teensy 4.1 のピン番号に変更
-#define DC_MOTOR_FLT_PIN 2   // TODO: Teensy 4.1 のピン番号に変更
+#define DC_MOTOR_SLP_PIN 21
+#define DC_MOTOR_PWM_PIN 22  // FlexPWM4_0 (PWM 出力)
+#define DC_MOTOR_DIR_PIN 23
+#define DC_MOTOR_FLT_PIN 20
 #define MOTOR_DIRECTION -1
 #endif
 
@@ -145,11 +145,17 @@
 /// Pulse Counter Settings //
 /////////////////////////////
 
-#define PULSE_WHEEL_FL_PIN 5
-#define PULSE_WHEEL_FR_PIN 6
-#define PULSE_WHEEL_RL_PIN 7
-#define PULSE_WHEEL_RR_PIN 8
+// 車輪速は FlexPWM 入力キャプチャ (FreqMeasureMulti) で計測。各輪は別 FlexPWM
+// サブモジュールに割り当てること (同一サブモジュールは同時計測不可):
+//   FL=24(PWM1_2)  FR=25(PWM1_3)  RL=28(PWM3_1)  RR=36(PWM2_3)
+#define PULSE_WHEEL_FL_PIN 24
+#define PULSE_WHEEL_FR_PIN 25
+#define PULSE_WHEEL_RL_PIN 28
+#define PULSE_WHEEL_RR_PIN 36
+// Engine / クラッチ後(出力軸) RPM は QuadTimer ハードカウンタ (PulseCounter)。
+//   Engine=14(QuadTimer3_2)  ClutchRPM=15(QuadTimer3_3)
 #define PULSE_ENGINE_PIN 14
+#define PULSE_CLUTCH_RPM_PIN 15
 #define PULSE_UPDATE_INTERVAL_MS 100
 
 ////////////////////
@@ -177,12 +183,12 @@
 /// Auto Shifter (GPIO)     ///
 ///////////////////////////////
 
-// 注意: ピン 26/27 は SPI1 の MOSI/SCK (IMU 用)。ここに割り当てると autoShifter.begin()
-// の pinMode で SPI1 が壊れ IMU read がハングする。SPI1(0,1,26,27) と被らない空きピンを使う。
-#define AUTO_SHIFT_UP_IN_PIN 24     // TODO: 実配線に合わせる (ドライバー UP 入力)
-#define AUTO_SHIFT_DOWN_IN_PIN 25   // TODO: 実配線に合わせる (ドライバー DOWN 入力)
-#define AUTO_SHIFT_UP_OUT_PIN 28    // TODO: 実配線に合わせる (UP 出力 → IST コントローラ)
-#define AUTO_SHIFT_DOWN_OUT_PIN 29  // TODO: 実配線に合わせる (DOWN 出力 → IST コントローラ)
+// GPIO のみ (digitalRead/Write)。SPI1(0,1,26,27)・SPI0(10-13)・CAN3(30,31)・
+// モーター(20-23)・車輪速(24,25,28,36)・RPM(14,15) と被らない空きピンを使う。
+#define AUTO_SHIFT_UP_IN_PIN 40
+#define AUTO_SHIFT_DOWN_IN_PIN 39
+#define AUTO_SHIFT_UP_OUT_PIN 4
+#define AUTO_SHIFT_DOWN_OUT_PIN 5
 // 入力はプルアップ前提 (押下=LOW)。出力はアサート=HIGH。
 #define AUTO_SHIFT_IN_ACTIVE LOW
 #define AUTO_SHIFT_OUT_ACTIVE HIGH

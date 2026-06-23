@@ -174,6 +174,7 @@ function sensorTick() {
     gpsRaw: gpsRawValues[mockGear] ?? 32768,
     clutch: +Math.max(0, Math.min(100, base)).toFixed(1),
     clutchRaw: Math.round(clutchCalib.min + (base / 100) * (clutchCalib.max - clutchCalib.min)),
+    clutchRpm: +(rpmHz * 0.9 + noise()).toFixed(2),
     accelX: +(noise() * 0.5).toFixed(2),
     accelY: +(noise() * 0.5).toFixed(2),
     accelZ: +(9.8 + noise() * 0.2).toFixed(2),

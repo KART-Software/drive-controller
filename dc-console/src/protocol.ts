@@ -88,6 +88,7 @@ function toAppSensor(st: PbState): SensorData {
     wheelRL: s?.wheelSpeedRl,
     wheelRR: s?.wheelSpeedRr,
     rpm: s?.rpm,
+    clutchRpm: s?.clutchRpm,
     ax: s?.accelX,
     ay: s?.accelY,
     az: s?.accelZ,

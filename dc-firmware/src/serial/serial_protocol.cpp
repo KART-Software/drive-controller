@@ -194,6 +194,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
 
     s.clutch_raw = hub.clutch().getRawValue();
     s.clutch = (float)hub.clutch().convertedValue();
+    s.clutch_rpm = hub.pulseClutchRpm().getFrequencyHz();
 
     st.has_etc = true;
     dc_EtcState& e = st.etc;

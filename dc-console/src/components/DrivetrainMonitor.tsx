@@ -50,6 +50,7 @@ export function DrivetrainMonitor() {
           <div class="sensor-group">
             <h3>Clutch</h3>
             <Row label="Clutch" raw={data?.clutchRaw} val={data?.clutch} unit="%" />
+            <Row label="Clutch RPM (Hz)" val={data?.clutchRpm} unit="Hz" />
           </div>
           <div class="sensor-group">
             <h3>Engine</h3>

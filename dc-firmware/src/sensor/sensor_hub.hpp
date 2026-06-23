@@ -5,6 +5,7 @@
 #include "icm45686.hpp"
 #include "pulse_counter.hpp"
 #include "sensors.hpp"
+#include "wheel_speed.hpp"
 
 class SensorHub {
    public:
@@ -30,10 +31,11 @@ class SensorHub {
     const Imu* imu() const { return imu_; }
     const Adc& adc() const { return adc_; }
     const PulseCounter& pulseEngine() const { return pulseEngine_; }
-    const PulseCounter& pulseWheelFL() const { return pulseWheelFL_; }
-    const PulseCounter& pulseWheelFR() const { return pulseWheelFR_; }
-    const PulseCounter& pulseWheelRL() const { return pulseWheelRL_; }
-    const PulseCounter& pulseWheelRR() const { return pulseWheelRR_; }
+    const PulseCounter& pulseClutchRpm() const { return pulseClutchRpm_; }
+    const WheelSpeedSensor& pulseWheelFL() const { return pulseWheelFL_; }
+    const WheelSpeedSensor& pulseWheelFR() const { return pulseWheelFR_; }
+    const WheelSpeedSensor& pulseWheelRL() const { return pulseWheelRL_; }
+    const WheelSpeedSensor& pulseWheelRR() const { return pulseWheelRR_; }
 
     // ── mut: Configurator-only mutable access ──
     struct Mut {
@@ -64,9 +66,11 @@ class SensorHub {
     Icm45686 imu_impl_{IMU_CS_PIN};
     Imu* imu_ = &imu_impl_;
 
-    PulseCounter pulseWheelFL_{PULSE_WHEEL_FL_PIN};
-    PulseCounter pulseWheelFR_{PULSE_WHEEL_FR_PIN};
-    PulseCounter pulseWheelRL_{PULSE_WHEEL_RL_PIN};
-    PulseCounter pulseWheelRR_{PULSE_WHEEL_RR_PIN};
+    // 車輪速は FlexPWM (FreqMeasureMulti)、Engine/クラッチ後RPM は QuadTimer (PulseCounter)
+    WheelSpeedSensor pulseWheelFL_{PULSE_WHEEL_FL_PIN};
+    WheelSpeedSensor pulseWheelFR_{PULSE_WHEEL_FR_PIN};
+    WheelSpeedSensor pulseWheelRL_{PULSE_WHEEL_RL_PIN};
+    WheelSpeedSensor pulseWheelRR_{PULSE_WHEEL_RR_PIN};
     PulseCounter pulseEngine_{PULSE_ENGINE_PIN};
+    PulseCounter pulseClutchRpm_{PULSE_CLUTCH_RPM_PIN};
 };

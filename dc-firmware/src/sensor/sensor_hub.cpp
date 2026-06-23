@@ -8,6 +8,7 @@ void SensorHub::begin() {
     pulseWheelRL_.begin();
     pulseWheelRR_.begin();
     pulseEngine_.begin();
+    pulseClutchRpm_.begin();
 }
 
 void SensorHub::read() {
@@ -48,4 +49,5 @@ void SensorHub::updatePulse() {
     pulseWheelRL_.update();
     pulseWheelRR_.update();
     pulseEngine_.update();
+    pulseClutchRpm_.update();
 }

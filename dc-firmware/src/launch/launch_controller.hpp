@@ -8,6 +8,7 @@
 #include "proto/drive_controller.pb.h"
 #include "sensor/pulse_counter.hpp"
 #include "sensor/sensors.hpp"
+#include "sensor/wheel_speed.hpp"
 #include "util/pid.hpp"
 
 namespace launch {
@@ -22,8 +23,8 @@ namespace launch {
 class LaunchController {
    public:
     LaunchController(const PulseCounter& engine,
-                     const PulseCounter& wheelRL,
-                     const PulseCounter& wheelRR,
+                     const WheelSpeedSensor& wheelRL,
+                     const WheelSpeedSensor& wheelRR,
                      const ClutchSensor& clutch,
                      Flash& flash);
 
@@ -40,8 +41,8 @@ class LaunchController {
    private:
     // -- sensors & actuator --
     const PulseCounter& engine_;
-    const PulseCounter& wheelRL_;
-    const PulseCounter& wheelRR_;
+    const WheelSpeedSensor& wheelRL_;
+    const WheelSpeedSensor& wheelRR_;
     const ClutchSensor& clutch_;
     ClutchMotor motor_;
     BitePointFile bitePointFile_;

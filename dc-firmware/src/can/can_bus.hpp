@@ -15,5 +15,6 @@ class CanBus {
     void poll(CanRxData& rx);
 
    private:
-    FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can1;
+    // CAN3 = Teensy 4.1 の pin 30/31 (CAN1 の 22/23 はモーター PWM/DIR に割当のため)
+    FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> can1;
 };

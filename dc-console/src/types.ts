@@ -31,6 +31,7 @@ export interface SensorData {
   wheelRL?: number;
   wheelRR?: number;
   rpm?: number; // engine pulse Hz (歯数換算前)
+  clutchRpm?: number; // クラッチ後(出力軸) Hz (歯数換算前)
   ax?: number;
   ay?: number;
   az?: number;

@@ -187,6 +187,8 @@ message Sensor{
 
   uint32 clutch_raw = 33;  // Clutch Position Sensor raw ADC value
   float  clutch     = 34;  // clutch position 0-100 (0=fully open, 100=fully closed)
+
+  float clutch_rpm = 35;  // クラッチ後(出力軸)の回転 [Hz] (engine_teeth と同様に要換算)
 }
 
 message State {

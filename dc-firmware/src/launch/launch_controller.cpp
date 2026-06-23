@@ -5,8 +5,8 @@
 namespace launch {
 
 LaunchController::LaunchController(const PulseCounter& engine,
-                                   const PulseCounter& wheelRL,
-                                   const PulseCounter& wheelRR,
+                                   const WheelSpeedSensor& wheelRL,
+                                   const WheelSpeedSensor& wheelRR,
                                    const ClutchSensor& clutch,
                                    Flash& flash)
     : engine_(engine),
