@@ -54,8 +54,8 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 `dc-firmware/src/main.cpp` は 3 つの並行コンテキストで動く。共有状態を触る前に自分のコードがどれに属するか把握すること:
 
 1. **モーター制御 ISR** — `IntervalTimer`, 周期 1 ms, NVIC 優先度 **0 (最高)**。センサー状態を読み、PID を回し、PWM を書き出す。`motor_controller.cycle()`。
-2. **センサーサンプリング ISR** — `IntervalTimer`, 周期 125 µs (8 kHz), NVIC 優先度 **16**。ADS8688 ADC を SPI で読み、移動平均を更新する。`sensor_hub.read()`。
-3. **`loop()`** — 非 ISR: CAN poll/send (60 Hz)、パルスカウンタ集計、プラウシビリティチェック、シリアルプロトコル、コマンドディスパッチ、オートシフター tick (毎イテレーション)、launch FSM tick (凍結時はビルドから除外)。
+2. **センサーサンプリング ISR** — `IntervalTimer`, 周期 125 µs (8 kHz)。既定 (`-DADC_DMA`, platformio.ini) では ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleAdcDmaIsr()`)。NVIC 優先度は **208** (USB より下) にして USB 送受信を阻害しないようにする。`-DADC_DMA` を外すとブロッキング読み (`sensor_hub.read()`) を `loop()` で行うフォールバックになる。
+3. **`loop()`** — 非 ISR: IMU 読み (DMA 経路では ADC と分離)、CAN poll/send (60 Hz)、パルスカウンタ更新 (車輪速 + RPM)、プラウシビリティチェック、シリアルプロトコル、コマンドディスパッチ、オートシフター tick (毎イテレーション)、launch FSM tick (凍結時はビルドから除外)。テレメトリ送信は TX バッファ満杯時にドロップする (loop をブロックさせない, `serial_protocol.cpp`)。
 
 ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は既に `sum` の読み取りを `noInterrupts()` で守っている — このパターンを踏襲すること。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
 
@@ -64,9 +64,18 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - `SensorHub` がすべてのセンサーと `EtcTarget` を所有する。多くのコードは `SensorHub&` を `const` で受け取り、`Configurator` だけが `SensorHub::mut` 経由で mutable アクセサに到達する (意図的な friend-by-API)。
 - `EtcTarget` がターゲットスロットル開度を決める: APPS と ITTR (IST コントローラからの CAN コマンド) の切り替え、モード (Normal / Restricted / Calibration / MotorOff)、アイドリングおよびモード別キャップ、オプションの多項式ターゲットカーブ。
 
+### パルスカウント (車輪速 / RPM)
+
+回転系は **2 系統のハードウェア機構**で計測する (`SensorHub` が所有し、`loop()` から `updatePulse()` を `PULSE_UPDATE_INTERVAL_MS` 毎に呼ぶ):
+
+- **車輪速 FL/FR/RL/RR** — `WheelSpeedSensor` (`sensor/wheel_speed.{hpp,cpp}`)。**FreqMeasureMulti** (FlexPWM 入力キャプチャ = 周期計測) を使う。各輪は **別々の FlexPWM サブモジュール**のピンに割り当てること (同一サブモジュールの 2 ピンは同時計測不可)。一定時間 (`STALE_MS`) エッジが無ければ 0Hz に減衰 (停車判定)。
+- **エンジン RPM / クラッチ後 (出力軸) RPM** — `PulseCounter` (`sensor/pulse_counter.{hpp,cpp}`)。Teensy の **QuadTimer** 外部エッジカウンタ。QuadTimer 対応ピン (10–15,18,19) のみ。`CNTR` 差分 ÷ 経過時間で Hz を算出。
+
+両者は `getFrequencyHz()` / `getRpm()` / `count()` の同一インターフェースを持つので、`AutoShifter` / `LaunchController` は backend を意識せず const 参照で受け取る。FlexPWM ピンは QuadTimer で数えられず、QuadTimer ピンは ADC(SPI0=10–13) を除くと残り少ないため、この 2 系統併用になっている。現在のピン割り当ては `constants.hpp` の Pulse Counter Settings を参照。
+
 ### CAN
 
-- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): `MODE_SELECT (0x200)` で ETC モード選択、`LAUNCH_CTRL (0x300)` で launch を切り替え、`AUTO_SHIFT (0x400)` でオートシフター ON/OFF を切り替え (byte0=0x01 で ON)。
+- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): `MODE_SELECT (0x200)` で ETC モード選択、`LAUNCH_CTRL (0x300)` で launch を切り替え、`AUTO_SHIFT (0x400)` でオートシフター ON/OFF を切り替え (byte0=0x01 で ON)。
 - `CanRxData::checkTimeouts()` が安全層。フレーム受信時刻を `lastXFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false に、autoShift を false (OFF=手動) にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
 - `MODE_SELECT` で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastModeFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
 
@@ -109,7 +118,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### ピンアサイン
 
-`dc-firmware/src/constants.hpp` で `#define` によりモータードライバを選択 (現在は `G2_18V17`)。多くの TODO 付きピン番号がプレースホルダのまま (TODO.md F セクション)。ベンチテスト前に実配線と必ず照合すること。
+`dc-firmware/src/constants.hpp` で `#define` によりモータードライバを選択 (現在は `G2_18V17`)。主要ピンは実配線に合わせて確定済み: モーター(G2)=SLP21/PWM22/DIR23/FLT20、車輪速=24/25/28/36 (FlexPWM, 別サブモジュール)、RPM=Engine14/クラッチ後15 (QuadTimer)、オートシフター=UP_IN40/DOWN_IN39/UP_OUT4/DOWN_OUT5、CAN=CAN3(30/31)、ADC(SPI0)=10-13、IMU(SPI1)=0/1/26/27。パルスカウントのピンはペリフェラル制約あり (上記「パルスカウント」節)。ベンチテスト前に実配線と必ず照合すること。
 
 ## 規約
 
