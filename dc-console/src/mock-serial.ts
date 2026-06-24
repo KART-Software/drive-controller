@@ -31,7 +31,7 @@ let t0 = 0;
 let manualMode = false;
 let manualTarget = 30;
 let configChanged = false;
-const MOCK_MODES = [EtcMode.CALIB, EtcMode.NORMAL, EtcMode.RESTRICT] as const;
+const MOCK_MODES = [EtcMode.CALIB, EtcMode.NORMAL, EtcMode.RESTRICT, EtcMode.MOTOR_OFF] as const;
 const flags = {
   apps: true,
   tps: true,

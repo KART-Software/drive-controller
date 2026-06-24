@@ -9,6 +9,9 @@ const MODES = [
   { key: "Calib", deg: 240, name: "Calib", label: "0 - 100", color: "#fbbf24" },
   { key: "Normal", deg: 300, name: "Normal", label: "Idle - Max", color: "#34d399" },
   { key: "Restrict", deg: 360, name: "Restricted", label: "Idle - Restrict Max", color: "#f87171" },
+  // 表示専用。デバイスが MOTOR_OFF モード (CAN/IST が設定) のとき点灯。key は
+  // protocol.ts modeToString(EtcMode.MOTOR_OFF) = "MotorOff" と一致させる。
+  { key: "MotorOff", deg: 60, name: "Motor OFF", label: "—", color: "#9a9abe" },
 ];
 
 function xy(r: number, deg: number): [number, number] {
@@ -34,7 +37,7 @@ export function ModeKnob(_props: Props) {
   return (
     <section>
       <h2>Mode</h2>
-      <svg viewBox="0 0 340 195" width="330">
+      <svg viewBox="0 0 380 195" width="360">
         {/* Knob face */}
         <circle cx={CX} cy={CY} r={R} fill="var(--bg)" stroke="var(--border)" stroke-width="2" />
 
@@ -43,7 +46,8 @@ export function ModeKnob(_props: Props) {
           const active = mode === m.key;
           const [tx, ty] = xy(R + 10, m.deg);
           const [lx, ly] = xy(R + 32, m.deg);
-          const anchor = m.deg === 360 ? "middle" : "end";
+          // 右半分 (deg<180) は始点揃え、左半分は終点揃え、真上(360)は中央。
+          const anchor = m.deg === 360 ? "middle" : m.deg < 180 ? "start" : "end";
           return (
             <g key={m.key}>
               <circle cx={tx} cy={ty} r={active ? 5 : 3} fill={active ? m.color : "#555"} />
