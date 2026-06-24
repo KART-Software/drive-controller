@@ -2,7 +2,7 @@
 
 #include "adc.hpp"
 #include "constants.hpp"
-#include "icm45686.hpp"
+#include "iam20680hp.hpp"
 #include "pulse_counter.hpp"
 #include "sensors.hpp"
 #include "util/toggle_switch.hpp"
@@ -68,7 +68,7 @@ class SensorHub {
     GearPositionSensor gps_;
     ClutchSensor clutch_;
 
-    Icm45686 imu_impl_{IMU_CS_PIN};
+    Iam20680hp imu_impl_{IMU_CS_PIN};
     Imu* imu_ = &imu_impl_;
 
     // 車輪速は FlexPWM (FreqMeasureMulti)、Engine/クラッチ後RPM は QuadTimer (PulseCounter)
