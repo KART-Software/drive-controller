@@ -21,7 +21,7 @@
 /// Sampling Settings ///
 /////////////////////////
 
-#define SENSOR_SAMPLING_RATE_US 125  // 8kHz sensor ISR interval
+#define SENSOR_SAMPLING_RATE_US 62.5  // 16kHz sensor ISR interval (IntervalTimer は float us 可)
 
 ////////////////////
 /// PWM Settings ///
