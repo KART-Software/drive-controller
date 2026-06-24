@@ -24,10 +24,10 @@ uint8_t Icm45686::readRegister(uint8_t reg) {
 void Icm45686::readRegisters(uint8_t reg, uint8_t* buf, uint8_t len) {
     digitalWriteFast(csPin, LOW);
     spi.beginTransaction(spiSettings);
-    spi.transfer(reg | 0x80);
-    for (uint8_t i = 0; i < len; i++) {
-        buf[i] = spi.transfer(0x00);
-    }
+    spi.transfer(reg | 0x80);  // レジスタアドレス (read bit)
+    // データはブロック転送で一括取得。buf の中身を送出 (read なので送信内容は don't-care)
+    // しつつ受信で上書きするため、1byte ずつ transfer するより per-byte オーバーヘッドが小さい。
+    spi.transfer(buf, len);
     spi.endTransaction();
     digitalWriteFast(csPin, HIGH);
 }
