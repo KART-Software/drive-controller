@@ -32,6 +32,7 @@ void PlausibilityValidator::initParameters() {
 bool PlausibilityValidator::isCurrentlyValid() {
     if (millis() < PLAUSIBLE_DURATION) {
         isValidAllTime = true;
+        lastCurrentlyValid_ = true;
         return true;
     } else {
         bool isValid = true;
@@ -46,7 +47,7 @@ bool PlausibilityValidator::isCurrentlyValid() {
         isValid &= isBpsTpsPlausible() || !bpsTpsCheckFlag;
 
         isValidAllTime &= isValid;
-
+        lastCurrentlyValid_ = isValid;
         return isValid;
     }
 }

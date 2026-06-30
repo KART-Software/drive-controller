@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <TimeLib.h>
 
 #include "can/can_controller.hpp"
 #include "commands/command_controller.hpp"
@@ -8,12 +9,15 @@
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "launch/launch_controller.hpp"
+#include "log_record_builder.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "shift/auto_shifter.hpp"
 #include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
 #include "util/flash.hpp"
 #include "util/log/debug_logger.hpp"
+#include "util/log/sd_binary_writer.hpp"
+#include "util/log/sensor_logger.hpp"
 
 IntervalTimer motorControlTimer;
 IntervalTimer sensorSamplingTimer;
@@ -43,6 +47,8 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
 Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController, autoShifter);
 CommandRouter commandRouter;
 CommandController commandController(configurator, motorController, sensorHub.mut.target());
+SdBinaryWriter sdWriter;
+SensorLogger sensorLogger(sdWriter);
 
 void motorControlISR() {
     motorController.cycle();
@@ -81,6 +87,9 @@ void setup() {
     static SerialDebugWriter serialDebugWriter;
     DebugLogger::addWriter(&serialDebugWriter);
 
+    // RTC を TimeLib に供給 (VBAT 保持されていれば起動時から日時が使える。set_rtc で更新)。
+    setSyncProvider(Teensy3Clock.get);
+
     // SHUTDOWN 回路: 通常 RELAY=HIGH (点火系許可)。SIG_IN は SensorHub が ToggleSwitch で読む。
     pinMode(SHUTDOWN_RELAY_PIN, OUTPUT);
     digitalWrite(SHUTDOWN_RELAY_PIN, HIGH);
@@ -118,12 +127,16 @@ void setup() {
     plausibilityValidator.initialize();
 
     commandController.registerCommands(commandRouter);
+
+    // SD ロギング: カード挿入時のみ有効。RTC 日時 (未設定なら LOGNNNN) で新ファイルを作る。
+    sensorLogger.begin();
 }
 
 unsigned long lastLogTime = 0;
 unsigned long lastPulseUpdateTime = 0;
 unsigned long lastCanTime = 0;
 unsigned long lastLaunchTime = 0;
+unsigned long lastSdLogMs = 0;
 
 void loop() {
     unsigned long now = millis();
@@ -211,6 +224,18 @@ void loop() {
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
                                        plausibilityValidator.getErrorHandler());
     }
+
+    // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が
+    // 止まりサンプルが空く (レアな小ギャップ)。完全ギャップレスが要れば ISR 収集化する。
+    // TODO[実機計測]: 実カードで sensorLogger.log()/service() の最悪所要時間を micros()
+    // で計測する (通常はキャッシュへ memcpy で数us、512B セクタ書込で ~100-500us、1s 毎の
+    // flush で ~ms〜まれに数十ms)。loop への影響 (CAN/テレメトリ/コマンド遅延) を確認し、
+    // 長すぎれば SYNC_INTERVAL_MS 調整 or リングバッファ+ISR 収集へ変更を検討。
+    if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
+        lastSdLogMs = now;
+        sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter));
+    }
+    sensorLogger.service(now);
 
     // Command polling
     commandRouter.poll();

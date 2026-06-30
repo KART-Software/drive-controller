@@ -34,6 +34,10 @@ class PlausibilityValidator {
                        bool bps,
                        bool bpsTps);
     ErrorHandler& getErrorHandler() { return errorHandler; }
+    // 副作用なしの const 読み取り (ログ生成等の純粋関数用)。
+    // errorBits = ETC エラービットマスク、currentlyValid = 直近に評価した瞬時 plausibility。
+    uint16_t errorBits() const { return errorHandler.bits(); }
+    bool currentlyValid() const { return lastCurrentlyValid_; }
     bool appsCheckFlag = false, tpsCheckFlag = false, apps1CheckFlag = false, apps2CheckFlag = false,
          tps1CheckFlag = false, tps2CheckFlag = false, targetCheckFlag = false, bpsCheckFlag = false,
          bpsTpsCheckFlag = false;
@@ -46,6 +50,7 @@ class PlausibilityValidator {
     const EtcTarget& target;
     const Bps& bps;
     bool isValidAllTime;
+    bool lastCurrentlyValid_ = true;  // isCurrentlyValid() の最新結果 (const 参照用キャッシュ)
     unsigned long lastTpsPlausibleTime, lastAppsPlausibleTime, lastTps1CircuitValidTime, lastTps2CircuitValidTime,
         lastApps1CircuitValidTime, lastApps2CircuitValidTime, lastAppsTpsTargetValidTime, lastBpsCircuitValidTime,
         lastBpsTpsPlausibleTime;
