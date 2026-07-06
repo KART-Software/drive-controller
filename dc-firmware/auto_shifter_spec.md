@@ -30,9 +30,12 @@ OFF の「manual」とは「シフトの**判断**をドライバーが行う（
 - ギアポジションセンサによるシフト完了確認のクローズドループ
 - シフト要求のキューイング（パルス中/クールダウン中の入力は v1 では破棄）
 
-> **設計上の注意**: v1 では ON 中はドライバーの手動シフトが一切効かない。
-> ドライバーが即座に手動へ戻せるよう、CAN の ON/OFF はコックピットスイッチ
-> 等でドライバーが任意に切り替えられる前提とする（フェイルセーフは §6）。
+> **設計上の注意（手動オーバーライド）**: auto 実行中でも、ドライバーが手動シフト操作
+> （UP/DOWN 入力の立ち上がりエッジ）をすると **その場で手動へ切り替わり**、以降 CAN が
+> **手動→auto に遷移するまで**手動を保持する（`manualOverride`, §5）。ドライバーは即座に
+> 手動へ割り込め、かつ意図せず auto へ戻らない。auto へ戻すには CAN の auto 指令を一度
+> OFF にしてから再度 ON する。
+> CAN の ON/OFF はコックピットスイッチ等でドライバーが任意に切り替えられる前提とする。
 
 ---
 
@@ -123,15 +126,21 @@ pulseWidthFor(gear, dir, moving):
 
 ## 5. シフト要求の発生源
 
-`requestDir` の決定（`OutState::Idle` のときのみ）:
+`requestDir` の決定（`OutState::Idle` のときのみ）。`autoOn` = CAN オートシフト指令:
 
 ```
-if !autoOn:                                 // OFF (manual)
+// 毎ティック: CAN が 手動→auto に遷移 (autoOn の立ち上がり) したら manualOverride = false。
+
+manual = !autoOn || manualOverride || (stopped && gear <= 2)
+if manual:
     requestDir = pollDriverEdge()           // ドライバー判断。本機は整形のみ
-else if stopped && gear <= 2:               // ON だが低速ギア帯/不明で停車 → manual
-    requestDir = pollDriverEdge()           // 不明 / N / 1 / 2 を手動でナビゲート (auto 停止)
-else:                                       // ON (auto)
-    requestDir = evaluate()
+else:                                       // auto
+    edge = pollDriverEdge()
+    if edge != None:                        // auto 実行中の手動シフト操作 → 手動へラッチ
+        manualOverride = true               //   (Idle でシフトが実際に出るときだけラッチ)
+        requestDir = edge                   //   同エッジでシフト実行 (切替+シフト)
+    else:
+        requestDir = evaluate()
 ```
 
 > `stopped = vWheelHz < min_wheel_hz`。`gear <= 2` は **不明(-1) / N(0) / 1速 / 2速** を含む。
@@ -141,6 +150,24 @@ else:                                       // ON (auto)
 > - ギア不明(-1)を含めるのは、ギアセンサがノイズ/未キャリブで -1 のときに手動シフトを
 >   殺さない（デッドゾーン回避）ため。auto は不明ギアでは何もしない (§6) ので、停車中は
 >   ドライバーに委ねる。
+
+### 手動オーバーライド（auto 実行中のドライバー割り込み）
+
+auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or gear>2）に、ドライバー
+が UP/DOWN 入力の**立ち上がりエッジ**を出すと、手動へ切り替わり（`manualOverride = true`）、
+以降 CAN が auto を指令していても手動として振る舞う。トリガーとなったエッジはそのまま
+手動シフトとして実行される（同ティックで「切替＋シフト」）。
+
+- **ラッチは Idle 時のみ**: override のラッチは、そのエッジで手動シフトが実際に出る
+  （`OutState::Idle`）ときだけ行う。Pulsing/Cooldown 中の押下は §3 どおり破棄され、手動へも
+  切り替わらない（クールダウン中の偶発的な接触で手動に固定されるのを避ける）。
+- **解除条件**: CAN オートシフト指令が **手動→auto に遷移**（`autoOn` の立ち上がり）した
+  ときのみ `manualOverride = false` に戻す。auto へ復帰させるには CAN 側で一度 OFF→ON する。
+- **低速ハンドオフ帯は対象外**: 停車中 gear<=2 のドライバー操作はもともと auto を止めて
+  ドライバーに渡す設計（本節冒頭）なので override をラッチしない。走り出せば通常どおり
+  auto に戻る。override は「auto が実際に仕切っている領域での割り込み」だけを対象にする。
+- **オブザーバビリティ**: 切替/解除を `sendDebugf` で出力。`AutoShifter::manualOverride()`
+  getter で現在の手動ラッチ状態を参照できる。
 
 ### OFF (manual)
 
@@ -169,16 +196,18 @@ else:                                       // ON (auto)
 
 ## 6. 安全設計
 
-`main.cpp` の tick で、ON を有効化する前に安全条件を AND する（launch の kill と同方針）:
+オートシフターの auto/manual は **CAN オートシフト指令 (0x740 byte2) だけ**で決まる。
+`AutoShifter::update(autoOn)` に `autoOn = canAutoShiftActive` を渡す:
 
-```
-effectiveAutoOn = canAutoShiftActive && plausibilityValidator.isCurrentlyValid()
-```
+- `autoOn == false`（CAN OFF）のとき manual として振る舞う。
+- **CAN 断時も manual**（§8 フォールバック。`can_data.checkTimeouts` が `autoShiftActive`
+  を false に戻す）。これがオートシフターの安全フォールバックの一次経路。
 
-`effectiveAutoOn == false` のとき OFF（manual）として振る舞う:
-
-- プラウシビリティ違反時も manual は生き、ドライバーは手動シフト可能。
-- CAN 断時も manual（§8 フォールバック）。
+> **ETC プラウシビリティには依存しない**: オートシフターは UP/DOWN パルスを IST コント
+> ローラへ渡すだけでスロットルを動かさないため、ETC のプラウシビリティ違反で auto を
+> 止めない（`evaluate()` も plausibility を読まない）。ETC の停止・SHUTDOWN 等の安全は
+> 別系統（`main.cpp` の ETC アーミング）で一元管理する。launch control は自らスロットル/
+> クラッチを動かすため plausibility に結合するが、オートシフターは切り離す。
 
 ### `evaluate()` が `None` を返す（自動シフトしない）条件
 
@@ -318,8 +347,8 @@ dc-firmware/src/shift/
  │          ▲ ON のときだけ呼ばれる
  │          │
  ├─ [② 調停層 arbitration]  requestDir をどこから取るか決める (§5)
- │     OFF / ON+停車+低速ギア帯(N/1/2) → ④の pollDriverEdge() (ドライバー判断)
- │     ON & それ以外                  → ① evaluate()          (auto 判断)
+ │     手動 (CAN OFF / 手動オーバーライド / 停車低速ギア帯) → ④ pollDriverEdge()
+ │     auto (上記以外)                                              → ① evaluate()
  │          │
  │          ▼
  ├─ [③ 出力整形層]  pulseWidthFor() (§4) + 状態機械 Idle→Pulsing→Cooldown (§3)
@@ -352,9 +381,10 @@ class AutoShifter {
 
     void begin();                          // pinMode 設定、出力を非アサート初期化
     void setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx, uint32_t engineTeeth);
-    void update(bool autoOn);              // 毎ティック呼ぶ
+    void update(bool autoOn);              // 毎ティック呼ぶ (autoOn = CAN オートシフト指令)
 
     enum class State { Idle, Pulsing, Cooldown };
+    bool manualOverride() const;           // auto 指令中に手動へ落ちているか
 
    private:
     enum class Dir { None, Up, Down };
@@ -379,7 +409,8 @@ class AutoShifter {
     unsigned long stateEnteredMs_ = 0;
     uint32_t activePulseMs_ = 0;
     bool prevUpIn_ = false, prevDownIn_ = false;
-    bool prevAutoOn_ = false;
+    bool prevAutoOn_ = false;              // CAN auto 指令の前回値 (手動→auto 遷移検出用)
+    bool manualOverride_ = false;          // auto 中の手動割り込みラッチ (§5)
 
     // -- helpers --
     bool readUpIn() const;                 // 極性考慮 digitalRead
@@ -421,9 +452,7 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.apps1());
 // setup(): autoShifter.begin();  Configurator が setConfig を反映
 // loop() (毎イテレーション):
-    bool autoOn = canController.rxData().autoShiftActive
-               && plausibilityValidator.isCurrentlyValid();
-    autoShifter.update(autoOn);
+    autoShifter.update(canController.rxData().autoShiftActive);     // CAN auto 指令 (0x740 byte2)
 ```
 
 `Configurator` に `AutoShifter&` を注入し、`calibrate()` で `setConfig` を反映
