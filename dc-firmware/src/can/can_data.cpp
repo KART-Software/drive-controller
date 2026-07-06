@@ -32,7 +32,8 @@ void CanTxData::toFrames(CAN_message_t (&out)[FRAME_COUNT]) const {
 }
 
 void CanRxData::mergeFrame(const CAN_message_t& msg) {
-    if (msg.id == CAN_ID_MODE_SELECT && msg.len >= 1) {
+    // 制御フレーム(0x740): byte0=mode, byte1=launch, byte2=auto-shift
+    if (msg.id == CAN_ID_CONTROL && msg.len >= 3) {
         switch (static_cast<CanEtcMode>(msg.buf[0])) {
             case CanEtcMode::CALIB:
             case CanEtcMode::NORMAL:
@@ -42,34 +43,26 @@ void CanRxData::mergeFrame(const CAN_message_t& msg) {
                 break;
             default:
                 // UNSPECIFIED (0) や未知値: モードは変更しない (現在値を維持)。
-                // フレーム自体は受信できているので lastModeFrameMs だけ更新する。
+                // フレーム自体は受信できているので lastControlFrameMs だけ更新する。
                 break;
         }
-        lastModeFrameMs = millis();
-    }
-    if (msg.id == CAN_ID_LAUNCH_CTRL && msg.len >= 1) {
-        launchActive = (msg.buf[0] == 0x01);
-        lastLaunchFrameMs = millis();
-    }
-    if (msg.id == CAN_ID_AUTO_SHIFT && msg.len >= 1) {
-        autoShiftActive = (msg.buf[0] == 0x01);
-        lastAutoShiftFrameMs = millis();
+        launchActive = (msg.buf[1] == 0x01);
+        autoShiftActive = (msg.buf[2] == 0x01);
+        lastControlFrameMs = millis();
     }
 }
 
 void CanRxData::checkTimeouts(unsigned long nowMs) {
-    if (launchActive && (nowMs - lastLaunchFrameMs) > CAN_LAUNCH_TIMEOUT_MS) {
-        launchActive = false;
+    // 制御フレームが起動以来未受信 (== 0) なら判定スキップ — 各値はデフォルトのまま。
+    if (lastControlFrameMs == 0 || (nowMs - lastControlFrameMs) <= CAN_CONTROL_TIMEOUT_MS) {
+        return;
     }
-    // 一度でも MODE_SELECT を受信していて、それが途絶した場合のみ NORMAL へフォールバック。
-    // lastModeFrameMs == 0 (起動以来未受信) は判定スキップ — デフォルトの NORMAL のまま。
-    // MOTOR_OFF は安全ラッチ: CAN 断で勝手にモーターを復帰させない。
-    if (etcMode != CanEtcMode::NORMAL && etcMode != CanEtcMode::MOTOR_OFF && lastModeFrameMs != 0 &&
-        (nowMs - lastModeFrameMs) > CAN_MODE_TIMEOUT_MS) {
+    // launch 途絶 → false
+    launchActive = false;
+    // mode 途絶 → NORMAL。MOTOR_OFF は安全ラッチ: CAN 断で勝手にモーターを復帰させない。
+    if (etcMode != CanEtcMode::MOTOR_OFF) {
         etcMode = CanEtcMode::NORMAL;
     }
-    // AUTO_SHIFT 途絶 → OFF(manual)。手動シフトが残る方が安全。
-    if (autoShiftActive && (nowMs - lastAutoShiftFrameMs) > CAN_AUTO_SHIFT_TIMEOUT_MS) {
-        autoShiftActive = false;
-    }
+    // auto-shift 途絶 → OFF(manual)。手動シフトが残る方が安全。
+    autoShiftActive = false;
 }
