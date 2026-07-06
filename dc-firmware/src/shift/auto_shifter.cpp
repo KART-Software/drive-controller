@@ -19,6 +19,8 @@ void AutoShifter::begin() {
     writeOutputs(false, false);
     prevUpIn_ = readUpIn();
     prevDownIn_ = readDownIn();
+    prevAutoOn_ = false;
+    manualOverride_ = false;
     state_ = State::Idle;
 }
 
@@ -123,18 +125,35 @@ void AutoShifter::update(bool autoOn) {
             break;
     }
 
+    // 走行状況 (副作用なし)。manualWindow = 停車中の低速ギア帯 (不明 -1 / N / 1 / 2):
+    // auto 中でもドライバーに渡す既存のハンドオフ帯 (§5)。ギア不明を含めるのは
+    // センサノイズ時に手動シフトを殺さないため。
+    int8_t gear = gps_.getGear();
+    bool stopped = !moving();
+    bool manualWindow = stopped && gear <= 2;
+
     // ④ 入力エッジ追跡 (毎ティック更新)。Pulsing/Cooldown 中の押下は破棄される。
     bool curUp = readUpIn();
     bool curDown = readDownIn();
-    bool modeChanged = (autoOn != prevAutoOn_);
     bool upEdge = curUp && !prevUpIn_;
     bool downEdge = curDown && !prevDownIn_;
     prevUpIn_ = curUp;
     prevDownIn_ = curDown;
+
+    // CAN オートシフト指令 (autoOn) の ON/OFF 遷移を検出
+    bool autoRising = autoOn && !prevAutoOn_;  // 手動→auto
+    bool modeChanged = (autoOn != prevAutoOn_);
     prevAutoOn_ = autoOn;
+
+    // CAN が 手動→auto に切り替わったら手動オーバーライドを解除し auto に復帰。
+    if (autoRising && manualOverride_) {
+        manualOverride_ = false;
+        SerialProtocol::sendDebugf("autoshift: manual override cleared (CAN manual->auto)");
+    }
+
     if (modeChanged) {
-        SerialProtocol::sendDebugf("autoshift: mode=%s", autoOn ? "ON" : "OFF");
-        // モード切替直後は「押しっぱ」の誤発火を防ぐためエッジを無効化
+        SerialProtocol::sendDebugf("autoshift: CAN=%s", autoOn ? "auto" : "manual");
+        // 切替直後の「押しっぱ」誤発火を防ぐためエッジを無効化
         upEdge = false;
         downEdge = false;
     }
@@ -142,23 +161,25 @@ void AutoShifter::update(bool autoOn) {
     if (state_ != State::Idle)
         return;
 
-    // ② 調停: requestDir をどこから取るか
-    int8_t gear = gps_.getGear();
-    bool stopped = !moving();
-    // 停車中の低速ギア帯 (不明 -1 / N 0 / 1 / 2) は auto を止めてドライバーに渡す。
-    // 不明を含めるのは、ギアセンサがノイズ/未キャリブで -1 のときに手動シフトを
-    // 殺さない (デッドゾーン回避) ため。
-    bool manualWindow = autoOn && stopped && gear <= 2;
+    // ② 調停: 手動 (CAN manual / 手動オーバーライド / 停車低速帯) か auto か。
+    bool manual = !autoOn || manualOverride_ || manualWindow;
 
     Dir req = Dir::None;
-    if (!autoOn || manualWindow) {
-        // OFF (manual) / ON+停車+低速ギア帯: ドライバーのエッジ (UP 優先)
+    if (manual) {
+        // ドライバーのエッジ (UP 優先)。本機は判断せず整形のみ。
         if (upEdge)
             req = Dir::Up;
         else if (downEdge)
             req = Dir::Down;
+    } else if (upEdge || downEdge) {
+        // auto 実行中 (走行中 or gear>2) にドライバーが手動シフト → その場で手動へラッチし、
+        // このエッジでシフトを実行 (同ティックで切替+シフト)。以降 CAN が 手動→auto に
+        // 遷移するまで手動として振る舞う (Pulsing/Cooldown 中の押下はここに来ず破棄される)。
+        manualOverride_ = true;
+        SerialProtocol::sendDebugf("autoshift: manual override (driver shifted during auto)");
+        req = upEdge ? Dir::Up : Dir::Down;
     } else {
-        // ON (auto): ① 判断ロジック
+        // auto: ① 判断ロジック
         req = evaluate();
     }
 

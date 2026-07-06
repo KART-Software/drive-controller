@@ -15,9 +15,12 @@ namespace shift {
 // 出力は OFF/ON 両モードとも「シフト要求 (エッジ or 自動判断) → 整形パルス
 // (Idle→Pulsing→Cooldown)」で統一。パルス幅は transmission/ギア/方向/停車状態で決まる。
 //
+// 手動オーバーライド: auto 実行中にドライバーが手動シフト操作をすると手動へ切り替わり、
+// CAN が 手動→auto に遷移するまで手動を保持する (§5)。
+//
 // 層構成:
-//   ① 判断ロジック (evaluate)   ON 時の自動シフト判断 (RPM/車輪速/ギア/APPS)
-//   ② 調停 (update 内)          OFF/ON+停車低速帯 → ドライバー入力 / ON → evaluate
+//   ① 判断ロジック (evaluate)   auto 時の自動シフト判断 (RPM/車輪速/ギア/APPS)
+//   ② 調停 (update 内)          手動(CAN OFF/手動ラッチ/停車低速帯)→入力 / auto → evaluate
 //   ③ 出力整形 (状態機械)        pulseWidthFor + Idle→Pulsing→Cooldown
 //   ④ I/O                       入力エッジ検出 / センサー getter / digitalWrite
 class AutoShifter {
@@ -30,10 +33,15 @@ class AutoShifter {
 
     void begin();  // pinMode 設定、出力を非アサート初期化、入力ベースライン取得
     void setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx, uint32_t engineTeeth);
-    void update(bool autoOn);  // 毎ループ呼ぶ
+    // 毎ループ呼ぶ。autoOn = CAN オートシフト指令 (0x740 byte2, ON=auto / OFF=manual)。
+    // オートシフターは ETC プラウシビリティに依存しない (安全フォールバックは CAN 断→manual,
+    // can_data.checkTimeouts)。ETC の停止/安全は別系統 (main.cpp の ETC アーミング)。
+    void update(bool autoOn);
 
     enum class State { Idle, Pulsing, Cooldown };
     State state() const { return state_; }
+    // auto 指令中にドライバー操作で手動へ落ちているか (observability)
+    bool manualOverride() const { return manualOverride_; }
 
    private:
     enum class Dir { None, Up, Down };
@@ -65,6 +73,8 @@ class AutoShifter {
     bool prevUpIn_ = false;
     bool prevDownIn_ = false;
     bool prevAutoOn_ = false;
+    // auto 実行中にドライバーが手動シフト → 手動へラッチ。CAN 手動→auto 遷移で解除。
+    bool manualOverride_ = false;
 
     // -- helpers --
     bool readUpIn() const;

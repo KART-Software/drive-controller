@@ -212,11 +212,10 @@ void loop() {
 #endif
 
     // Auto-shifter — 毎イテレーション (passthrough レイテンシ最小化, パルス計時は内部 millis)
-    // CAN ON かつ plausibility OK のときだけ auto。それ以外は OFF(manual=ドライバー入力スルー整形)。
-    {
-        bool autoOn = canController.rxData().autoShiftActive && plausibilityValidator.isCurrentlyValid();
-        autoShifter.update(autoOn);
-    }
+    // CAN auto のときだけ auto。CAN OFF や、auto 実行中にドライバーが手動シフトした場合は
+    // manual(ドライバー入力スルー整形)。オートシフターは ETC プラウシビリティに依存しない
+    // (安全フォールバックは CAN 断→manual, can_data.checkTimeouts)。
+    autoShifter.update(canController.rxData().autoShiftActive);
 
     // Send sensor data via serial protocol (50Hz)
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {

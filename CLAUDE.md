@@ -89,7 +89,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
 - ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
 - 4 層構成: 判断ロジック (`evaluate`, 将来の拡張点) / 調停 / 出力整形 / I/O。
-- `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る。`update()` は `loop()` から毎イテレーション呼ばれ、`autoOn = CAN active && plausibilityOK`。
+- `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る。`update()` は `loop()` から毎イテレーション呼ばれ、`autoOn = CAN オートシフト指令` のみで判定 (ETC プラウシビリティには非依存。auto-shift の安全フォールバックは CAN 断→manual)。
 - シフト機構制御 (クラッチ/点火カット/ブリッピング/オーバーレブ保護) は IST コントローラ責務。
 
 ### Launch Control (現在凍結)
