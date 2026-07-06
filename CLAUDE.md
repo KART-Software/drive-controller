@@ -75,16 +75,16 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### CAN
 
-- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): `MODE_SELECT (0x200)` で ETC モード選択、`LAUNCH_CTRL (0x300)` で launch を切り替え、`AUTO_SHIFT (0x400)` でオートシフター ON/OFF を切り替え (byte0=0x01 で ON)。
-- `CanRxData::checkTimeouts()` が安全層。フレーム受信時刻を `lastXFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false に、autoShift を false (OFF=手動) にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
-- `MODE_SELECT` で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastModeFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
+- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): 制御フレーム `CONTROL (0x740)` の byte0=ETC モード / byte1=launch / byte2=オートシフター ON/OFF (byte1・byte2 は 0x01 で ON)。制御用 CAN ID は `0x740` から始まり、制御信号が増えれば `0x741`, `0x742`... を割り当てる。
+- `CanRxData::checkTimeouts()` が安全層。制御フレーム受信時刻を `lastControlFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false に、autoShift を false (OFF=手動) にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
+- 制御フレームの byte0 で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastControlFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
 
 ### オートシフター
 
 `shift::AutoShifter` (`dc-firmware/src/shift/`) — クイックシフター/シーケンシャル
 ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/auto_shifter_spec.md` が一次ソース。
 
-- ON/OFF は CAN `AUTO_SHIFT (0x400)` で切替。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。
+- ON/OFF は制御フレーム `CONTROL (0x740)` の byte2 で切替。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。
 - 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。
 - パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
 - ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
@@ -94,7 +94,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### Launch Control (現在凍結)
 
-**`-DLAUNCH_CONTROL_ENABLED` が未定義の通常ビルドでは凍結中。** `main.cpp` の `launchController.begin()` と FSM tick が `#if defined(LAUNCH_CONTROL_ENABLED)` でガードされ、`update()` が呼ばれないため FSM は Idle のまま (clutch motor 停止)。インスタンスと参照はビルドに残るので、フラグ ON ビルド (CI 等) で腐敗検知できる。CAN `LAUNCH_CTRL` は受信し続けるが何も起きない。
+**`-DLAUNCH_CONTROL_ENABLED` が未定義の通常ビルドでは凍結中。** `main.cpp` の `launchController.begin()` と FSM tick が `#if defined(LAUNCH_CONTROL_ENABLED)` でガードされ、`update()` が呼ばれないため FSM は Idle のまま (clutch motor 停止)。インスタンスと参照はビルドに残るので、フラグ ON ビルド (CI 等) で腐敗検知できる。制御フレーム `CONTROL (0x740)` の launch ビットは受信し続けるが何も起きない。
 
 `launch::LaunchController` は FSM `Idle → Ready → Approach → EngageControl → FullEngage → Idle`。制御量は **エンゲージ率** (`wheel_rps_at_engine / engine_rps`) で、外側 PID がクラッチ位置指令を出す。内側 PID は `ClutchMotor` 内でクラッチセンサに対するクローズドループを構成する想定 — proto/config 上は配線済みだがアクチュエータ側はハード待ち (TODO.md A-2 参照)。
 

@@ -168,16 +168,16 @@
 #define CAN_ID_GYRO_Z_GEAR 0x601  // gz(float32) gear(8)
 #define CAN_ID_ACCEL_XY 0x602     // ax(float32) ay(float32)
 #define CAN_ID_ACCEL_Z 0x603      // az(float32)
-#define CAN_ID_MODE_SELECT 0x200
-#define CAN_ID_LAUNCH_CTRL 0x300
-#define CAN_ID_AUTO_SHIFT 0x400  // byte0: 0x01=ON(auto) / それ以外=OFF(manual)
+// 制御信号 (data-logger → drive-controller)。制御用 CAN ID は 0x740 から始まり、
+// 制御信号が増えれば 0x741, 0x742... を割り当てる。0x740 は:
+//   byte0: ETC モード (CanEtcMode)
+//   byte1: launch     (0x01=active / それ以外=inactive)
+//   byte2: auto-shift  (0x01=ON(auto) / それ以外=OFF(manual))
+#define CAN_ID_CONTROL 0x740
 
-// LAUNCH_CTRL フレームが本値以上途絶したら launchActive を false に落とす (フェールセーフ)
-#define CAN_LAUNCH_TIMEOUT_MS 200
-// MODE_SELECT フレームが本値以上途絶したら etcMode を NORMAL に戻す (フェールセーフ)
-#define CAN_MODE_TIMEOUT_MS 200
-// AUTO_SHIFT フレームが本値以上途絶したら OFF(manual) に戻す (フェールセーフ)
-#define CAN_AUTO_SHIFT_TIMEOUT_MS 200
+// 制御フレームが本値以上途絶したら各値を安全側へ戻す (フェールセーフ):
+//   launch → false, mode → NORMAL(MOTOR_OFF はラッチ), auto-shift → OFF(manual)
+#define CAN_CONTROL_TIMEOUT_MS 200
 
 ///////////////////////////////
 /// Auto Shifter (GPIO)     ///
