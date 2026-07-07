@@ -164,16 +164,9 @@
 
 #define CAN_BITRATE 1000000       // 1 Mbps
 #define CAN_TX_INTERVAL_MS 16     // ~60Hz
-#define CAN_ID_GYRO_XY 0x600      // gx(float32) gy(float32)
-#define CAN_ID_GYRO_Z_GEAR 0x601  // gz(float32) gear(8)
-#define CAN_ID_ACCEL_XY 0x602     // ax(float32) ay(float32)
-#define CAN_ID_ACCEL_Z 0x603      // az(float32)
-// 制御信号 (data-logger → drive-controller)。制御用 CAN ID は 0x740 から始まり、
-// 制御信号が増えれば 0x741, 0x742... を割り当てる。0x740 は:
-//   byte0: ETC モード (CanEtcMode)
-//   byte1: launch     (0x01=active / それ以外=inactive)
-//   byte2: auto-shift  (0x01=ON(auto) / それ以外=OFF(manual))
-#define CAN_ID_CONTROL 0x740
+// CAN ID / メッセージ定義は kart-can (submodule: dc-firmware/lib/kart-can, 生成 kart_can.h) を単一ソースとする:
+//   TX: KART_CAN_DC_GYRO_XY / GYRO_Z_GEAR / ACCEL_XY / ACCEL_Z_FRAME_ID (0x600-0x603)
+//   RX: KART_CAN_KART_CONTROL_FRAME_ID (0x740, byte0=mode / byte1=launch / byte2=auto-shift)
 
 // 制御フレームが本値以上途絶したら各値を安全側へ戻す (フェールセーフ):
 //   launch → false, mode → NORMAL(MOTOR_OFF はラッチ), auto-shift → OFF(manual)

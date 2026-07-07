@@ -1,3 +1,6 @@
 [submodule "dc-firmware/lib/FlexCAN_T4"]
 	path = dc-firmware/lib/FlexCAN_T4
 	url = https://github.com/tonton81/FlexCAN_T4.git
+[submodule "dc-firmware/lib/kart-can"]
+	path = dc-firmware/lib/kart-can
+	url = https://github.com/KART-Software/kart-can.git

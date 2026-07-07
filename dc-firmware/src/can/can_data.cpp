@@ -1,53 +1,63 @@
 #include "can_data.hpp"
-#include <cstring>
+#include <kart_can.h>
 #include "constants.hpp"
 
-static void packFloat(uint8_t* dst, float val) {
-    memcpy(dst, &val, 4);
-}
-
 void CanTxData::toFrames(CAN_message_t (&out)[FRAME_COUNT]) const {
+    // 0x600: gyro x/y (float32 LE)
     out[0] = {};
-    out[0].id = CAN_ID_GYRO_XY;
-    out[0].len = 8;
-    packFloat(out[0].buf + 0, gyro[0]);
-    packFloat(out[0].buf + 4, gyro[1]);
+    out[0].id = KART_CAN_DC_GYRO_XY_FRAME_ID;
+    out[0].len = KART_CAN_DC_GYRO_XY_LENGTH;
+    struct kart_can_dc_gyro_xy_t m0 = {};
+    m0.gyro_x = gyro[0];
+    m0.gyro_y = gyro[1];
+    kart_can_dc_gyro_xy_pack(out[0].buf, &m0, sizeof(out[0].buf));
 
+    // 0x601: gyro z (float32 LE) + gear (u8)
     out[1] = {};
-    out[1].id = CAN_ID_GYRO_Z_GEAR;
-    out[1].len = 5;
-    packFloat(out[1].buf + 0, gyro[2]);
-    out[1].buf[4] = static_cast<uint8_t>(gear);
+    out[1].id = KART_CAN_DC_GYRO_Z_GEAR_FRAME_ID;
+    out[1].len = KART_CAN_DC_GYRO_Z_GEAR_LENGTH;
+    struct kart_can_dc_gyro_z_gear_t m1 = {};
+    m1.gyro_z = gyro[2];
+    m1.gear = static_cast<uint8_t>(gear);  // -1=unknown → 0xFF
+    kart_can_dc_gyro_z_gear_pack(out[1].buf, &m1, sizeof(out[1].buf));
 
+    // 0x602: accel x/y (float32 LE)
     out[2] = {};
-    out[2].id = CAN_ID_ACCEL_XY;
-    out[2].len = 8;
-    packFloat(out[2].buf + 0, accel[0]);
-    packFloat(out[2].buf + 4, accel[1]);
+    out[2].id = KART_CAN_DC_ACCEL_XY_FRAME_ID;
+    out[2].len = KART_CAN_DC_ACCEL_XY_LENGTH;
+    struct kart_can_dc_accel_xy_t m2 = {};
+    m2.accel_x = accel[0];
+    m2.accel_y = accel[1];
+    kart_can_dc_accel_xy_pack(out[2].buf, &m2, sizeof(out[2].buf));
 
+    // 0x603: accel z (float32 LE)
     out[3] = {};
-    out[3].id = CAN_ID_ACCEL_Z;
-    out[3].len = 4;
-    packFloat(out[3].buf, accel[2]);
+    out[3].id = KART_CAN_DC_ACCEL_Z_FRAME_ID;
+    out[3].len = KART_CAN_DC_ACCEL_Z_LENGTH;
+    struct kart_can_dc_accel_z_t m3 = {};
+    m3.accel_z = accel[2];
+    kart_can_dc_accel_z_pack(out[3].buf, &m3, sizeof(out[3].buf));
 }
 
 void CanRxData::mergeFrame(const CAN_message_t& msg) {
     // 制御フレーム(0x740): byte0=mode, byte1=launch, byte2=auto-shift
-    if (msg.id == CAN_ID_CONTROL && msg.len >= 3) {
-        switch (static_cast<CanEtcMode>(msg.buf[0])) {
+    if (msg.id == KART_CAN_CONTROL_FRAME_ID && msg.len >= KART_CAN_CONTROL_LENGTH) {
+        struct kart_can_control_t c;
+        kart_can_control_unpack(&c, msg.buf, msg.len);
+        switch (static_cast<CanEtcMode>(c.etc_mode)) {
             case CanEtcMode::CALIB:
             case CanEtcMode::NORMAL:
             case CanEtcMode::RESTRICTED:
             case CanEtcMode::MOTOR_OFF:
-                etcMode = static_cast<CanEtcMode>(msg.buf[0]);
+                etcMode = static_cast<CanEtcMode>(c.etc_mode);
                 break;
             default:
                 // UNSPECIFIED (0) や未知値: モードは変更しない (現在値を維持)。
                 // フレーム自体は受信できているので lastControlFrameMs だけ更新する。
                 break;
         }
-        launchActive = (msg.buf[1] == 0x01);
-        autoShiftActive = (msg.buf[2] == 0x01);
+        launchActive = (c.launch_active == 0x01);
+        autoShiftActive = (c.auto_shift == 0x01);
         lastControlFrameMs = millis();
     }
 }
