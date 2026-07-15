@@ -138,6 +138,24 @@ unsigned long lastCanTime = 0;
 unsigned long lastLaunchTime = 0;
 unsigned long lastSdLogMs = 0;
 
+#if !defined(CONTROL_INPUT_VIA_CAN)
+// GPIO 3 ピン セレクタ位置 → ETC モード。data-logger feature/control-switches の
+// modeToByte と一致 (First=CALIB / Second=RESTRICTED / Third=MOTOR_OFF / 未選択=NORMAL)。
+static CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s) {
+    switch (s) {
+        case SelectSwitch3Pin::Status::First:
+            return CanEtcMode::CALIB;
+        case SelectSwitch3Pin::Status::Second:
+            return CanEtcMode::RESTRICTED;
+        case SelectSwitch3Pin::Status::Third:
+            return CanEtcMode::MOTOR_OFF;
+        case SelectSwitch3Pin::Status::Zero:
+        default:
+            return CanEtcMode::NORMAL;
+    }
+}
+#endif
+
 void loop() {
     unsigned long now = millis();
 
@@ -147,9 +165,20 @@ void loop() {
     sensorHub.read();     // 非DMA: ADC(ブロッキング) + sensor.update + IMU を loop で
 #endif
 
-    // Poll CAN for mode-select frame
+    // Poll CAN (TX/RX バス駆動)。制御入力(0x740)は一旦凍結し GPIO 直入力を使う (下記)。
     canController.poll();
-    switch (canController.rxData().etcMode) {
+
+    // 制御入力 (ETC モード / auto-shift) の取得元を切替。既定は GPIO 直入力。
+    // CONTROL_INPUT_VIA_CAN 定義時のみ CAN 0x740 経路 (can_data の受信パースも復活)。
+#if defined(CONTROL_INPUT_VIA_CAN)
+    CanEtcMode ctrlMode = canController.rxData().etcMode;
+    bool autoShiftOn = canController.rxData().autoShiftActive;
+#else
+    CanEtcMode ctrlMode = selectToEtcMode(sensorHub.modeSwitch().getStatus());
+    bool autoShiftOn = sensorHub.autoShiftSwitch().isOn();
+#endif
+
+    switch (ctrlMode) {
         case CanEtcMode::CALIB:
             sensorHub.mut.target().setModeCalibration();
             break;
@@ -175,7 +204,8 @@ void loop() {
     // ETC を止める要因は独立に 3 つあり、SHUTDOWN_RELAY(点火系, pin2)を落とすのは①だけ。
     //   ① プラウシビリティ違反 : ETC 停止 + SHUTDOWN_RELAY=LOW + 復帰不可(ラッチ)
     //   ② SIG_IN=LOW (外部)     : ETC 停止 / RELAY=HIGH 維持 / SIG_IN=HIGH 復帰で ETC 再開
-    //   ③ CAN MOTOR_OFF モード  : ETC 停止 / RELAY=HIGH (落とさない)
+    //   ③ MOTOR_OFF モード      : ETC 停止 / RELAY=HIGH (落とさない)。GPIO モード選択 knob
+    //                             を戻せば ctrlMode が変わり再開する (ラッチしない)。
     // ① が RELAY を LOW にすると AND 回路が開いて SIG_IN も LOW になるが、① ラッチを
     // 最優先で判定するので ②(復帰可) の経路には入らない = 復帰不可を維持する。
     // ここで落とすのは点火系 SHUTDOWN リレーであって、DcMotor が持つモーター電源リレー
@@ -186,8 +216,7 @@ void loop() {
     if (!plausibilityValidator.isValid()) {
         digitalWrite(SHUTDOWN_RELAY_PIN, LOW);  // ① 点火系を遮断 (恒久)
         stopEtc();
-    } else if (!sensorHub.shutdownSig().isOn() ||
-               canController.rxData().etcMode == CanEtcMode::MOTOR_OFF) {
+    } else if (!sensorHub.shutdownSig().isOn() || ctrlMode == CanEtcMode::MOTOR_OFF) {
         stopEtc();  // ② SIG_IN=LOW または ③ MOTOR_OFF → ETC 停止 (RELAY は HIGH のまま)
     } else {
         startEtc();  // SIG_IN=HIGH かつ違反なしかつ MOTOR_OFF でない → ETC 動作 (停止中なら再開)
@@ -205,17 +234,15 @@ void loop() {
     // FSM を Idle に戻す (handler 側の !launchRequested パスで motor_.off() 経由)。
     if (now - lastLaunchTime >= LAUNCH_UPDATE_INTERVAL_MS) {
         lastLaunchTime = now;
-        bool safe = plausibilityValidator.isCurrentlyValid() &&
-                    canController.rxData().etcMode != CanEtcMode::MOTOR_OFF;
+        bool safe = plausibilityValidator.isCurrentlyValid() && ctrlMode != CanEtcMode::MOTOR_OFF;
         launchController.update(safe && canController.rxData().launchActive);
     }
 #endif
 
     // Auto-shifter — 毎イテレーション (passthrough レイテンシ最小化, パルス計時は内部 millis)
-    // CAN auto のときだけ auto。CAN OFF や、auto 実行中にドライバーが手動シフトした場合は
-    // manual(ドライバー入力スルー整形)。オートシフターは ETC プラウシビリティに依存しない
-    // (安全フォールバックは CAN 断→manual, can_data.checkTimeouts)。
-    autoShifter.update(canController.rxData().autoShiftActive);
+    // auto-shift スイッチ ON のときだけ auto。OFF や、auto 実行中にドライバーが手動シフトした
+    // 場合は manual(ドライバー入力スルー整形)。オートシフターは ETC プラウシビリティに依存しない。
+    autoShifter.update(autoShiftOn);
 
     // Send sensor data via serial protocol (50Hz)
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {

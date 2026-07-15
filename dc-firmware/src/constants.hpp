@@ -172,6 +172,28 @@
 //   launch → false, mode → NORMAL(MOTOR_OFF はラッチ), auto-shift → OFF(manual)
 #define CAN_CONTROL_TIMEOUT_MS 200
 
+///////////////////////////////////
+/// 制御入力 (Control Input)     ///
+///////////////////////////////////
+
+// 制御信号 (ETC モード / auto-shift ON-OFF) の入力源。
+// CAN(0x740) 制御入力は一旦凍結し、GPIO 直入力を使う (既定)。
+// CAN 制御入力に戻すときは下を有効化 → main.cpp / can_data.cpp / log_record_builder.cpp が
+// CAN 経路へ切り替わる (0x740 の受信パースが復活)。
+// #define CONTROL_INPUT_VIA_CAN
+
+// ETC モード選択: 3 ピン セレクタ (SelectSwitch3Pin, 各ピン GND=選択 / 内部プルアップ)。
+// ポジション→モードの対応は data-logger feature/control-switches の modeToByte と一致
+// (暫定。実機のスイッチ配置で確定する):
+//   First(PIN_1)=CALIB / Second(PIN_2)=RESTRICTED / Third(PIN_3)=MOTOR_OFF / 未選択=NORMAL
+#define MODE_SELECT_SW_PIN_1 6
+#define MODE_SELECT_SW_PIN_2 7
+#define MODE_SELECT_SW_PIN_3 8
+
+// auto-shift ON/OFF: 単一トグル (ToggleSwitch 既定 = GND=ON=auto / 開放=OFF=manual)。
+#define AUTO_SHIFT_SW_PIN 41
+// launch は凍結中のため GPIO 入力なし (常に false)。
+
 ///////////////////////////////
 /// Auto Shifter (GPIO)     ///
 ///////////////////////////////

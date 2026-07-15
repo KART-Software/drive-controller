@@ -55,9 +55,13 @@ LogRecord buildLogRecord(uint32_t t_ms,
         f |= LOG_FLAG_SHUTDOWN_SIG;
     if (plausibility.currentlyValid())
         f |= LOG_FLAG_VALID;
+#if defined(CONTROL_INPUT_VIA_CAN)
     if (can.rxData().autoShiftActive)
+#else
+    if (hub.autoShiftSwitch().isOn())  // GPIO 直入力 (CAN 制御入力は凍結中)
+#endif
         f |= LOG_FLAG_AUTOSHIFT;
-    if (can.rxData().launchActive)
+    if (can.rxData().launchActive)  // launch は凍結 (常に false)
         f |= LOG_FLAG_LAUNCH;
     rec.flags = f;
 
