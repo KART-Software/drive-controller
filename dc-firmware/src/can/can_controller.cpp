@@ -1,5 +1,7 @@
 #include "can_controller.hpp"
 
+#include "constants.hpp"
+
 CanController::CanController(const SensorHub& sensorHub) : sensorHub_(sensorHub) {}
 
 void CanController::begin() {
@@ -17,6 +19,13 @@ void CanController::send() {
     data.accel[1] = imu ? imu->accel[1] : 0.0f;
     data.accel[2] = imu ? imu->accel[2] : 0.0f;
     bus_.send(data);
+
+#if !defined(CONTROL_INPUT_VIA_CAN)
+    // GPIO 制御入力 (mode / auto-shift) を Control(0x740) として CAN 出力する。
+    // CONTROL_INPUT_VIA_CAN 定義時は逆に 0x740 を受信する側なので出力しない。
+    bus_.sendControl(selectToEtcMode(sensorHub_.modeSwitch().getStatus()),
+                     sensorHub_.autoShiftSwitch().isOn());
+#endif
 }
 
 void CanController::poll() {

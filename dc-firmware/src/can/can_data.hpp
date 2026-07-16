@@ -2,6 +2,8 @@
 
 #include <FlexCAN_T4.h>
 
+#include "util/toggle_switch.hpp"
+
 // Data to transmit over CAN at each 60Hz tick
 struct CanTxData {
     int8_t gear;
@@ -23,6 +25,10 @@ enum class CanEtcMode : uint8_t {
     RESTRICTED = 3u,
     MOTOR_OFF = 4u,
 };
+
+// GPIO 3ピンセレクタ位置 → ETC モード (GPIO 制御入力用。main.cpp / CanController で共有)。
+//   未選択(Zero)=CALIB / First=NORMAL / Second=RESTRICTED / Third=MOTOR_OFF
+CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s);
 
 // Data received over CAN
 struct CanRxData {

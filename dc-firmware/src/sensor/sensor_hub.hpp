@@ -42,6 +42,11 @@ class SensorHub {
     // isOn()==true で ETC 許可。他センサー同様 const 参照で返す。
     const ToggleSwitch& shutdownSig() const { return shutdownSig_; }
 
+    // 制御入力スイッチ (GPIO 直入力。CAN 0x740 制御入力を一旦凍結して置き換え)。
+    // read()/readImu() で毎ループ更新。ポジション/ON-OFF の解釈は消費側 (main.cpp)。
+    const SelectSwitch3Pin& modeSwitch() const { return modeSwitch_; }        // ETC モード選択
+    const ToggleSwitch& autoShiftSwitch() const { return autoShiftSwitch_; }  // auto-shift ON/OFF
+
     // ── mut: Configurator-only mutable access ──
     struct Mut {
         SensorHub& hub;
@@ -81,4 +86,8 @@ class SensorHub {
 
     // SHUTDOWN 回路出力。アクティブHIGH + 外部 PULLDOWN (素の INPUT)。
     ToggleSwitch shutdownSig_{SHUTDOWN_SIG_IN_PIN, HIGH, ToggleSwitch::InputMode::External};
+
+    // 制御入力スイッチ (GPIO)。いずれも既定 = GND=選択/ON, 内部プルアップ。
+    SelectSwitch3Pin modeSwitch_{MODE_SELECT_SW_PIN_1, MODE_SELECT_SW_PIN_2, MODE_SELECT_SW_PIN_3};
+    ToggleSwitch autoShiftSwitch_{AUTO_SHIFT_SW_PIN};
 };

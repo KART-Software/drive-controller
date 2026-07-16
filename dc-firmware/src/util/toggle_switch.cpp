@@ -88,12 +88,12 @@ void SelectSwitch3Pin::read()
     toggleSwitch3.read();
 }
 
-bool SelectSwitch3Pin::changed()
+bool SelectSwitch3Pin::changed() const
 {
     return toggleSwitch1.switched() || toggleSwitch2.switched() || toggleSwitch3.switched();
 }
 
-SelectSwitch3Pin::Status SelectSwitch3Pin::getStatus()
+SelectSwitch3Pin::Status SelectSwitch3Pin::getStatus() const
 {
     if (toggleSwitch1.isOn())
     {

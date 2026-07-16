@@ -52,8 +52,8 @@ public:
     SelectSwitch3Pin(uint8_t pin1, uint8_t pin2, uint8_t pin3);
     void initialize();
     void read();
-    bool changed();
-    Status getStatus();
+    bool changed() const;      // 読み取り専用 (const 参照から呼べる)
+    Status getStatus() const;
 
 private:
     ToggleSwitch toggleSwitch1, toggleSwitch2, toggleSwitch3;

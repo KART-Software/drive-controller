@@ -2,6 +2,20 @@
 #include <kart_can.h>
 #include "constants.hpp"
 
+CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s) {
+    switch (s) {
+        case SelectSwitch3Pin::Status::First:
+            return CanEtcMode::NORMAL;
+        case SelectSwitch3Pin::Status::Second:
+            return CanEtcMode::RESTRICTED;
+        case SelectSwitch3Pin::Status::Third:
+            return CanEtcMode::MOTOR_OFF;
+        case SelectSwitch3Pin::Status::Zero:
+        default:
+            return CanEtcMode::CALIB;
+    }
+}
+
 void CanTxData::toFrames(CAN_message_t (&out)[FRAME_COUNT]) const {
     // 0x600: gyro x/y (float32 LE)
     out[0] = {};
@@ -40,6 +54,7 @@ void CanTxData::toFrames(CAN_message_t (&out)[FRAME_COUNT]) const {
 }
 
 void CanRxData::mergeFrame(const CAN_message_t& msg) {
+#if defined(CONTROL_INPUT_VIA_CAN)
     // 制御フレーム(0x740): byte0=mode, byte1=launch, byte2=auto-shift
     if (msg.id == KART_CAN_CONTROL_FRAME_ID && msg.len >= KART_CAN_CONTROL_LENGTH) {
         struct kart_can_control_t c;
@@ -60,9 +75,15 @@ void CanRxData::mergeFrame(const CAN_message_t& msg) {
         autoShiftActive = (c.auto_shift == 0x01);
         lastControlFrameMs = millis();
     }
+#else
+    // CAN 制御入力は一旦凍結 (GPIO 直入力を使用, main.cpp)。0x740 は無視し、
+    // etcMode/launchActive/autoShiftActive はデフォルト(安全側)のまま保持する。
+    (void)msg;
+#endif
 }
 
 void CanRxData::checkTimeouts(unsigned long nowMs) {
+#if defined(CONTROL_INPUT_VIA_CAN)
     // 制御フレームが起動以来未受信 (== 0) なら判定スキップ — 各値はデフォルトのまま。
     if (lastControlFrameMs == 0 || (nowMs - lastControlFrameMs) <= CAN_CONTROL_TIMEOUT_MS) {
         return;
@@ -75,4 +96,7 @@ void CanRxData::checkTimeouts(unsigned long nowMs) {
     }
     // auto-shift 途絶 → OFF(manual)。手動シフトが残る方が安全。
     autoShiftActive = false;
+#else
+    (void)nowMs;  // CAN 制御入力 凍結中はフォールバック不要 (GPIO 直入力が常に現在値)。
+#endif
 }

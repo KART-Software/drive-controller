@@ -78,13 +78,14 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): 制御フレーム `CONTROL (0x740)` の byte0=ETC モード / byte1=launch / byte2=オートシフター ON/OFF (byte1・byte2 は 0x01 で ON)。制御用 CAN ID は `0x740` から始まり、制御信号が増えれば `0x741`, `0x742`... を割り当てる。
 - `CanRxData::checkTimeouts()` が安全層。制御フレーム受信時刻を `lastControlFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false に、autoShift を false (OFF=手動) にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
 - 制御フレームの byte0 で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastControlFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
+- **【現在: CAN 制御入力は一旦凍結し GPIO 直入力】** ETC モード / auto-shift ON-OFF は CAN 0x740 ではなく **GPIO 直入力**で受ける。`SensorHub` が所有し毎ループ read: モード選択 = 3 ピン `SelectSwitch3Pin` (`MODE_SELECT_SW_PIN_1..3` = 6/7/8, 各ピン GND=選択/内部プルアップ)、auto-shift = `ToggleSwitch` (`AUTO_SHIFT_SW_PIN` = 41, GND=ON=auto)。マッピングは data-logger `feature/control-switches` と一致 (暫定): First(6)=CALIB / Second(7)=RESTRICTED / Third(8)=MOTOR_OFF / 未選択=NORMAL。上記の CAN 制御受信 (mergeFrame/checkTimeouts の 0x740 パース) は `#if defined(CONTROL_INPUT_VIA_CAN)` で**無効化して残してある** (未定義=GPIO 既定)。main.cpp / log_record_builder.cpp も同マクロで取得元を切替。CAN TX (0x600-0x603) は継続。GPIO では **MOTOR_OFF は knob 位置が真実なのでラッチしない** (knob を戻せば ETC 再開)。launch は凍結中で GPIO 入力なし (常に false)。
 
 ### オートシフター
 
 `shift::AutoShifter` (`dc-firmware/src/shift/`) — クイックシフター/シーケンシャル
 ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/auto_shifter_spec.md` が一次ソース。
 
-- ON/OFF は制御フレーム `CONTROL (0x740)` の byte2 で切替。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。
+- ON/OFF は現在 **GPIO の auto-shift スイッチ** (`AUTO_SHIFT_SW_PIN`=41, GND=ON) で切替 (CAN 0x740 byte2 は一旦凍結。CAN 節参照)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。
 - 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。
 - パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
 - ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
@@ -129,7 +130,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 - **① プラウシビリティ違反** → ETC 停止 + `SHUTDOWN_RELAY_PIN`=LOW (点火系 SHUTDOWN 回路を遮断、**復帰不可ラッチ**)。
 - **② `SHUTDOWN_SIG_IN_PIN`=LOW** (外部 AND 回路が開いた) → ETC 停止 (RELAY は HIGH 維持、SIG が HIGH に戻れば**自動再開**)。
-- **③ CAN `MOTOR_OFF` モード** → ETC 停止 (RELAY 維持)。
+- **③ `MOTOR_OFF` モード** (現在は GPIO モード選択スイッチ由来 / CAN 凍結中) → ETC 停止 (RELAY 維持)。GPIO では knob を戻せば再開 (ラッチしない)。
 
 ETC 停止 = モーター OFF + モーター ISR 停止 (`motorControlTimer.end()`)、再開 = `setMotorOn()` (内部で `pid.reset()`) + ISR 再起動。① は復帰不可で電源再投入が必要。詳細ロジックは `main.cpp` の「ETC アーミング」コメントが一次ソース。**`SHUTDOWN_RELAY_PIN`(点火系) を落とすのは①だけ**で、`DcMotor` が持つモーター電源リレー `DC_MOTOR_RELAY_PIN` とは別系統。(燃料ポンプ制御は削除済み — 燃料カットはエンジン ECU 責務。)
 
