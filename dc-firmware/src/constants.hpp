@@ -183,9 +183,8 @@
 // #define CONTROL_INPUT_VIA_CAN
 
 // ETC モード選択: 3 ピン セレクタ (SelectSwitch3Pin, 各ピン GND=選択 / 内部プルアップ)。
-// ポジション→モードの対応は data-logger feature/control-switches の modeToByte と一致
-// (暫定。実機のスイッチ配置で確定する):
-//   First(PIN_1)=CALIB / Second(PIN_2)=RESTRICTED / Third(PIN_3)=MOTOR_OFF / 未選択=NORMAL
+// ポジション→モードの対応:
+//   未選択=CALIB / First(PIN_1)=NORMAL / Second(PIN_2)=RESTRICTED / Third(PIN_3)=MOTOR_OFF
 #define MODE_SELECT_SW_PIN_1 6
 #define MODE_SELECT_SW_PIN_2 7
 #define MODE_SELECT_SW_PIN_3 8

@@ -5,14 +5,14 @@
 CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s) {
     switch (s) {
         case SelectSwitch3Pin::Status::First:
-            return CanEtcMode::CALIB;
+            return CanEtcMode::NORMAL;
         case SelectSwitch3Pin::Status::Second:
             return CanEtcMode::RESTRICTED;
         case SelectSwitch3Pin::Status::Third:
             return CanEtcMode::MOTOR_OFF;
         case SelectSwitch3Pin::Status::Zero:
         default:
-            return CanEtcMode::NORMAL;
+            return CanEtcMode::CALIB;
     }
 }
 

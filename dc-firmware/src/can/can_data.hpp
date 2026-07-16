@@ -27,7 +27,7 @@ enum class CanEtcMode : uint8_t {
 };
 
 // GPIO 3ピンセレクタ位置 → ETC モード (GPIO 制御入力用。main.cpp / CanController で共有)。
-//   First=CALIB / Second=RESTRICTED / Third=MOTOR_OFF / 未選択(Zero)=NORMAL
+//   未選択(Zero)=CALIB / First=NORMAL / Second=RESTRICTED / Third=MOTOR_OFF
 CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s);
 
 // Data received over CAN
