@@ -138,23 +138,7 @@ unsigned long lastCanTime = 0;
 unsigned long lastLaunchTime = 0;
 unsigned long lastSdLogMs = 0;
 
-#if !defined(CONTROL_INPUT_VIA_CAN)
-// GPIO 3 ピン セレクタ位置 → ETC モード。data-logger feature/control-switches の
-// modeToByte と一致 (First=CALIB / Second=RESTRICTED / Third=MOTOR_OFF / 未選択=NORMAL)。
-static CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s) {
-    switch (s) {
-        case SelectSwitch3Pin::Status::First:
-            return CanEtcMode::CALIB;
-        case SelectSwitch3Pin::Status::Second:
-            return CanEtcMode::RESTRICTED;
-        case SelectSwitch3Pin::Status::Third:
-            return CanEtcMode::MOTOR_OFF;
-        case SelectSwitch3Pin::Status::Zero:
-        default:
-            return CanEtcMode::NORMAL;
-    }
-}
-#endif
+// selectToEtcMode() は can_data.hpp/cpp に移動 (CanController の CAN 出力と共有)。
 
 void loop() {
     unsigned long now = millis();

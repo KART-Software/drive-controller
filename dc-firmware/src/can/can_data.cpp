@@ -2,6 +2,20 @@
 #include <kart_can.h>
 #include "constants.hpp"
 
+CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s) {
+    switch (s) {
+        case SelectSwitch3Pin::Status::First:
+            return CanEtcMode::CALIB;
+        case SelectSwitch3Pin::Status::Second:
+            return CanEtcMode::RESTRICTED;
+        case SelectSwitch3Pin::Status::Third:
+            return CanEtcMode::MOTOR_OFF;
+        case SelectSwitch3Pin::Status::Zero:
+        default:
+            return CanEtcMode::NORMAL;
+    }
+}
+
 void CanTxData::toFrames(CAN_message_t (&out)[FRAME_COUNT]) const {
     // 0x600: gyro x/y (float32 LE)
     out[0] = {};
