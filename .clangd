@@ -1,11 +1,19 @@
+# clangd 設定 (リポジトリルート)。VS Code 側は dc-firmware/.vscode/settings.json の
+# --query-driver で arm-none-eabi-g++ のシステムインクルード (newlib / libstdc++) を取得する。
 CompileFlags:
   CompilationDatabase: dc-firmware/
   Add:
-    - --include=.clangd_shim.h
+    # GCC (arm-none-eabi) は int32_t/uint32_t を long/unsigned long にするが clang は int/unsigned。
+    # そのままだと Teensy コアの int32_t random(void) と newlib の long random(void) が
+    # 「戻り型だけ違う多重定義」として衝突するので、clang の型マクロを GCC に合わせる。
+    - -D__INT32_TYPE__=long
+    - -D__UINT32_TYPE__=unsigned long
+    - -D__INT32_C_SUFFIX__=L
+    - -D__UINT32_C_SUFFIX__=UL
+    - -Wno-builtin-macro-redefined
+    # GCC 専用の警告オプション (-Wno-maybe-uninitialized 等) を clang が知らなくても黙らせる
+    - -Wno-unknown-warning-option
   Remove:
-    - -mthumb
-    - -mcpu=*
-    - -mfloat-abi=*
-    - -mfpu=*
+    # リンク専用。clang はシンタックスチェックのみなので不要 (--specs は clang が解釈できない)
     - -nostdlib
     - --specs=*
