@@ -1,2 +1,13 @@
 packages:
   - "."
+
+# pnpm v10+ はビルドスクリプトを既定でブロックする。buf は postinstall で
+# プラットフォームバイナリを取得するため明示的に許可する (gen:proto に必要)。
+allowBuilds:
+  '@bufbuild/buf': true
+
+# pnpm v11 は package.json の pnpm.patchedDependencies を読まないため、こちらに
+# 定義する (zimmerframe の exports 欠落修正。無いと vite dev で
+# transform-hook-names が "No exports main defined" で落ちる)。
+patchedDependencies:
+  zimmerframe@1.1.4: patches/zimmerframe@1.1.4.patch
