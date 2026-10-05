@@ -264,6 +264,15 @@ double EtcTarget::manualAdjust(double amount) {
     return manualTarget;
 }
 
+double EtcTarget::setManualTarget(double value) {
+    if (value < MANUAL_MIN)
+        value = MANUAL_MIN;
+    if (value > MANUAL_MAX)
+        value = MANUAL_MAX;
+    manualTarget = value;
+    return manualTarget;
+}
+
 void EtcTarget::setTargetCurve(const TargetCurve& curve) {
     ca4 = curve.a4;
     ca3 = curve.a3;

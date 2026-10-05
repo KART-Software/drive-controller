@@ -6,6 +6,7 @@
 #include "commands/command_router.hpp"
 #include "configurator.hpp"
 #include "constants.hpp"
+#include "etc/experiment_runner.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "launch/launch_controller.hpp"
@@ -44,11 +45,19 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.pulseWheelFR(),
                                sensorHub.gps(),
                                sensorHub.apps1());
-Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController, autoShifter);
-CommandRouter commandRouter;
-CommandController commandController(configurator, motorController, sensorHub.mut.target());
 SdBinaryWriter sdWriter;
 SensorLogger sensorLogger(sdWriter);
+// ETC 同定実験モード (ベンチ専用, docs/etc_experiment_mode_spec.md)。目標注入は
+// manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
+// 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
+etc::ExperimentRunner experimentRunner(sensorHub,
+                                       sensorHub.mut.target(),
+                                       motorController,
+                                       plausibilityValidator,
+                                       sensorLogger);
+Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController, autoShifter);
+CommandRouter commandRouter;
+CommandController commandController(configurator, motorController, sensorHub.mut.target(), experimentRunner);
 
 void motorControlISR() {
     motorController.cycle();
@@ -184,6 +193,10 @@ void loop() {
         sensorHub.updatePulse();
     }
 
+    // ETC 同定実験モード tick (非アクティブ時は即 return)。ガード違反時は自力で
+    // 中断する。コースト要求は下のアーミング層が拾う (安全層の優先度は不変)。
+    experimentRunner.tick(now);
+
     // ── ETC アーミング / SHUTDOWN 安全層 ─────────────────────────────────
     // ETC を止める要因は独立に 3 つあり、SHUTDOWN_RELAY(点火系, pin2)を落とすのは①だけ。
     //   ① プラウシビリティ違反 : ETC 停止 + SHUTDOWN_RELAY=LOW + 復帰不可(ラッチ)
@@ -202,6 +215,8 @@ void loop() {
         stopEtc();
     } else if (!sensorHub.shutdownSig().isOn() || ctrlMode == CanEtcMode::MOTOR_OFF) {
         stopEtc();  // ② SIG_IN=LOW または ③ MOTOR_OFF → ETC 停止 (RELAY は HIGH のまま)
+    } else if (experimentRunner.wantsCoast()) {
+        stopEtc();  // ④ 同定実験リリース試験のコースト区間 (①②③が常に優先)
     } else {
         startEtc();  // SIG_IN=HIGH かつ違反なしかつ MOTOR_OFF でない → ETC 動作 (停止中なら再開)
     }
@@ -243,7 +258,8 @@ void loop() {
     // 長すぎれば SYNC_INTERVAL_MS 調整 or リングバッファ+ISR 収集へ変更を検討。
     if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
         lastSdLogMs = now;
-        sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter));
+        sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter,
+                                        motorController, experimentRunner));
     }
     sensorLogger.service(now);
 

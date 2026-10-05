@@ -16,7 +16,12 @@ void sendConfigResponse(CommandContainer* c, uint32_t id, bool ok) {
 }
 
 void etcMotorOff(void* ctx, const dc_Command& cmd) {
-    static_cast<CommandContainer*>(ctx)->motorController.setMotorOff();
+    auto* c = static_cast<CommandContainer*>(ctx);
+    if (c->experimentRunner.active()) {  // 実験中は拒否 (spec Q17)
+        SerialProtocol::sendResponse(cmd.id, false);
+        return;
+    }
+    c->motorController.setMotorOff();
     SerialProtocol::sendResponse(cmd.id, true);
 }
 
@@ -152,12 +157,21 @@ void setEtcTargetCurve(void* ctx, const dc_Command& cmd) {
 }
 
 void setEtcManual(void* ctx, const dc_Command& cmd) {
-    bool ok = static_cast<CommandContainer*>(ctx)->target.setManual();
-    SerialProtocol::sendResponse(cmd.id, ok);
+    auto* c = static_cast<CommandContainer*>(ctx);
+    if (c->experimentRunner.active()) {  // manual target を奪い合うため実験中は拒否 (spec Q17)
+        SerialProtocol::sendResponse(cmd.id, false);
+        return;
+    }
+    SerialProtocol::sendResponse(cmd.id, c->target.setManual());
 }
 
 void etcManualAdjust(void* ctx, const dc_Command& cmd) {
-    static_cast<CommandContainer*>(ctx)->target.manualAdjust(cmd.body.etc_manual_adjust.amount);
+    auto* c = static_cast<CommandContainer*>(ctx);
+    if (c->experimentRunner.active()) {  // 同上 (spec Q17)
+        SerialProtocol::sendResponse(cmd.id, false);
+        return;
+    }
+    c->target.manualAdjust(cmd.body.etc_manual_adjust.amount);
     SerialProtocol::sendResponse(cmd.id, true);
 }
 
@@ -246,12 +260,40 @@ void formatFs(void* ctx, const dc_Command& cmd) {
     sendConfigResponse(c, cmd.id, ok);     // 更新後の fs_used/fs_total を返す
 }
 
+void startEtcExperiment(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    etc::ExperimentRunner::Type t;
+    switch (cmd.body.start_etc_experiment.type) {
+        case dc_StartEtcExperimentCmd_Type_POINT_DWELL:
+            t = etc::ExperimentRunner::Type::PointDwell;
+            break;
+        case dc_StartEtcExperimentCmd_Type_RELEASE:
+            t = etc::ExperimentRunner::Type::Release;
+            break;
+        case dc_StartEtcExperimentCmd_Type_STEP:
+            t = etc::ExperimentRunner::Type::Step;
+            break;
+        default:
+            SerialProtocol::sendResponse(cmd.id, false);
+            return;
+    }
+    // 前提条件 (spec §5: ノブ≠MOTOR_OFF・エンジン停止・車両静止・plausibility・SD) は
+    // start() が検証し、不成立なら false 応答になる。
+    SerialProtocol::sendResponse(cmd.id, c->experimentRunner.start(t));
+}
+
+void stopEtcExperiment(void* ctx, const dc_Command& cmd) {
+    static_cast<CommandContainer*>(ctx)->experimentRunner.stop();
+    SerialProtocol::sendResponse(cmd.id, true);
+}
+
 }  // namespace
 
 CommandController::CommandController(Configurator& configurator,
                                      etc::MotorController& motorController,
-                                     EtcTarget& target)
-    : container{configurator, motorController, target} {}
+                                     EtcTarget& target,
+                                     etc::ExperimentRunner& experimentRunner)
+    : container{configurator, motorController, target, experimentRunner} {}
 
 void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_etc_motor_off_tag, etcMotorOff, &container);
@@ -278,4 +320,6 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_set_clutch_max_tag, setClutchMax, &container);
     router.on(dc_Command_set_transmission_type_tag, setTransmissionType, &container);
     router.on(dc_Command_format_fs_tag, formatFs, &container);
+    router.on(dc_Command_start_etc_experiment_tag, startEtcExperiment, &container);
+    router.on(dc_Command_stop_etc_experiment_tag, stopEtcExperiment, &container);
 }

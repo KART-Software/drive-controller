@@ -208,6 +208,28 @@
 #define AUTO_SHIFT_OUT_ACTIVE HIGH
 #define AUTO_SHIFT_OUT_INACTIVE LOW
 
+//////////////////////////////////////
+/// ETC Experiment Mode (同定実験) ///
+//////////////////////////////////////
+
+// docs/etc_experiment_mode_spec.md。シーケンス定義は experiment_runner.cpp。
+// ガード帯は拡張ストッパー (-15/115%) の内側かつ TPS_MARGIN(15) の内側 =
+// プラウシビリティ回路チェックより必ず先に効く。
+#define EXPERIMENT_TP_GUARD_LOW (-10.0)   // % 下限 (リリース試験中は不適用)
+#define EXPERIMENT_TP_GUARD_HIGH (110.0)  // % 上限
+// 静止判定 (全実験共通): 窓内で TPS と duty の変動幅が閾値未満なら静止。
+// duty も見る理由: 摩擦帯で θ 張り付き中は I 項がランプしている (真の平衡でない)。
+#define EXPERIMENT_STATIONARY_TP_TOL (0.2)    // % 窓内 |Δtps| 上限
+#define EXPERIMENT_STATIONARY_DUTY_TOL (0.5)  // % 窓内 |Δduty| 上限
+#define EXPERIMENT_STATIONARY_WINDOW_MS 500   // 判定窓
+#define EXPERIMENT_SETTLE_TIMEOUT_MS 8000     // 静止しない場合のタイムアウト (黙って続行, 件数のみ計上)
+#define EXPERIMENT_RECORD_HOLD_MS 1000        // ポイント滞在の記録窓 (静止後)
+#define EXPERIMENT_RELEASE_HOLD_MS 1000       // リリース前の静止保持
+// ストール: PID がほぼ飽和 + 目標乖離 + 不動が続いたら中断 (仮値、実測後調整)
+#define EXPERIMENT_STALL_DUTY (90.0)          // % |u| 閾値
+#define EXPERIMENT_STALL_TARGET_DEV (2.0)     // % |tps - target| 閾値
+#define EXPERIMENT_STALL_MS 1000              // 継続時間
+
 /////////////////////////////////
 /// Other Output Pin Settings ///
 /////////////////////////////////
