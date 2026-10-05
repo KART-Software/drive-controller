@@ -405,6 +405,19 @@ function buildCommand(
         id,
         body: { case: "setTransmissionType", value: { type: params.type } },
       });
+    case "start_experiment":
+      // ETC 同定実験の開始 (docs/etc_experiment_mode_spec.md)。
+      // params.type = StartEtcExperimentCmd_Type (1=dwell, 2=release, 3=step)。
+      // 前提条件不成立時はファームが ok=false を返す。
+      return create(CommandSchema, {
+        id,
+        body: { case: "startEtcExperiment", value: { type: params.type } },
+      });
+    case "stop_experiment":
+      return create(CommandSchema, {
+        id,
+        body: { case: "stopEtcExperiment", value: {} },
+      });
     case "set_auto_shift":
       // auto_shift のみを設定した部分 Config を送る。firmware overlayConfig が
       // has_auto_shift だけを見て他セクションを温存する (CLAUDE.md の不変条件)。
