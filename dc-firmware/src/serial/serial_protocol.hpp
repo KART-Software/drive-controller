@@ -20,7 +20,7 @@ class SerialProtocol {
     static void initialize();
 
     // Sensor data (50 Hz).
-    static void sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler);
+    static void sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler, float duty);
 
     // Debug log message.
     static void sendDebugf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));

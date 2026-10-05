@@ -17,6 +17,7 @@ export interface SensorData {
   m: string;
   manual: boolean;
   tgt_ittr: boolean;
+  duty: number; // モーター実印加 duty [%] (±100, ETC 停止中 0)
   v: boolean;
   err: number;
   sps?: number;

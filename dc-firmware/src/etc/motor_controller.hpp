@@ -15,7 +15,8 @@ class MotorController {
     void setMotorOff();
     bool isOn();
     void setPidGains(double kP, double kI, double kD);
-    // 直近の実印加 duty (%)。ISR が書き loop が読む: float の 32bit ストアは
+    // 直近の実印加 duty (%)。±DC_MOTOR_OUTPUT_SCALE_MAX で飽和済み (= DcMotor の実出力)。
+    // ISR が書き loop が読む: float の 32bit ストアは
     // Cortex-M7 でアトミックなので保護不要。モーター停止中は 0 (setMotorOff で
     // クリア = 「常に実印加値」の不変条件。SD ログ・実験ガードが参照する)。
     float lastOutput() const { return lastOutput_; }

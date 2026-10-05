@@ -249,7 +249,7 @@ void loop() {
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {
         lastLogTime = now;
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
-                                       plausibilityValidator.getErrorHandler());
+                                       plausibilityValidator.getErrorHandler(), motorController.lastOutput());
     }
 
     // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が

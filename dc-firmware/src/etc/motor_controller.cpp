@@ -16,7 +16,15 @@ void MotorController::cycle() {
     double target_ = target.getTarget();
     double tp = tps.convertedValue();
     output = pid.compute(target_, tp);
-    lastOutput_ = (float)output;
+    // DcMotor::write は |output| を DC_MOTOR_OUTPUT_SCALE_MAX で飽和させる。lastOutput_ は
+    // 「実印加 duty」(SD ログ / 実験ガード / telemetry が参照) なので同じ飽和を掛ける。
+    // 生 PID 出力は D 項で数万 % に達し得る (TPS 校正切替時に +169,000 % を記録した実績)。
+    double applied = output;
+    if (applied > DC_MOTOR_OUTPUT_SCALE_MAX)
+        applied = DC_MOTOR_OUTPUT_SCALE_MAX;
+    else if (applied < -DC_MOTOR_OUTPUT_SCALE_MAX)
+        applied = -DC_MOTOR_OUTPUT_SCALE_MAX;
+    lastOutput_ = (float)applied;
     dcMotor.write(output);
 }
 

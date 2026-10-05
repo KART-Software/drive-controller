@@ -188,6 +188,8 @@ function sensorTick() {
     Math.min(100, tgt + noise() * 3 + Math.sin(elapsed * 2) * 2 + 0.3),
   );
   const ittr = base * 0.8 + noise();
+  // 実印加 duty のモック: P 項相当を ±100 で飽和 (ファームの lastOutput() と同じ範囲)
+  const mockDuty = Math.max(-100, Math.min(100, pidGains.kP * (tgt - t1)));
   const bpsVal = 14.7 + Math.sin(elapsed * 0.3) * 2 + noise() * 0.5;
 
   // ── 非 ETC モック ──
@@ -232,6 +234,7 @@ function sensorTick() {
     ittr: useIttr,
     valid: true,
     errors: 0,
+    duty: +mockDuty.toFixed(2),
   });
   const state = create(StateSchema, {
     timestamp: Date.now() - t0,
