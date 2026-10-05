@@ -6,12 +6,17 @@ MotorController::MotorController(const EtcTarget& target, const Tps& tps) : targ
 
 void MotorController::initialize() {
     dcMotor.initialize();
+    // Anti-windup: 出力は ±DC_MOTOR_OUTPUT_SCALE_MAX で飽和するため、積分項の
+    // 寄与をそれ以上積んでも巻き戻し遅れ (windup → オーバーシュート) にしか
+    // ならない。積分寄与を出力フルスケールでクランプする。
+    pid.setIntegralLimit(DC_MOTOR_OUTPUT_SCALE_MAX);
 }
 
 void MotorController::cycle() {
     double target_ = target.getTarget();
     double tp = tps.convertedValue();
     output = pid.compute(target_, tp);
+    lastOutput_ = (float)output;
     dcMotor.write(output);
 }
 
@@ -22,6 +27,7 @@ void MotorController::setMotorOn() {
 
 void MotorController::setMotorOff() {
     dcMotor.off();
+    lastOutput_ = 0.0f;  // 停止中の凍結値を残さない (duty ログ = 常に実印加値)
 }
 
 bool MotorController::isOn() {
@@ -29,7 +35,11 @@ bool MotorController::isOn() {
 }
 
 void MotorController::setPidGains(double kP, double kI, double kD) {
+    // モーター ISR (優先度 0) が compute 中にゲイン 3 値の書き換えへ割り込むと
+    // 混成ゲイン/破損 double を読み得るため、書き換えはアトミックに行う。
+    noInterrupts();
     pid.setGains(kP, kI, kD);
+    interrupts();
 }
 
 }  // namespace etc
