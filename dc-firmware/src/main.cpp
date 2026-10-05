@@ -97,7 +97,9 @@ void setup() {
     DebugLogger::addWriter(&serialDebugWriter);
 
     // RTC を TimeLib に供給 (VBAT 保持されていれば起動時から日時が使える。set_rtc で更新)。
-    setSyncProvider(Teensy3Clock.get);
+    // Teensy3Clock.get は unsigned long (32bit) 返しだが TimeLib の time_t は 64bit なので、
+    // 関数ポインタを直接渡さずラムダで型を合わせる (直接渡しは -fpermissive 依存 + 上位 32bit 不定)。
+    setSyncProvider([]() -> time_t { return Teensy3Clock.get(); });
 
     // SHUTDOWN 回路: 通常 RELAY=HIGH (点火系許可)。SIG_IN は SensorHub が ToggleSwitch で読む。
     pinMode(SHUTDOWN_RELAY_PIN, OUTPUT);
