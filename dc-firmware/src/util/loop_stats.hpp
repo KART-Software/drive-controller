@@ -59,6 +59,20 @@ class LoopStats {
         curSdMax_ = 0;
     }
     const Snapshot& last() const { return last_; }
+    // SD ログ用: 直前の窓と「現在の窓のここまで」の大きい方。last() だけだと停止の値が 1〜2 s 後の
+    // レコードにしか載らず、CSV で t_ms の穴と突き合わせられない。tick() は loop 先頭なので、停止した
+    // 周の直後の周のレコードから値が上がる
+    Snapshot forLog() const {
+        Snapshot s = last_;
+        if (curLoopMax_ > s.loopMaxUs)
+            s.loopMaxUs = curLoopMax_;
+        if (curSdMax_ > s.sdMaxUs)
+            s.sdMaxUs = curSdMax_;
+        uint32_t safety = curSafetyMax_;
+        if (safety > s.safetyMaxUs)
+            s.safetyMaxUs = safety;
+        return s;
+    }
 
    private:
     Snapshot last_;

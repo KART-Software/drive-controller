@@ -56,7 +56,7 @@ LogRecord buildLogRecord(uint32_t t_ms,
     rec.loop_max_us = sys.loopMaxUs;
     rec.sd_max_us = sys.sdMaxUs;
     rec.safety_max_us = (uint16_t)min(sys.safetyMaxUs, (uint32_t)65535);
-    rec.log_drops = (uint16_t)(sys.logDrops & 0xFFFF);
+    rec.log_drops = (uint16_t)min(sys.logDrops, (uint32_t)65535);  // 飽和 (折り返すと「減った」ように見える)
 
     uint16_t f = 0;
     if (hub.target().isManual())

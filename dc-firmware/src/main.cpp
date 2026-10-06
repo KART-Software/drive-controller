@@ -92,6 +92,8 @@ void stopEtc() {
     motorControlTimer.end();        // その後 ISR を止める
 }
 
+unsigned long lastStatsMs = 0;  // 計測窓 (LoopStats) の起点。setup() 末尾で初期化
+
 void setup() {
     SerialProtocol::initialize();
 
@@ -143,6 +145,9 @@ void setup() {
 
     // SD ロギング: カード挿入時のみ有効。RTC 日時 (未設定なら LOGNNNN) で新ファイルを作る。
     sensorLogger.begin();
+
+    // 計測窓の起点。0 のままだと最初の loop で空の窓が確定し、最初の 1 s が全項目 0 (=「停止なし」と区別不能) になる
+    lastStatsMs = millis();
 }
 
 unsigned long lastLogTime = 0;
@@ -150,7 +155,6 @@ unsigned long lastPulseUpdateTime = 0;
 unsigned long lastCanTime = 0;
 unsigned long lastLaunchTime = 0;
 unsigned long lastSdLogMs = 0;
-unsigned long lastStatsMs = 0;
 
 // selectToEtcMode() は can_data.hpp/cpp に移動 (CanController の CAN 出力と共有)。
 
@@ -265,14 +269,13 @@ void loop() {
 
     // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が
     // 止まりサンプルが空く (レアな小ギャップ)。完全ギャップレスが要れば ISR 収集化する。
-    // TODO[実機計測]: 実カードで sensorLogger.log()/service() の最悪所要時間を micros()
-    // で計測する (通常はキャッシュへ memcpy で数us、512B セクタ書込で ~100-500us、1s 毎の
-    // flush で ~ms〜まれに数十ms)。loop への影響 (CAN/テレメトリ/コマンド遅延) を確認し、
-    // 長すぎれば SYNC_INTERVAL_MS 調整 or リングバッファ+ISR 収集へ変更を検討。
+    // SD の所要時間は LoopStats が計測している (telemetry SysStats.sd_max_us / LogRecord v4 sd_max_us)。
+    // 毎秒の flush で数 ms、カード遅延で数十 ms の停止がある。解消は Phase 3 (リングバッファ + ISR 採取,
+    // docs/loop_nonblocking_spec.md §7)。
     if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
         lastSdLogMs = now;
         sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter,
-                                        motorController, experimentRunner, loopStats.last()));
+                                        motorController, experimentRunner, loopStats.forLog()));
     }
     sensorLogger.service(now);
 
