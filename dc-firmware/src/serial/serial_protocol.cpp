@@ -103,6 +103,12 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
 // 送らずに捨てる。これがないと Serial.write がバッファ満杯でブロックし、loop() が止まって
 // コマンド受信/応答(commandRouter.poll)が滞り、ホスト側が 3s タイムアウトする。
 bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, bool droppable = false) {
+    // ホストがポートを開いていない (DTR=0) なら送らない。読み手がいない状態で Serial.write すると
+    // usb_serial_write が先頭バッファの完了待ちで最大 TX_TIMEOUT_MSEC (120 ms) ブロックし loop() が
+    // 止まる (docs/loop_nonblocking_spec.md §4)。availableForWrite() は先頭バッファを除外して空きを
+    // 返すため、下の droppable 判定だけでは防げない。OS はポート close で DTR を自動で落とす。
+    if (!Serial.dtr())
+        return false;
     uint8_t frame[DC_MAX_FRAME];
     CobsCrcWriter writer;
     writer.init(frame, sizeof(frame));
@@ -142,7 +148,11 @@ void SerialProtocol::initialize() {
     }
 }
 
-void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler, float duty) {
+void SerialProtocol::sendSensorData(const SensorHub& hub,
+                                    bool isValid,
+                                    const etc::ErrorHandler& errorHandler,
+                                    float duty,
+                                    const LoopStats::Snapshot& sys) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_sensor_tag;
     dc_State& st = env.payload.sensor;
@@ -206,6 +216,14 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
 
     // Build error bitmask
     e.errors = errorHandler.bits();
+
+    st.has_sys = true;
+    st.sys.loop_max_us = sys.loopMaxUs;
+    st.sys.loop_mean_us = sys.loopMeanUs;
+    st.sys.sd_max_us = sys.sdMaxUs;
+    st.sys.safety_max_us = sys.safetyMaxUs;
+    st.sys.log_drops = sys.logDrops;
+    st.sys.loop_max_us_boot = sys.loopMaxUsBoot;
 
     sendDeviceMessage(env);
 }

@@ -12,6 +12,13 @@ let onDisconnect: (() => void) | null = null;
 async function connect(): Promise<void> {
   port = await navigator.serial.requestPort();
   await port.open({ baudRate: BAUD_RATE });
+  // DTR/RTS を明示的に立てる。ファームは Serial.dtr()==0 の間は送信しない (loop 停止対策,
+  // docs/loop_nonblocking_spec.md §4)。閉じる側は OS が DTR を落とすので処理不要。
+  try {
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+  } catch {
+    // 非対応環境では既定挙動 (open 時に DTR が立つ) に任せる
+  }
 
   writer = port.writable!.getWriter();
   reader = (port.readable as ReadableStream<Uint8Array>).getReader();

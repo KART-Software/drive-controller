@@ -6,6 +6,7 @@ interface SerialPort extends EventTarget {
   readonly writable: WritableStream<Uint8Array>;
   open(options: { baudRate: number }): Promise<void>;
   close(): Promise<void>;
+  setSignals(signals: { dataTerminalReady?: boolean; requestToSend?: boolean; break?: boolean }): Promise<void>;
   addEventListener(type: "disconnect", listener: () => void): void;
 }
 
