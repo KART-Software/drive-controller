@@ -4,9 +4,10 @@
 
 // loop() / SD / 安全層 ISR の所要時間を 1 s 窓で集計する (docs/loop_nonblocking_spec.md §5)。
 //   tick(micros())  : loop() 先頭で毎回。前回からの経過 = 1 周の所要として max/mean を更新
-//   noteSdUs()      : SD write/flush の所要 (SensorLogger から 1 s ごとにまとめて報告)
+//   noteSdUs()      : SD write/flush 1 回の所要 (SensorLogger が呼び出しごとに直接報告)
 //   noteSafetyUs()  : 安全層 ISR の所要 (Phase 2 以降。ISR から呼ぶので volatile)
-//   rollover()      : 1 s ごとに loop から。窓を確定して last() に移し、カウンタを初期化
+//   rollover()      : 1 s ごとに loop 先頭 (tick の直後) から。窓を確定して last() に移し初期化。
+//                     窓境界を loop 先頭に置くことで、同じ周の loop 所要と SD 所要が同じ窓に入る
 // last() は「直近に完了した 1 s 窓」の値で、telemetry (SysStats) と SD ログ (LogRecord v4) に載せる。
 class LoopStats {
    public:
@@ -41,17 +42,21 @@ class LoopStats {
             curSafetyMax_ = us;
     }
     void rollover(uint32_t logDrops) {
+        // curSafetyMax_ は安全層 ISR が書くので、読み出しとゼロ化の間に割り込まれると 1 サンプル消える
+        noInterrupts();
+        uint32_t safetyMax = curSafetyMax_;
+        curSafetyMax_ = 0;
+        interrupts();
         last_.loopMaxUs = curLoopMax_;
         last_.loopMeanUs = curLoopN_ ? (uint32_t)(curLoopSum_ / curLoopN_) : 0;
         last_.sdMaxUs = curSdMax_;
-        last_.safetyMaxUs = curSafetyMax_;
+        last_.safetyMaxUs = safetyMax;
         last_.logDrops = logDrops;
         last_.loopMaxUsBoot = bootLoopMax_;
         curLoopMax_ = 0;
         curLoopSum_ = 0;
         curLoopN_ = 0;
         curSdMax_ = 0;
-        curSafetyMax_ = 0;
     }
     const Snapshot& last() const { return last_; }
 

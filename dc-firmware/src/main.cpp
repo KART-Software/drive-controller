@@ -47,8 +47,8 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.gps(),
                                sensorHub.apps1());
 SdBinaryWriter sdWriter;
-SensorLogger sensorLogger(sdWriter);
 LoopStats loopStats;  // loop/SD/安全層 ISR の所要時間 (1 s 窓)。telemetry + SD ログへ
+SensorLogger sensorLogger(sdWriter, loopStats);
 // ETC 同定実験モード (ベンチ専用, docs/etc_experiment_mode_spec.md)。目標注入は
 // manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
 // 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
@@ -157,6 +157,12 @@ unsigned long lastStatsMs = 0;
 void loop() {
     loopStats.tick(micros());  // 前回 loop 先頭からの経過 = 1 周の所要 (停止の可視化)
     unsigned long now = millis();
+    // 計測窓の確定 (1 s)。tick 直後に置くので、直前の周 (= tick が計上した周) とその周の SD 所要が
+    // 同じ窓に入る (末尾に置くと SD 所要だけ 1 窓先行して組み合わせがずれる)
+    if ((uint32_t)(now - lastStatsMs) >= 1000) {
+        lastStatsMs = now;
+        loopStats.rollover(0 /* log_drops: Phase 3 */);
+    }
 
 #ifdef ADC_DMA
     sensorHub.readImu();  // ADC は 8kHz DMA ISR でサンプリング済み。loop は IMU のみ
@@ -269,13 +275,6 @@ void loop() {
                                         motorController, experimentRunner, loopStats.last()));
     }
     sensorLogger.service(now);
-
-    // 計測窓の確定 (1 s): SD の最大所要を取り込み、直近窓の値を telemetry / ログ用に確定
-    if ((uint32_t)(now - lastStatsMs) >= 1000) {
-        lastStatsMs = now;
-        loopStats.noteSdUs(sensorLogger.takeMaxBusyUs());
-        loopStats.rollover(0 /* log_drops: Phase 3 */);
-    }
 
     // Command polling
     commandRouter.poll();

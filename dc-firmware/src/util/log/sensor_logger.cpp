@@ -23,7 +23,7 @@ void SensorLogger::log(const LogRecord& rec) {
     if (writer_.active()) {
         uint32_t t0 = micros();
         writer_.write(&rec, sizeof(rec));
-        noteBusy(t0);  // SD セクタ書き込みが走った回の所要を捕まえる
+        stats_.noteSdUs(micros() - t0);  // SD セクタ書き込みが走った回の所要を捕まえる
     }
 }
 
@@ -33,6 +33,6 @@ void SensorLogger::service(uint32_t nowMs) {
         lastSyncMs_ = nowMs;
         uint32_t t0 = micros();
         writer_.flush();
-        noteBusy(t0);
+        stats_.noteSdUs(micros() - t0);
     }
 }
