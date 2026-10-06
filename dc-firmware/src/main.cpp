@@ -19,6 +19,7 @@
 #include "util/log/debug_logger.hpp"
 #include "util/log/sd_binary_writer.hpp"
 #include "util/log/sensor_logger.hpp"
+#include "util/loop_stats.hpp"
 
 IntervalTimer motorControlTimer;
 IntervalTimer sensorSamplingTimer;
@@ -47,6 +48,7 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.apps1());
 SdBinaryWriter sdWriter;
 SensorLogger sensorLogger(sdWriter);
+LoopStats loopStats;  // loop/SD/安全層 ISR の所要時間 (1 s 窓)。telemetry + SD ログへ
 // ETC 同定実験モード (ベンチ専用, docs/etc_experiment_mode_spec.md)。目標注入は
 // manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
 // 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
@@ -148,10 +150,12 @@ unsigned long lastPulseUpdateTime = 0;
 unsigned long lastCanTime = 0;
 unsigned long lastLaunchTime = 0;
 unsigned long lastSdLogMs = 0;
+unsigned long lastStatsMs = 0;
 
 // selectToEtcMode() は can_data.hpp/cpp に移動 (CanController の CAN 出力と共有)。
 
 void loop() {
+    loopStats.tick(micros());  // 前回 loop 先頭からの経過 = 1 周の所要 (停止の可視化)
     unsigned long now = millis();
 
 #ifdef ADC_DMA
@@ -249,7 +253,8 @@ void loop() {
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {
         lastLogTime = now;
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
-                                       plausibilityValidator.getErrorHandler(), motorController.lastOutput());
+                                       plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
+                                       loopStats.last());
     }
 
     // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が
@@ -261,9 +266,16 @@ void loop() {
     if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
         lastSdLogMs = now;
         sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter,
-                                        motorController, experimentRunner));
+                                        motorController, experimentRunner, loopStats.last()));
     }
     sensorLogger.service(now);
+
+    // 計測窓の確定 (1 s): SD の最大所要を取り込み、直近窓の値を telemetry / ログ用に確定
+    if ((uint32_t)(now - lastStatsMs) >= 1000) {
+        lastStatsMs = now;
+        loopStats.noteSdUs(sensorLogger.takeMaxBusyUs());
+        loopStats.rollover(0 /* log_drops: Phase 3 */);
+    }
 
     // Command polling
     commandRouter.poll();

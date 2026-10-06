@@ -5,6 +5,7 @@
 #include "etc/error_handler.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
+#include "util/loop_stats.hpp"
 
 #define SERIAL_SPEED 115200
 #define SENSOR_SEND_INTERVAL 20  // ms (50Hz)
@@ -20,7 +21,11 @@ class SerialProtocol {
     static void initialize();
 
     // Sensor data (50 Hz).
-    static void sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler, float duty);
+    static void sendSensorData(const SensorHub& hub,
+                               bool isValid,
+                               const etc::ErrorHandler& errorHandler,
+                               float duty,
+                               const LoopStats::Snapshot& sys);
 
     // Debug log message.
     static void sendDebugf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));

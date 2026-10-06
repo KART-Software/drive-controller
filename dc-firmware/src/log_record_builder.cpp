@@ -6,7 +6,8 @@ LogRecord buildLogRecord(uint32_t t_ms,
                          const CanController& can,
                          const shift::AutoShifter& shifter,
                          const etc::MotorController& motor,
-                         const etc::ExperimentRunner& experiment) {
+                         const etc::ExperimentRunner& experiment,
+                         const LoopStats::Snapshot& sys) {
     LogRecord rec = {};
     rec.t_ms = t_ms;
 
@@ -52,6 +53,10 @@ LogRecord buildLogRecord(uint32_t t_ms,
     rec.exp_phase = experiment.logPhase();
     rec.duty = motor.lastOutput();  // 停止中は 0 (setMotorOff でクリア = 常に実印加値)
     rec.vbat = 0.0f;  // CAN 受信予定 (kart-can のメッセージ定義待ち, spec Q12)
+    rec.loop_max_us = sys.loopMaxUs;
+    rec.sd_max_us = sys.sdMaxUs;
+    rec.safety_max_us = (uint16_t)min(sys.safetyMaxUs, (uint32_t)65535);
+    rec.log_drops = (uint16_t)(sys.logDrops & 0xFFFF);
 
     uint16_t f = 0;
     if (hub.target().isManual())

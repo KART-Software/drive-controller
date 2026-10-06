@@ -20,14 +20,19 @@ bool SensorLogger::begin() {
 }
 
 void SensorLogger::log(const LogRecord& rec) {
-    if (writer_.active())
+    if (writer_.active()) {
+        uint32_t t0 = micros();
         writer_.write(&rec, sizeof(rec));
+        noteBusy(t0);  // SD セクタ書き込みが走った回の所要を捕まえる
+    }
 }
 
 void SensorLogger::service(uint32_t nowMs) {
     // 定期 flush: ディレクトリ+データを媒体へ反映 (電源断時のロストを SYNC_INTERVAL 以内に)
     if (writer_.active() && (uint32_t)(nowMs - lastSyncMs_) >= SYNC_INTERVAL_MS) {
         lastSyncMs_ = nowMs;
+        uint32_t t0 = micros();
         writer_.flush();
+        noteBusy(t0);
     }
 }

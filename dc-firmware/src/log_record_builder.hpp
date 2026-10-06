@@ -8,6 +8,7 @@
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "shift/auto_shifter.hpp"
+#include "util/loop_stats.hpp"
 #include "util/log/log_record.hpp"
 
 // 各サブシステムの現在値から SD ログ 1 レコードを組み立てる純粋関数。
@@ -19,4 +20,5 @@ LogRecord buildLogRecord(uint32_t t_ms,
                          const CanController& can,
                          const shift::AutoShifter& shifter,
                          const etc::MotorController& motor,
-                         const etc::ExperimentRunner& experiment);
+                         const etc::ExperimentRunner& experiment,
+                         const LoopStats::Snapshot& sys);

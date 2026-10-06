@@ -19,6 +19,8 @@
   (0=idle 1=settling 2=holding 3=coasting), duty (実印加 duty %, 停止中=0),
   vbat (V, CAN 定義待ちの間は 0)。
   モーター電流は adc4 (MOTOR_CURRENT_CH, ~20mV/A + 50mV オフセット) の生値。
+  v4 追加: loop_max_us / sd_max_us / safety_max_us / log_drops (直近 1 s 窓の loop 停止計測,
+  docs/loop_nonblocking_spec.md §5)。v3 ファイルもそのまま読める。
 """
 import csv
 import struct
@@ -30,8 +32,11 @@ HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 24
 #            wheel[4], rpm, clutch_rpm, target_tp, clutch, wheel_count[4],
 #            errors, flags, gear, mode, autoshift_state,
 #            exp_type, exp_index, exp_phase, duty, vbat
-RECORD_FMT = "<I8H6f3f3f4f4f4IIHbBBBBBff"
-RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 136
+RECORD_FMT_V3 = "<I8H6f3f3f4f4f4IIHbBBBBBff"      # 136 B
+# v4 (148B): v3 + loop_max_us(u32), sd_max_us(u32), safety_max_us(u16), log_drops(u16)
+RECORD_FMT_V4 = RECORD_FMT_V3 + "IIHH"             # 148 B
+RECORD_FMTS = {3: RECORD_FMT_V3, 4: RECORD_FMT_V4}
+SYS_COLS = ["loop_max_us", "sd_max_us", "safety_max_us", "log_drops"]
 
 # flags ビット (firmware: log_record.hpp LOG_FLAG_*)
 FLAG_BITS = [
@@ -67,25 +72,28 @@ def main(argv):
         if magic != b"KARTLOG1":
             print(f"bad magic: {magic!r}", file=sys.stderr)
             return 2
-        if rec_size != RECORD_SIZE:
+        fmt = RECORD_FMTS.get(ver)
+        if fmt is None or rec_size != struct.calcsize(fmt):
+            sizes = {v: struct.calcsize(f) for v, f in RECORD_FMTS.items()}
             print(
-                f"record_size mismatch: file={rec_size} decoder={RECORD_SIZE} "
-                f"(version {ver}). デコーダのフォーマットを合わせてください。",
+                f"unsupported version/record_size: version={ver} file={rec_size} "
+                f"decoder={sizes}. デコーダを合わせてください。",
                 file=sys.stderr,
             )
             return 3
+        columns = COLUMNS + (SYS_COLS if ver >= 4 else [])
         print(f"version={ver} record_size={rec_size} rtc_epoch={rtc_epoch} "
               f"log_hz={log_hz} boot_ms={boot_ms}", file=sys.stderr)
 
         n = 0
         with open(out_path, "w", newline="") as out:
             w = csv.writer(out)
-            w.writerow(COLUMNS)
+            w.writerow(columns)
             while True:
                 buf = f.read(rec_size)
                 if len(buf) < rec_size:
                     break  # 末尾の半端 (電源断時) は捨てる
-                v = struct.unpack(RECORD_FMT, buf)
+                v = struct.unpack(fmt, buf)
                 t_ms = v[0]
                 # 絶対時刻 (RTC 設定時のみ): rtc_epoch + (t_ms - boot_ms)/1000
                 abs_time = (rtc_epoch + (t_ms - boot_ms) / 1000.0) if rtc_epoch else ""
@@ -102,7 +110,7 @@ def main(argv):
                 w.writerow(
                     [t_ms, abs_time, *adc, *conv, *acc, *gyr, *wheel, rpm, clutch_rpm,
                      target_tp, clutch, *wc, errors, flags, *flagbits, gear, mode, ashift,
-                     exp_type, exp_index, exp_phase, duty, vbat]
+                     exp_type, exp_index, exp_phase, duty, vbat, *v[43:]]
                 )
                 n += 1
         dur = n / log_hz if log_hz else 0
