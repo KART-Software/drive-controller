@@ -15,7 +15,7 @@ CLAUDE.md「ファームウェア並行性」節 (本書で更新対象)。
 
 | 柱 | 内容 | 効果 |
 |---|---|---|
-| **A. USB 送信ゲート** | ホストが読んでいない時は送信しない | 120 ms 停止の根絶 |
+| **A. USB 送信ガード** | TX リングに空きが無い時は送らない (全フレーム) | 120 ms 停止の根絶 |
 | **B. 計測** | loop / SD / 安全層 ISR の所要時間を毎秒集計して telemetry と SD ログに載せる | 停止の可視化。以後の判断材料 |
 | **C. 安全層 ISR 化** | アーミング層・プラウシビリティ・スイッチ読み・シフターを 1 kHz タイマー ISR (`safetyISR`) へ | loop 停止が安全層とシフターに影響しなくなる |
 | **D. ギャップレスログ** | 記録採取を ISR + リングバッファ化、SD ファイル事前確保、sync 間隔延長 | SD ストールで記録が途切れない |
@@ -27,7 +27,7 @@ Launch Control (凍結中)、既存の double 書き換え競合 (§6.5 で指�
 
 | 事象 | 頻度 | 大きさ | 原因 (確定) |
 |---|---|---|---|
-| USB 送信タイムアウト | ホストがポートを閉じるたび 1 回 | **ちょうど 120 ms** | `usb_serial.c` の `TX_TIMEOUT_MSEC 120`。`availableForWrite()` は書き込み中の先頭バッファを除外して空きを返すため droppable 判定をすり抜け、先頭バッファ完了待ちで `usb_serial_write` がブロック。タイムアウト後は `transmit_previous_timeout` ラッチで以後は即 return |
+| USB 送信タイムアウト | ホストがポートを閉じるたび 1 回 | **ちょうど 120 ms** | `usb_serial.c` の `TX_TIMEOUT_MSEC 120`。telemetry が空き判定の対象になっておらず (呼び出し側が一度も `droppable=true` を渡していない) 常にブロッキング送信だったため、読み手が消えると先頭バッファの完了待ちで `usb_serial_write` がブロック。タイムアウト後は `transmit_previous_timeout` ラッチで以後は即 return |
 | SD flush | 1.00 回/s (間隔中央値 1000.0 ms) | 中央値 4〜5 ms、p95 6 ms | `SYNC_INTERVAL_MS=1000` の `sdFile.flush()` = SdFat `sync()` (データブロック + ディレクトリエントリ)。ファイル肥大で 3.5→4.6 ms に増加 |
 | セクタ書き込み遅延 | 約 0.25 回/s | 3〜9 ms | flush 周期と無関係な位相。カード内部処理 |
 | 中間 | 2 時間で 17 件 | 21〜49 ms | 遅い flush とカードのブロック消去等 |
@@ -52,7 +52,7 @@ loop 停止の影響 (現状の配置):
             ┌──────────── ISR (優先度) ────────────┐   ┌──────── loop() (非 ISR) ────────┐
   1 ms  prio 0    motor:      PID → PWM            │   │ IMU 読み / CAN poll+send / pulse 更新
   62.5µs prio 208 sampling:   ADC DMA → 移動平均    │   │ 同定実験 FSM tick / launch(凍結)
-  1 ms  prio 64   safetyISR:  ①スイッチ読み        │   │ telemetry 送信 (DTR ゲート)
+  1 ms  prio 64   safetyISR:  ①スイッチ読み        │   │ telemetry 送信 (送信ガード)
         (新設)                ②モード反映          │   │ SD: リング → 書き出し / 定期 sync
                               ③plausibility       │   │ コマンド受信・ディスパッチ
                               ④アーミング(①②③④)  │   │ シフター/監視のイベント → debug 送信
@@ -66,23 +66,26 @@ loop 停止の影響 (現状の配置):
 
 各フェーズは独立にコミット・検証する。Phase 2 以降は CLAUDE.md の並行性節を更新する。
 
-## 4. A: USB 送信ゲート
+## 4. A: USB 送信ガード
 
-- `SerialProtocol::encodeAndWrite()` の冒頭で **`Serial.dtr()` が 0 なら全フレームを捨てる**
-  (droppable / 非 droppable を問わず。読み手がいないので応答・debug も無意味)。
-  既存の `availableForWrite()` 判定はそのまま残す。
-- `Serial.dtr()` は `usb_cdc_line_rtsdtr` のフラグ読み (`operator bool` と違い `yield()` も 15 ms の
-  整定待ちも無い)。
-- console (`dc-console/src/serial.ts`): `port.open()` の直後に
-  `port.setSignals({ dataTerminalReady: true, requestToSend: true })` を明示する
-  (Web Serial の既定挙動に依存しない。Q1 決定)。pyserial は既定で DTR を立てる。
-- DTR の扱い: ホストのアプリがポートを閉じると **OS のドライバが自動で DTR を下げる**。デバイスは
-  それを `Serial.dtr()` で検知する。console 側に「読み出しをやめる時に DTR を落とす」処理は不要。
-- 残る穴: ポートを開いたままアプリが固まって読まない場合は DTR が立ったままなので 1 回だけ 120 ms
-  止まる (`transmit_previous_timeout` ラッチで 2 回目以降は即 return)。Phase 2/3 以降は loop 停止が
-  安全層と記録に影響しないため許容する。
-- 検証: ログ中にホストがポートを閉じても SD ログに 120 ms ギャップが出ないこと。
-  ホストがポートを開いていない間はテレメトリが出ないこと (console 接続で再開)。
+- `SerialProtocol::encodeAndWrite()` で **全フレーム (telemetry / 応答 / debug)** に
+  `Serial.availableForWrite() >= len` を要求し、満たさなければ捨てる。旧実装はこの判定を
+  `droppable=true` のフレームにだけ掛ける設計だったが、telemetry を含め誰も true を渡しておらず
+  判定は死んでいた (= 50 Hz telemetry が常にブロッキング送信)。これが 120 ms 停止の真因。`droppable` 引数は削除。
+- 待たない根拠: `usb_serial_write` が待つのは「先頭バッファが満杯で次のバッファがまだ転送中」の時だけ。
+  `availableForWrite()` は先頭以外の空きバッファ (2048 B 単位) の合計を返し、バッファはリング順に空く。
+  フレーム最大 `DC_MAX_FRAME` < `TX_SIZE` (2048 B、`static_assert` で固定) なので、空きがあれば 1 フレームは必ず収まる。
+- 当初案の **DTR ゲート (`Serial.dtr()==0` で破棄) は撤回** (自己レビュー 2026-10-06):
+  - DTR フラグは SET_CONTROL_LINE_STATE でしか更新されず、ケーブル抜去・バスリセット・サスペンドで
+    クリアされない。「console を閉じずにケーブルを抜く」でストールが残る。
+  - DTR を立てないホスト (pyserial の `dtr=False`、`pio device monitor` の `monitor_dtr=0`、.NET 既定) で
+    コマンドは実行されるのに応答が返らなくなる。
+  - 起動時の診断 (`SD log -> ...`、IMU WHO_AM_I、config 読込) がポート未オープン時に捨てられる。
+    送信ガード方式なら TX リング (4 × 2 KB) に溜まり、後から開いたホストに届く。
+- console は open 直後に `port.setSignals({ dataTerminalReady: true, requestToSend: true })` を明示する
+  (無害なので残す。Q1)。
+- 検証: ホストがポートを閉じる / DTR=0 で開く、のいずれでも `loop_max_us_boot` に 120 ms が出ないこと。
+  DTR=0 のホストでもコマンド応答が返ること。
 
 ## 5. B: 計測 (loop / SD / ISR 所要時間)
 
@@ -91,11 +94,12 @@ loop 停止の影響 (現状の配置):
 | 名前 | 計測 | 集計 (1 s 窓) |
 |---|---|---|
 | `loop_us` | `loop()` 1 周の `micros()` 差 | max / mean |
-| `sd_us` | `SdBinaryWriter::write()` と `flush()` の各呼び出し所要 | max |
+| `sd_us` | `SensorLogger` の write / flush 1 回の所要 (呼び出しごとに `LoopStats` へ直接報告) | max |
 | `safety_us` | 安全層 ISR 1 回の所要 (Phase 2 以降) | max |
 | `log_drops` | リング溢れで捨てたレコード数 (Phase 3 以降) | 累積 (uint16 ラップ) |
 
-`util/loop_stats.{hpp,cpp}` に `LoopStats` を新設し、`loop()` 末尾で `tick()`、毎秒 `rollover()`。
+`util/loop_stats.hpp` に `LoopStats` を新設し、`loop()` 先頭で `tick()`、その直後に毎秒 `rollover()`
+(窓境界を loop 先頭に置き、同じ周の loop 所要と SD 所要を同じ窓に入れる)。
 ISR 側は `volatile uint32_t` に max を書くだけ。
 
 ### 5.2 出力先
@@ -103,6 +107,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 - **telemetry**: `State` に `SysStats sys = 4` を追加 (`loop_max_us / loop_mean_us / sd_max_us /
   safety_max_us / log_drops / loop_max_us_boot`、全て uint32)。直近に完了した 1 s 窓の値を 50 Hz の State に同梱 (Q2 決定)。
   `loop_max_us_boot` は起動以来の最大で、ポート開閉後に 120 ms 停止が無くなったことを SD を抜かずに確認するための値。
+  注意: `save` / `set_config` の flash 消去 (割り込み禁止で約 150 ms、モーター ISR も止まる) もここに記録される。
 - **SD ログ**: LogRecord **v4** (136 → 148 B): `uint32 loop_max_us, sd_max_us` + `uint16 safety_max_us, log_drops`
   を末尾に追加 (4 バイト整列維持。µs を uint16 にすると 65 ms で飽和し、肝心の 120 ms 停止が記録できないため
   loop/SD は uint32)。値は直近 1 s 窓のもの (全レコード同値で構わない。
@@ -176,7 +181,7 @@ launch (凍結)、telemetry、SD 書き出し + sync、コマンド処理、イ�
 
 ### 7.2 リングバッファ
 
-- `DMAMEM static LogRecord ring[LOG_RING_RECORDS]`、**2048 レコード (≈2 s, 295 KB @144 B)**。
+- `DMAMEM static LogRecord ring[LOG_RING_RECORDS]`、**2048 レコード (≈2 s, 303 KB @148 B)**。
   RAM2 空き約 500 KB (現ビルド)。(Q5 決定)
 - head (ISR が書く) / tail (loop が読む) は `volatile uint32_t`。満杯時は**新しいレコードを捨てて**
   `log_drops++` (順序を保つ。古い方を捨てる方式は tail の競合管理が要る。Q6 決定)。
@@ -194,10 +199,11 @@ launch (凍結)、telemetry、SD 書き出し + sync、コマンド処理、イ�
 
 - `SD.open()` の代わりに `SDClass::sdfs` (SdFs) 経由で `FsFile` を開き (`O_RDWR|O_CREAT|O_TRUNC`)、
   `preAllocate(LOG_PREALLOC_BYTES)` で連続クラスタを確保する (FAT 更新が書き込み経路から消える)。
-  サイズ **512 MB ≈ 1 時間** (144 B × 1 kHz)。上限到達時は新ファイルを開く。(Q9 決定)
+  サイズ **512 MB ≈ 1 時間** (148 B × 1 kHz)。上限到達時は新ファイルを開く。(Q9 決定)
   (`SDClass::sdfs` が public か要確認。非公開なら `SdFs` を自前で `begin(BUILTIN_SDCARD)`)。
 - **電源断対策**: 確保領域の末尾は未初期化データなので、デコーダが終端を知る手段が要る。
-  - `LogHeader` v4 に `uint32 record_count` を追加 (32 B)。`sync()` の直前にヘッダへ seek して
+  - `LogHeader` に `uint32 record_count` を追加 (32 B) し **`SENSOR_LOG_VERSION` を 5 に上げる**。
+    v4 (Phase 1: 24 B ヘッダ + 148 B レコード) と同じ版番号で混在するとデコーダが無言で 8 B ずれるため。`sync()` の直前にヘッダへ seek して
     更新 (+1 ブロック書き込み/sync)。
   - デコーダは `record_count > 0` ならそれを使い、0 (初回 sync 前の電源断) なら
     `t_ms` の単調性 (前レコード以上かつ +10 s 未満) が崩れた所で止める。
@@ -224,17 +230,17 @@ launch (凍結)、telemetry、SD 書き出し + sync、コマンド処理、イ�
 
 | ファイル | Phase | 変更 |
 |---|---|---|
-| `src/serial/serial_protocol.cpp` | 1 | `encodeAndWrite` に `Serial.dtr()` ゲート |
+| `src/serial/serial_protocol.cpp` | 1 | 全フレームに送信ガード (`availableForWrite`)、`droppable` 引数削除 |
 | `dc-console/src/serial.ts` | 1 | `setSignals({dataTerminalReady:true, requestToSend:true})` |
 | `src/util/loop_stats.{hpp,cpp}` | 1 | 新規: 所要時間集計 |
-| `src/util/log/sd_binary_writer.cpp` | 1 / 3 | write/flush 所要計測 / `FsFile` + `preAllocate` + ヘッダ `record_count` |
+| `src/util/log/sd_binary_writer.cpp` | 3 | `FsFile` + `preAllocate` + ヘッダ `record_count` |
 | `spec/proto/drive_controller.proto` | 1 / 2 | `SysStats`、`DebugStallCmd` → 両側再生成 |
-| `src/util/log/log_record.hpp` + `tools/decode_log.py` | 1 / 3 | v4 (stats フィールド / ヘッダ `record_count`、終端判定) |
+| `src/util/log/log_record.hpp` + `tools/decode_log.py` | 1 / 3 | v4 (stats フィールド) / v5 (ヘッダ `record_count`、終端判定) |
 | `src/main.cpp` | 2 / 3 | 安全層 ISR タイマー、loop の再編、イベント送信 |
 | `src/sensor/sensor_hub.{hpp,cpp}` | 2 | `readImu()` からスイッチ読みを分離 (`readSwitches()`) |
 | `src/etc/plausibility_validator.{hpp,cpp}` | 2 | `validLatched() const` |
 | `src/shift/auto_shifter.{hpp,cpp}` | 2 | `sendDebugf` → イベントキュー + `pollEvent()` |
-| `src/util/log/sensor_logger.{hpp,cpp}` | 3 | リング採取 API (`captureFromIsr`) + まとめ書き出し + drops |
+| `src/util/log/sensor_logger.{hpp,cpp}` | 1 / 3 | write/flush 所要を `LoopStats` へ直接報告 / リング採取 API (`captureFromIsr`) + まとめ書き出し + drops |
 | `src/commands/command_controller.cpp` | 2 | `DebugStallCmd` (BENCH_DEBUG) |
 | `dc-console/` | 1 | SysStats 表示 |
 | `CLAUDE.md` | 2 / 3 | 並行性節 (安全層 ISR 追加、SD ログ節) |
@@ -243,7 +249,7 @@ launch (凍結)、telemetry、SD 書き出し + sync、コマンド処理、イ�
 
 | Q | 決定 |
 |---|---|
-| Q1 | console は open 直後に `setSignals` で DTR/RTS を明示。閉じる側は OS が DTR を落とすので処理不要 |
+| Q1 | console は open 直後に `setSignals` で DTR/RTS を明示。ファーム側の DTR ゲートは自己レビューで撤回し、全フレームの送信ガードに置換 (§4) |
 | Q2 | `SysStats` は 50 Hz の State に同梱 |
 | Q3 | console 表示は読み出し 1 行 |
 | Q4 | `safetyISR` (安全層 ISR) = 3 本目の IntervalTimer ISR、1 ms、優先度 64。名前は「安全のための ISR」と分かるものにする (supervisor は別概念と衝突、arming は一工程に過ぎないため不採用) |

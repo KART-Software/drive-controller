@@ -118,7 +118,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 `SensorLogger` (`dc-firmware/src/util/log/`) が Teensy 4.1 内蔵 SD (SDIO, `BUILTIN_SDCARD`) へセンサーデータを **1kHz・固定長バイナリ**で記録する。**Config の flash (LittleFS) とは別系統**。
 
-- 構造はテキスト用ロガーのバイナリ版で対になっている: `BinaryWriter` (interface) ↔ `LogWriter`、`SdBinaryWriter` (SD I/O) ↔ `SerialDebugWriter`、`SensorLogger` (facade) ↔ `DebugLogger`。フォーマット (`LogHeader` / `LogRecord`, 128B/レコード) は `util/log/log_record.hpp`。
+- 構造はテキスト用ロガーのバイナリ版で対になっている: `BinaryWriter` (interface) ↔ `LogWriter`、`SdBinaryWriter` (SD I/O) ↔ `SerialDebugWriter`、`SensorLogger` (facade) ↔ `DebugLogger`。フォーマット (`LogHeader` / `LogRecord`, v4 = 148B/レコード) は `util/log/log_record.hpp`。
 - **カード挿入時のみ有効**・**電源投入毎に新ファイル**: `dc_log_YYYYMMDD_HHMMSS.bin` (RTC 設定時) / `dc_log_NNNN.bin` (未設定時)。RTC は `setSyncProvider(Teensy3Clock.get)` で起動時反映、`set_rtc` で更新。
 - レコード生成は**純粋関数** `buildLogRecord()` (`src/log_record_builder.{hpp,cpp}`) に集約 — 全入力を const 参照で受け、`SensorHub` 等の public const getter から読むだけで副作用なし。`SensorHub` はログ形式に依存しない。plausibility の valid/errors は `PlausibilityValidator::currentlyValid()` / `errorBits()` (副作用なし const) で読む。
 - 収集・書き込みは `loop()` (1kHz tick + 毎ループ `service()` で定期 flush)。SD 書き込みストール中は loop が止まりその間サンプルが空く (レアな小ギャップ)。ISR (motor/sampling) は影響を受けない。完全ギャップレスが要れば ISR 収集化する (`main.cpp` の TODO 参照)。
