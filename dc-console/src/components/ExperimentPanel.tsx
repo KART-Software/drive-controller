@@ -54,7 +54,8 @@ export function ExperimentPanel({ addLog, logs }: Props) {
       if (!resp.ok) {
         addLog(
           `実験開始が拒否されました (${exp.label})。前提条件を確認: ` +
-            "エンジン停止 / 車両静止 / SD カード挿入 / モードノブ≠MOTOR_OFF / plausibility 正常",
+            "ETC 稼働中 (SIG_IN=HIGH・モーター ON) / plausibility 正常 (未ラッチ) / エンジン停止 / 車両静止 / " +
+            "SD カード挿入 / モードノブ≠MOTOR_OFF",
         );
       }
     } catch (err) {

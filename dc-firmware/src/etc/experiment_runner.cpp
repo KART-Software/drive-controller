@@ -115,8 +115,12 @@ bool ExperimentRunner::start(Type type) {
 }
 
 void ExperimentRunner::stop() {
-    if (!active())
+    if (!active()) {
+        // 非実行中でも EXP stop を返す: 実験中に再起動 / USB 断があると console は EXP stop を受け取れず
+        // 「実行中」表示が張り付く。停止ボタンでそれを解除できるようにする
+        SerialProtocol::sendDebugf("EXP stop (not running)");
         return;
+    }
     if (target_.isManual())
         target_.setManual();  // manual 解除 → 通常のモード別ターゲットへ復帰
     validator_.suspendTargetCheck(false);
