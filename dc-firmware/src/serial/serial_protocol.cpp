@@ -99,16 +99,17 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
     return !w->overflow;
 }
 
-// droppable=true のフレーム(=高頻度テレメトリ)は、USB TX バッファに空きが無ければ
-// 送らずに捨てる。これがないと Serial.write がバッファ満杯でブロックし、loop() が止まって
-// コマンド受信/応答(commandRouter.poll)が滞り、ホスト側が 3s タイムアウトする。
-bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, bool droppable = false) {
-    // ホストがポートを開いていない (DTR=0) なら送らない。読み手がいない状態で Serial.write すると
-    // usb_serial_write が先頭バッファの完了待ちで最大 TX_TIMEOUT_MSEC (120 ms) ブロックし loop() が
-    // 止まる (docs/loop_nonblocking_spec.md §4)。availableForWrite() は先頭バッファを除外して空きを
-    // 返すため、下の droppable 判定だけでは防げない。OS はポート close で DTR を自動で落とす。
-    if (!Serial.dtr())
-        return false;
+// 送信ガード: USB TX リングに 1 フレーム分の空きが無ければ送らずに捨てる (telemetry / 応答 / debug 共通)。
+// usb_serial_write は空きが無いと先頭バッファの完了を最大 TX_TIMEOUT_MSEC (120 ms) 待ち、その間 loop() が
+// 止まる (ホストがポートを閉じた / 読み出しが詰まった / ケーブル抜去)。バッファはリング順に空き、
+// availableForWrite() は先頭以外の空きバッファ (2048 B 単位) の合計を返す。フレーム最大 DC_MAX_FRAME は
+// TX_SIZE (2048) 未満なので、availableForWrite() >= len なら write は決して待たない。
+// 旧実装はこの判定を droppable=true のフレームにだけ掛けていたが、telemetry を含め誰も true を渡して
+// おらず判定は死んでいた (docs/loop_nonblocking_spec.md §4)。ホスト不在中に溜まった分 (起動時の debug 等) は
+// リングに残り、後からポートを開いたホストに届く。
+static_assert(DC_MAX_FRAME < 2048, "送信ガードは 1 フレームが TX_SIZE(2048) に収まる前提");
+
+bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct) {
     uint8_t frame[DC_MAX_FRAME];
     CobsCrcWriter writer;
     writer.init(frame, sizeof(frame));
@@ -121,15 +122,15 @@ bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, bool dro
     if (len == 0)
         return false;
 
-    if (droppable && (size_t)Serial.availableForWrite() < len)
-        return false;  // ホストの取り込みが追いつかない: テレメトリをドロップ (loop を止めない)
+    if ((size_t)Serial.availableForWrite() < len)
+        return false;  // ホストが読んでいない / 追いつかない: 捨てる (loop を止めない)
 
     Serial.write(frame, len);
     return true;
 }
 
-void sendDeviceMessage(const dc_DeviceToHost& msg, bool droppable = false) {
-    encodeAndWrite(dc_DeviceToHost_fields, &msg, droppable);
+void sendDeviceMessage(const dc_DeviceToHost& msg) {
+    encodeAndWrite(dc_DeviceToHost_fields, &msg);
 }
 
 void sendResponseInternal(const dc_Response& resp) {

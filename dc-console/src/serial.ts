@@ -12,8 +12,8 @@ let onDisconnect: (() => void) | null = null;
 async function connect(): Promise<void> {
   port = await navigator.serial.requestPort();
   await port.open({ baudRate: BAUD_RATE });
-  // DTR/RTS を明示的に立てる。ファームは Serial.dtr()==0 の間は送信しない (loop 停止対策,
-  // docs/loop_nonblocking_spec.md §4)。閉じる側は OS が DTR を落とすので処理不要。
+  // DTR/RTS を明示的に立てる (Web Serial の既定挙動に依存しない)。ファームは DTR を見ないが、
+  // CDC の作法として「ポートを開いた」ことを示す。閉じる側は OS が DTR を落とすので処理不要。
   try {
     await port.setSignals({ dataTerminalReady: true, requestToSend: true });
   } catch {
