@@ -40,7 +40,7 @@ export function ExperimentPanel({ addLog, logs }: Props) {
     for (let i = logs.length - 1; i >= 0; i--) {
       const m = logs[i].msg;
       if (!m.startsWith("EXP ")) continue;
-      if (m.startsWith("EXP start")) return true;
+      if (m.startsWith("EXP start") || m.startsWith("EXP progress")) return true;
       return false; // done / stop / abort はいずれも終了
     }
     return false;
