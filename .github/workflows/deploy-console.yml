@@ -29,9 +29,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm のバージョンは dc-console/package.json の packageManager を単一ソースにする
+      # (ローカルの corepack と一致させ、lockfile の形式不一致 ERR_PNPM_LOCKFILE_CONFIG_MISMATCH を防ぐ)
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          package_json_file: dc-console/package.json
 
       - uses: actions/setup-node@v4
         with:
