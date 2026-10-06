@@ -76,6 +76,16 @@ function toAppSensor(st: PbState): SensorData {
     manual: e?.manual ?? false,
     tgt_ittr: e?.ittr ?? false,
     duty: e?.duty ?? 0,
+    sys: st.sys
+      ? {
+          loopMaxUs: st.sys.loopMaxUs,
+          loopMeanUs: st.sys.loopMeanUs,
+          sdMaxUs: st.sys.sdMaxUs,
+          safetyMaxUs: st.sys.safetyMaxUs,
+          logDrops: st.sys.logDrops,
+          loopMaxUsBoot: st.sys.loopMaxUsBoot,
+        }
+      : undefined,
     v: e?.valid ?? false,
     err: e?.errors ?? 0,
     sps: s?.sps,
