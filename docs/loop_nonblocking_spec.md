@@ -75,7 +75,7 @@ loop 停止の影響 (現状の配置):
 - 待たない根拠: `usb_serial_write` が待つのは「先頭バッファが満杯で次のバッファがまだ転送中」の時だけ。
   `availableForWrite()` は先頭以外の空きバッファ (2048 B 単位) の合計を返し、バッファはリング順に空く。
   フレーム最大 `DC_MAX_FRAME` < `TX_SIZE` (2048 B、`static_assert` で固定) なので、空きがあれば 1 フレームは必ず収まる。
-- **優先度**: 応答 (Reply) は `>= len`、telemetry / debug (Bulk) は `>= len + 2048` を要求し、TX バッファ
+- **優先度**: 応答と debug (Important) は `>= len`、telemetry (Bulk) は `>= len + 2048` を要求し、TX バッファ
   1 本分を応答用に残す。全フレームを同列に扱うと 50 Hz telemetry がリングを埋めて応答が捨てられ、
   コマンドは実行済みなのに console が 3 s タイムアウトする (2 回目の自己レビューで発覚)。`TxClass` は
   既定値を持たせず、旧 `droppable` のような付け忘れを防ぐ。
@@ -85,7 +85,8 @@ loop 停止の影響 (現状の配置):
   - DTR を立てないホスト (pyserial の `dtr=False`、`pio device monitor` の `monitor_dtr=0`、.NET 既定) で
     コマンドは実行されるのに応答が返らなくなる。
   - 起動時の診断 (`SD log -> ...`、IMU WHO_AM_I、config 読込) がポート未オープン時に捨てられる。
-    送信ガード方式なら TX リング (4 × 2 KB) に溜まり、後から開いたホストに届く。
+    送信ガード方式なら TX リングに溜まり、後から開いたホストに届く (debug は Important なので先頭以外の
+    3 本分まで。1 フレームが 1 本を占有するので約 3 件)。
 - console は open 直後に `port.setSignals({ dataTerminalReady: true })` を明示する (Q1)。ファームは起動時に
   DTR を最大 3 s 待つので意味がある。RTS は使わないので触らない (RTS でリセットがかかる機器があるため)。
 - 検証: ホストがポートを閉じる / DTR=0 で開く、のいずれでも `loop_max_us_boot` に 120 ms が出ないこと。
@@ -113,10 +114,9 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
   `loop_max_us_boot` は起動以来の最大で、ポート開閉後に 120 ms 停止が無くなったことを SD を抜かずに確認するための値。
   注意: `save` / `set_config` の flash 消去 (割り込み禁止で約 150 ms、モーター ISR も止まる) もここに記録される。
 - **SD ログ**: LogRecord **v4** (136 → 148 B): `uint32 loop_max_us, sd_max_us` + `uint16 safety_max_us, log_drops`
-  を末尾に追加 (値は `LoopStats::forLog()` = 直前の窓と現在の窓のここまでの大きい方。停止直後のレコードから
+  を末尾に追加 (値は `LoopStats::live()` = 直前の窓と現在の窓のここまでの大きい方。telemetry も同じ値。停止直後のレコードから
   値が上がるので、CSV で `t_ms` の穴と突き合わせられる。4 バイト整列維持。µs を uint16 にすると 65 ms で飽和し、肝心の 120 ms 停止が記録できないため
-  loop/SD は uint32)。値は直近 1 s 窓のもの (全レコード同値で構わない。
-  レコード単位で持つのは「窓の切り出し」を楽にするため)。`SENSOR_LOG_VERSION` 4、
+  loop/SD は uint32)。停止の値は停止直後から次の窓の終わりまで (1〜2 s) のレコードに残る。`SENSOR_LOG_VERSION` 4、
   `decode_log.py` 対応。
 - **console**: DebugLog 見出し付近に `loop max / SD max / drops` の読み出し 1 行 (Q3 決定)。
 
