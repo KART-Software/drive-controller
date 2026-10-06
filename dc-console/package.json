@@ -1,6 +1,7 @@
 {
   "name": "etc-console",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.27.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -23,10 +24,5 @@
     "@preact/preset-vite": "^2.10.5",
     "typescript": "^6.0.2",
     "vite": "^8.0.7"
-  },
-  "pnpm": {
-    "patchedDependencies": {
-      "zimmerframe@1.1.4": "patches/zimmerframe@1.1.4.patch"
-    }
   }
 }
