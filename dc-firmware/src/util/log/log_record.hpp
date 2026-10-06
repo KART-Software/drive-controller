@@ -55,9 +55,13 @@ struct __attribute__((packed)) LogRecord {
     uint8_t exp_phase;  // 0=idle, 1=settling, 2=holding, 3=coasting
     float duty;         // モーター実印加 duty u [%]。停止(コースト)中は 0  ※ caller (v3)
     float vbat;         // バッテリー電圧 [V]。CAN 受信予定 (kart-can 定義待ち、それまで 0) ※ caller (v3)
-    // ── v4: loop 停止の可視化 (LoopStats, 直近 1 s 窓の値。全レコード同値で良い) ※ caller ──
+    // ── v4: loop 停止の可視化 (LoopStats::live() = 直前の窓と現在の窓のここまでの大きい方) ※ caller ──
     uint32_t loop_max_us;    // loop 1 周の最大 [µs] (120 ms 停止を記録するため uint32)
     uint32_t sd_max_us;      // SD write/flush 1 回の最大 [µs]
     uint16_t safety_max_us;  // 安全層 ISR 1 回の最大 [µs] (Phase 2 以降、それまで 0)
     uint16_t log_drops;      // リング溢れ累積 (Phase 3 以降、それまで 0)
 };
+
+// レイアウトを固定する (tools/decode_log.py の RECORD_FMT_V4 と一致させる。変えるなら SENSOR_LOG_VERSION を上げる)
+static_assert(sizeof(LogHeader) == 24, "LogHeader は 24 B (decode_log.py HEADER_FMT)");
+static_assert(sizeof(LogRecord) == 148, "LogRecord v4 は 148 B (decode_log.py RECORD_FMT_V4)");

@@ -19,7 +19,7 @@
   (0=idle 1=settling 2=holding 3=coasting), duty (実印加 duty %, 停止中=0),
   vbat (V, CAN 定義待ちの間は 0)。
   モーター電流は adc4 (MOTOR_CURRENT_CH, ~20mV/A + 50mV オフセット) の生値。
-  v4 追加: loop_max_us / sd_max_us / safety_max_us / log_drops (直近 1 s 窓の loop 停止計測,
+  v4 追加: loop_max_us / sd_max_us / safety_max_us / log_drops (loop 停止計測。直前の 1 s 窓と現在の窓のここまでの大きい方,
   docs/loop_nonblocking_spec.md §5)。v3 ファイルもそのまま読める。
 """
 import csv

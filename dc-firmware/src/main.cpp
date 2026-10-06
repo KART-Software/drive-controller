@@ -146,7 +146,7 @@ void setup() {
     // SD ロギング: カード挿入時のみ有効。RTC 日時 (未設定なら LOGNNNN) で新ファイルを作る。
     sensorLogger.begin();
 
-    // 計測窓の起点。0 のままだと最初の loop で空の窓が確定し、最初の 1 s が全項目 0 (=「停止なし」と区別不能) になる
+    // 計測窓の起点 (setup() の所要は計測しない。最初の窓は最初の loop から 1 s)
     lastStatsMs = millis();
 }
 
@@ -264,7 +264,7 @@ void loop() {
         lastLogTime = now;
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
                                        plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
-                                       loopStats.last());
+                                       loopStats.live());
     }
 
     // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が
@@ -275,7 +275,7 @@ void loop() {
     if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
         lastSdLogMs = now;
         sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter,
-                                        motorController, experimentRunner, loopStats.forLog()));
+                                        motorController, experimentRunner, loopStats.live()));
     }
     sensorLogger.service(now);
 
