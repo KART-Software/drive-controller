@@ -37,9 +37,14 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
+    // PWM 0 と _isOn=false をモーター ISR (優先度 0) に割り込まれずに行う。間に ISR が入ると write(double)
+    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
+    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
+    noInterrupts();
     write(0, 0);
-    digitalWrite(enablePin, LOW);
     _isOn = false;
+    interrupts();
+    digitalWrite(enablePin, LOW);
 }
 
 void DcMotor::pwmSetUp() {
@@ -84,8 +89,13 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
+    // PWM 0 と _isOn=false をモーター ISR (優先度 0) に割り込まれずに行う。間に ISR が入ると write(double)
+    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
+    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
+    noInterrupts();
     write(0, LOW, LOW);
     _isOn = false;
+    interrupts();
 }
 
 void DcMotor::pwmSetUp() {
@@ -125,10 +135,15 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
+    // PWM 0 と _isOn=false をモーター ISR (優先度 0) に割り込まれずに行う。間に ISR が入ると write(double)
+    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
+    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
+    noInterrupts();
     write(0, LOW);
+    _isOn = false;
+    interrupts();
     digitalWrite(relayPin, LOW);
     digitalWrite(slpPin, LOW);
-    _isOn = false;
 }
 
 void DcMotor::pwmSetUp() {
@@ -184,10 +199,15 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
+    // PWM 0 と _isOn=false をモーター ISR (優先度 0) に割り込まれずに行う。間に ISR が入ると write(double)
+    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
+    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
+    noInterrupts();
     write(0, 0);
+    _isOn = false;
+    interrupts();
     digitalWrite(relayPin, LOW);
     digitalWrite(slpPin, LOW);
-    _isOn = false;
 }
 
 void DcMotor::pwmSetUp() {
@@ -234,9 +254,14 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
+    // PWM 0 と _isOn=false をモーター ISR (優先度 0) に割り込まれずに行う。間に ISR が入ると write(double)
+    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
+    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
+    noInterrupts();
     write(0, 0);
-    digitalWrite(relayPin, LOW);
     _isOn = false;
+    interrupts();
+    digitalWrite(relayPin, LOW);
 }
 
 void DcMotor::pwmSetUp() {
