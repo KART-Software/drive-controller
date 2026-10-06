@@ -5,9 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  zimmerframe@1.1.4:
-    hash: abfe28cbc60d59f92454dd50e9b7ce15f31361f6bc77cee9f9f9371ffe4ce75d
-    path: patches/zimmerframe@1.1.4.patch
+  zimmerframe@1.1.4: abfe28cbc60d59f92454dd50e9b7ce15f31361f6bc77cee9f9f9371ffe4ce75d
 
 importers:
 
@@ -936,7 +934,7 @@ snapshots:
       picocolors: 1.1.1
       vite: 8.0.7(yaml@2.8.3)
       vite-prerender-plugin: 0.5.13(vite@8.0.7(yaml@2.8.3))
-      zimmerframe: 1.1.4(patch_hash=abfe28cbc60d59f92454dd50e9b7ce15f31361f6bc77cee9f9f9371ffe4ce75d)
+      zimmerframe: 1.1.4
     transitivePeerDependencies:
       - preact
       - rollup
@@ -1284,4 +1282,4 @@ snapshots:
   yaml@2.8.3:
     optional: true
 
-  zimmerframe@1.1.4(patch_hash=abfe28cbc60d59f92454dd50e9b7ce15f31361f6bc77cee9f9f9371ffe4ce75d): {}
+  zimmerframe@1.1.4: {}

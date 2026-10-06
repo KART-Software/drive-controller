@@ -15,6 +15,10 @@
     u32 errors; i8 gear; u8 mode; u16 _pad
   ADC は生値 (キャリブレーションは別途 config で換算)。IMU は mg / dps (平均後)。
   mode: 0=Calib 1=Normal 2=Restrict 3=MotorOff (EtcTarget::Mode 順, 要確認)。
+  v3 追加: exp_type (0=none 1=dwell 2=release 3=step), exp_index, exp_phase
+  (0=idle 1=settling 2=holding 3=coasting), duty (実印加 duty %, 停止中=0),
+  vbat (V, CAN 定義待ちの間は 0)。
+  モーター電流は adc4 (MOTOR_CURRENT_CH, ~20mV/A + 50mV オフセット) の生値。
 """
 import csv
 import struct
@@ -22,11 +26,12 @@ import sys
 
 HEADER_FMT = "<8sHHIII"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 24
-# v2 (128B): t_ms, adc[8], apps1/apps2/ittr/tps1/tps2/bps, accel[3], gyro[3],
+# v3 (136B): t_ms, adc[8], apps1/apps2/ittr/tps1/tps2/bps, accel[3], gyro[3],
 #            wheel[4], rpm, clutch_rpm, target_tp, clutch, wheel_count[4],
-#            errors, flags, gear, mode, autoshift_state, pad[3]
-RECORD_FMT = "<I8H6f3f3f4f4f4IIHbBB3x"
-RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 128
+#            errors, flags, gear, mode, autoshift_state,
+#            exp_type, exp_index, exp_phase, duty, vbat
+RECORD_FMT = "<I8H6f3f3f4f4f4IIHbBBBBBff"
+RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 136
 
 # flags ビット (firmware: log_record.hpp LOG_FLAG_*)
 FLAG_BITS = [
@@ -45,6 +50,7 @@ COLUMNS = (
     + ["errors", "flags"]
     + [name for name, _ in FLAG_BITS]
     + ["gear", "mode", "autoshift_state"]
+    + ["exp_type", "exp_index", "exp_phase", "duty", "vbat"]
 )
 
 
@@ -91,10 +97,12 @@ def main(argv):
                 rpm, clutch_rpm, target_tp, clutch = v[25:29]
                 wc = v[29:33]
                 errors, flags, gear, mode, ashift = v[33], v[34], v[35], v[36], v[37]
+                exp_type, exp_index, exp_phase, duty, vbat = v[38], v[39], v[40], v[41], v[42]
                 flagbits = [(flags >> b) & 1 for _, b in FLAG_BITS]
                 w.writerow(
                     [t_ms, abs_time, *adc, *conv, *acc, *gyr, *wheel, rpm, clutch_rpm,
-                     target_tp, clutch, *wc, errors, flags, *flagbits, gear, mode, ashift]
+                     target_tp, clutch, *wc, errors, flags, *flagbits, gear, mode, ashift,
+                     exp_type, exp_index, exp_phase, duty, vbat]
                 )
                 n += 1
         dur = n / log_hz if log_hz else 0

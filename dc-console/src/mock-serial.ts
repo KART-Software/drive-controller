@@ -8,6 +8,7 @@ import {
   SensorSchema,
   EtcStateSchema,
   ConfigSchema,
+  DebugMessageSchema,
   EtcMode,
 } from "./proto/drive_controller_pb";
 import type {
@@ -122,6 +123,49 @@ function emitFrame(env: DeviceToHost): void {
   onBytes?.(cobsCrcEncode(pb));
 }
 
+function emitDebug(msg: string): void {
+  emitFrame(
+    create(DeviceToHostSchema, {
+      payload: {
+        case: "debug",
+        value: create(DebugMessageSchema, { timestamp: Date.now() - t0, msg }),
+      },
+    }),
+  );
+}
+
+// ── ETC 同定実験のモック (spec Q18: ボタン→開始/進捗/完了の流れの確認用) ──
+const EXP_STEPS: Record<number, number> = { 1: 221, 2: 111, 3: 110 };
+let expType = 0; // 0=none
+let expTimers: ReturnType<typeof setTimeout>[] = [];
+
+function stopMockExperiment(emitMsg: boolean): void {
+  for (const t of expTimers) clearTimeout(t);
+  expTimers = [];
+  if (expType !== 0 && emitMsg) emitDebug("EXP stop");
+  expType = 0;
+}
+
+function startMockExperiment(type: number): boolean {
+  if (expType !== 0 || !(type in EXP_STEPS)) return false;
+  expType = type;
+  const steps = EXP_STEPS[type];
+  emitDebug(`EXP start type=${type} steps=${steps}`);
+  // 実機より速い縮小タイムライン (~6 秒) で progress → done を流す
+  for (let i = 1; i <= 5; i++) {
+    expTimers.push(
+      setTimeout(() => emitDebug(`EXP progress ${Math.round((steps * i) / 6 / 10) * 10}/${steps}`), i * 1000),
+    );
+  }
+  expTimers.push(
+    setTimeout(() => {
+      emitDebug(`EXP done type=${type} timeouts=0`);
+      stopMockExperiment(true);
+    }, 6000),
+  );
+  return true;
+}
+
 function emitResponse(r: Response): void {
   emitFrame(
     create(DeviceToHostSchema, { payload: { case: "response", value: r } }),
@@ -144,6 +188,8 @@ function sensorTick() {
     Math.min(100, tgt + noise() * 3 + Math.sin(elapsed * 2) * 2 + 0.3),
   );
   const ittr = base * 0.8 + noise();
+  // 実印加 duty のモック: P 項相当を ±100 で飽和 (ファームの lastOutput() と同じ範囲)
+  const mockDuty = Math.max(-100, Math.min(100, pidGains.kP * (tgt - t1)));
   const bpsVal = 14.7 + Math.sin(elapsed * 0.3) * 2 + noise() * 0.5;
 
   // ── 非 ETC モック ──
@@ -188,6 +234,7 @@ function sensorTick() {
     ittr: useIttr,
     valid: true,
     errors: 0,
+    duty: +mockDuty.toFixed(2),
   });
   const state = create(StateSchema, {
     timestamp: Date.now() - t0,
@@ -309,11 +356,19 @@ function handleCommand(cmd: Command): void {
         break;
       }
       case "setEtcManual":
+        if (expType !== 0) {  // 実験中は拒否 (spec Q17)
+          emitResponse(create(ResponseSchema, { id, ok: false }));
+          break;
+        }
         manualMode = !manualMode;
         if (manualMode) manualTarget = 30;
         emitResponse(create(ResponseSchema, { id, ok: true }));
         break;
       case "etcManualAdjust":
+        if (expType !== 0) {  // 実験中は拒否 (spec Q17)
+          emitResponse(create(ResponseSchema, { id, ok: false }));
+          break;
+        }
         manualTarget = Math.max(
           -10,
           Math.min(110, manualTarget + body.value.amount),
@@ -511,8 +566,20 @@ function handleCommand(cmd: Command): void {
         );
         break;
       }
-      case "reboot":
+      case "startEtcExperiment":
+        emitResponse(
+          create(ResponseSchema, { id, ok: startMockExperiment(body.value.type) }),
+        );
+        break;
+      case "stopEtcExperiment":
+        stopMockExperiment(true);
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
       case "etcMotorOff":
+        // 実験中は拒否 (spec Q17 のファーム挙動を再現)
+        emitResponse(create(ResponseSchema, { id, ok: expType === 0 }));
+        break;
+      case "reboot":
       default:
         emitResponse(create(ResponseSchema, { id, ok: true }));
         break;
@@ -548,6 +615,7 @@ export const mockSerial: Transport = {
       clearInterval(timer);
       timer = null;
     }
+    stopMockExperiment(false);
     onDisconnect?.();
   },
   async send(bytes: Uint8Array) {

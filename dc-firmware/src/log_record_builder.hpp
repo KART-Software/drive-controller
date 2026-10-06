@@ -3,6 +3,8 @@
 #include <stdint.h>
 
 #include "can/can_controller.hpp"
+#include "etc/experiment_runner.hpp"
+#include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "shift/auto_shifter.hpp"
@@ -15,4 +17,6 @@ LogRecord buildLogRecord(uint32_t t_ms,
                          const SensorHub& hub,
                          const etc::PlausibilityValidator& plausibility,
                          const CanController& can,
-                         const shift::AutoShifter& shifter);
+                         const shift::AutoShifter& shifter,
+                         const etc::MotorController& motor,
+                         const etc::ExperimentRunner& experiment);

@@ -45,7 +45,12 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 ### clangd
 
-ファームウェアは Arduino/Teensy ツールチェインを使っており clangd が混乱する。`.clangd` + `dc-firmware/.clangd_shim.h` で `-mcpu/-mfpu/-mthumb` 等の非互換フラグを剥がし、`WProgram.h` との `random`/`srandom` 衝突を回避するシムを pre-include している。ツールチェイン変更後に clangd が幻のエラーを出すようなら `compile_commands.json` を再生成 (`pio run` で自動的に走る)。
+ファームウェアは Arduino/Teensy ツールチェインを使うため、clangd には 2 つの補正が要る (`.clangd` + `dc-firmware/.vscode/settings.json`):
+
+1. **システムインクルード**: `compile_commands.json` には newlib / libstdc++ の暗黙パスが入らないので、エディタ側から `--query-driver=${env:HOME}/.platformio/packages/toolchain-gccarmnoneeabi-teensy/bin/arm-none-eabi-*` を渡して g++ から取得する (VS Code 設定に記載済み。他エディタでも同じ引数が必須。無いと `<type_traits>` 等が見つからず大量の幻エラーになる)。
+2. **型マクロの差**: GCC (arm-none-eabi) は `int32_t`/`uint32_t` を `long`/`unsigned long` にするが clang は `int`/`unsigned`。そのままだと Teensy コアの `int32_t random(void)` と newlib の `long random(void)` が衝突するので、`.clangd` で `-D__INT32_TYPE__=long` 等を与えて GCC に合わせている。
+
+`-mcpu/-mfpu/-mfloat-abi/-mthumb` は clang がそのまま解釈できるので剥がさない (剥がすと multilib の選択がずれる)。`.clangd` に**絶対パスを書かないこと** (旧マシンのパスが残って preamble が壊れた前例あり)。ツールチェイン変更後に幻のエラーが出たら `compile_commands.json` を再生成 (`pio run` で自動) し、`clangd --query-driver=... --check=dc-firmware/src/main.cpp` で確認する。
 
 ## アーキテクチャ
 

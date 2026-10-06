@@ -142,7 +142,7 @@ void SerialProtocol::initialize() {
     }
 }
 
-void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler) {
+void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler, float duty) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_sensor_tag;
     dc_State& st = env.payload.sensor;
@@ -202,6 +202,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     e.manual = hub.target().isManual();
     e.ittr = hub.target().isIttr();
     e.valid = isValid;
+    e.duty = duty;  // 実印加 duty (MotorController::lastOutput, ±100 飽和済み)
 
     // Build error bitmask
     e.errors = errorHandler.bits();

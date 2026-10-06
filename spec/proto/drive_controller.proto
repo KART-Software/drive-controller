@@ -143,6 +143,7 @@ message EtcState{
   bool    valid  = 3;
   uint32  errors = 4;  // bitmask: bit0=apps, 1=tps, 2=apps1, 3=apps2, 4=tps1, 5=tps2, 6=target, 7=bps, 8=bps_tps
   bool    ittr   = 5;  // ターゲットが ITTR(CAN指令)由来か (false=APPS)。console のライブ表示用
+  float   duty   = 6;  // モーター実印加 duty [%] (符号=駆動方向, ±100 で飽和, ETC 停止中は 0)
 }
 
 message Sensor{
@@ -358,6 +359,25 @@ message SetRtcCmd {
 
 message FormatFsCmd {}  // LittleFS を消去し、現在の config を書き戻す (設定保持フォーマット)
 
+// ETC 同定実験モード (docs/etc_experiment_mode_spec.md)。
+// 開始条件 (モードノブ≠MOTOR_OFF・エンジン停止・車両静止・plausibility 正常・
+// SD ログ動作中) はファーム側で検証し、満たさなければ ok=false を返す。
+// シーケンス定義はファーム焼き込み:
+//   POINT_DWELL: -5..105% を 1% 刻みで上り→下り (221 点)。静止判定→記録窓 1s
+//   RELEASE:     -5..105% の 1% 刻み各点で保持→コースト (バネ戻り、静止で終了)
+//   STEP:        0..100% の 10% 刻み 11 点×11 点から from==to を除く 110 ペア
+message StartEtcExperimentCmd {
+  enum Type {
+    EXPERIMENT_UNSPECIFIED = 0;
+    POINT_DWELL            = 1;
+    RELEASE                = 2;
+    STEP                   = 3;
+  }
+  Type type = 1;
+}
+
+message StopEtcExperimentCmd {}  // 実行中の実験を中断 (manual 解除 → 通常制御へ復帰)
+
 message SetGpsGearCmd {
   sint32 gear = 1;  // which gear position to calibrate (0=N, 1-6)
 }
@@ -397,6 +417,8 @@ message Command {
     SetClutchMaxCmd            set_clutch_max         = 31;
     SetTransmissionTypeCmd     set_transmission_type  = 32;
     FormatFsCmd                format_fs              = 33;
+    StartEtcExperimentCmd      start_etc_experiment   = 34;
+    StopEtcExperimentCmd       stop_etc_experiment    = 35;
   }
 }
 

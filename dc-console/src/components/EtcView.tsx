@@ -13,6 +13,7 @@ import { TargetBoundTuner } from "./TargetBoundTuner";
 import { TargetCurveTuner } from "./TargetCurveTuner";
 import { CurvePreview } from "./CurvePreview";
 import { ModeKnob } from "./ModeKnob";
+import { ExperimentPanel } from "./ExperimentPanel";
 
 type SetConfig = (
   next: DeviceConfig | null | ((prev: DeviceConfig | null) => DeviceConfig | null),
@@ -72,6 +73,7 @@ export function EtcView({ config, setConfig, addLog, setDirty, logs }: Props) {
       } /></div>
       <div class="area-config">
         <ConfigPanel config={config} onConfigLoaded={setConfig} addLog={addLog} />
+        <ExperimentPanel addLog={addLog} logs={logs} />
       </div>
       <div class="area-log"><DebugLog entries={logs} /></div>
     </main>

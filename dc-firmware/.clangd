@@ -1,10 +1,4 @@
+# ルートの .clangd と併用される (clangd は親ディレクトリの設定をマージする)。
+# フラグ追加/削除はルート側に集約。ここでは CDB の位置だけ明示する。
 CompileFlags:
   CompilationDatabase: .
-  Add:
-    - --include=/home/a000410/Projects/kart/drive-controller/dc-firmware/.clangd_shim.h
-  Remove:
-    - -mthumb
-    - -mcpu=*
-    - -mfloat-abi=*
-    - -mfpu=*
-    - --specs=*

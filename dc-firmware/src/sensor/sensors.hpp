@@ -134,6 +134,7 @@ class EtcTarget {
     bool setManual();
     bool isManual() const;
     double manualAdjust(double amount);
+    double setManualTarget(double value);  // 絶対値セット (MANUAL_MIN..MAX にクランプ)
     void setTargetCurve(const TargetCurve& curve);
 
    private:

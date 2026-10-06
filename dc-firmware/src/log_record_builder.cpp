@@ -4,7 +4,9 @@ LogRecord buildLogRecord(uint32_t t_ms,
                          const SensorHub& hub,
                          const etc::PlausibilityValidator& plausibility,
                          const CanController& can,
-                         const shift::AutoShifter& shifter) {
+                         const shift::AutoShifter& shifter,
+                         const etc::MotorController& motor,
+                         const etc::ExperimentRunner& experiment) {
     LogRecord rec = {};
     rec.t_ms = t_ms;
 
@@ -45,6 +47,11 @@ LogRecord buildLogRecord(uint32_t t_ms,
     rec.gear = hub.gps().getGear();
     rec.mode = (uint8_t)hub.target().getMode();
     rec.autoshift_state = (uint8_t)shifter.state();
+    rec.exp_type = experiment.logType();
+    rec.exp_index = experiment.logIndex();
+    rec.exp_phase = experiment.logPhase();
+    rec.duty = motor.lastOutput();  // 停止中は 0 (setMotorOff でクリア = 常に実印加値)
+    rec.vbat = 0.0f;  // CAN 受信予定 (kart-can のメッセージ定義待ち, spec Q12)
 
     uint16_t f = 0;
     if (hub.target().isManual())

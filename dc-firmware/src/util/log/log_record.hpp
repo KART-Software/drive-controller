@@ -10,7 +10,7 @@
 // ファイル構成: [LogHeader] [LogRecord][LogRecord]...
 
 #define SENSOR_LOG_MAGIC "KARTLOG1"  // 8 文字ちょうど
-#define SENSOR_LOG_VERSION 2
+#define SENSOR_LOG_VERSION 3
 #define SENSOR_LOG_HZ 1000  // 収集レート
 
 // LogRecord.flags のビット。SensorHub が立てるもの / 呼び出し側が立てるものを混在。
@@ -30,7 +30,7 @@ struct __attribute__((packed)) LogHeader {
     uint32_t boot_ms;      // 開始時 millis() (t_ms の基準)
 };
 
-// 128 バイト固定 (4 バイト整列)。u32/float は全て 4 整列オフセットに並べてある。
+// 136 バイト固定 (4 バイト整列)。u32/float は全て 4 整列オフセットに並べてある。
 struct __attribute__((packed)) LogRecord {
     uint32_t t_ms;            // millis() (boot 基準)  ※ caller
     uint16_t adc[8];          // ADC 生 ch0..7  (hub)
@@ -49,5 +49,10 @@ struct __attribute__((packed)) LogRecord {
     int8_t gear;              // -1=不明,0=N,1-6 (hub)
     uint8_t mode;             // EtcTarget::Mode (hub)
     uint8_t autoshift_state;  // shift::AutoShifter::State  ※ caller
-    uint8_t _pad[3];          // 128B へ整列
+    // ── v3: ETC 同定実験モード (etc::ExperimentRunner) ※ caller ──
+    uint8_t exp_type;   // 0=none, 1=point_dwell, 2=release, 3=step
+    uint8_t exp_index;  // シーケンス内インデックス (dwell 0-220 / release 0-110 / step 0-109)
+    uint8_t exp_phase;  // 0=idle, 1=settling, 2=holding, 3=coasting
+    float duty;         // モーター実印加 duty u [%]。停止(コースト)中は 0  ※ caller (v3)
+    float vbat;         // バッテリー電圧 [V]。CAN 受信予定 (kart-can 定義待ち、それまで 0) ※ caller (v3)
 };

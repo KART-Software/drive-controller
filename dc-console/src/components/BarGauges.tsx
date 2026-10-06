@@ -106,6 +106,7 @@ export function BarGauges({ addLog, onDirty }: Props) {
         </div>
         <Bar label="TPS1" value={data.t1} min={0} max={100} color="var(--ok)" />
         <Bar label="TPS2" value={data.t2} min={0} max={100} color="var(--ok)" />
+        <Bar label="DUTY (-100..100)" value={data.duty} min={-100} max={100} color="var(--warn)" />
         <Bar label="BPS" value={data.b} min={0} max={1000} color="var(--err)" />
       </div>
     </section>
