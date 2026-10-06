@@ -47,7 +47,7 @@ class DcMotor {
     void write(double value);
     void on();
     void off();
-    bool isOn();
+    bool isOn() const;
 
    private:
 #ifdef HILITAND

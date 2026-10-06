@@ -38,6 +38,14 @@ class PlausibilityValidator {
     // errorBits = ETC エラービットマスク、currentlyValid = 直近に評価した瞬時 plausibility。
     uint16_t errorBits() const { return errorHandler.bits(); }
     bool currentlyValid() const { return lastCurrentlyValid_; }
+    // ① ラッチ状態 (一度でも違反すると false。isValid() と違い評価しない = 副作用なし)
+    bool validLatched() const { return isValidAllTime; }
+    // 同定実験用: target-vs-TPS チェックを一時停止する。config 由来の targetCheckFlag とは独立なので、
+    // 実験中に set_config / revert / set_plausibility_flags が来ても停止は維持され、終了時に古い値で
+    // フラグを上書きすることもない。再開時は「最後に正常だった時刻」を今にリセットする (停止中の乖離で
+    // 即ラッチしないため)。停止中は判定もエラービットの記録も行わない。
+    void suspendTargetCheck(bool suspend);
+    bool targetCheckSuspended() const { return targetCheckSuspended_; }
     bool appsCheckFlag = false, tpsCheckFlag = false, apps1CheckFlag = false, apps2CheckFlag = false,
          tps1CheckFlag = false, tps2CheckFlag = false, targetCheckFlag = false, bpsCheckFlag = false,
          bpsTpsCheckFlag = false;
@@ -50,6 +58,7 @@ class PlausibilityValidator {
     const EtcTarget& target;
     const Bps& bps;
     bool isValidAllTime;
+    bool targetCheckSuspended_ = false;
     bool lastCurrentlyValid_ = true;  // isCurrentlyValid() の最新結果 (const 参照用キャッシュ)
     unsigned long lastTpsPlausibleTime, lastAppsPlausibleTime, lastTps1CircuitValidTime, lastTps2CircuitValidTime,
         lastApps1CircuitValidTime, lastApps2CircuitValidTime, lastAppsTpsTargetValidTime, lastBpsCircuitValidTime,

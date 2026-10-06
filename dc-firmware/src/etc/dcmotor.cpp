@@ -140,7 +140,7 @@ void DcMotor::pwmSetUp() {
 
 #endif
 
-bool DcMotor::isOn() {
+bool DcMotor::isOn() const {
     return _isOn;
 }
 
