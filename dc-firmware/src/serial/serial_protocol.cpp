@@ -107,9 +107,15 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
 // 旧実装はこの判定を droppable=true のフレームにだけ掛けていたが、telemetry を含め誰も true を渡して
 // おらず判定は死んでいた (docs/loop_nonblocking_spec.md §4)。ホスト不在中に溜まった分 (起動時の debug 等) は
 // リングに残り、後からポートを開いたホストに届く。
+// 優先度: 応答 (Reply) はホストが待っているので最後まで送る。telemetry / debug (Bulk) は TX バッファ 1 本分
+// (TX_RESERVE) を応答用に残して先に捨てる。これが無いと 50 Hz telemetry がリングを埋め、応答が捨てられて
+// console が 3 s タイムアウトする (コマンド自体は実行済みなのに失敗表示 → 再送の危険)。
+// 前提: Teensy 4 コア usb_serial.c の TX は 4 本 × 2048 B で、送り出した順に完了する。
 static_assert(DC_MAX_FRAME < 2048, "送信ガードは 1 フレームが TX_SIZE(2048) に収まる前提");
+constexpr size_t TX_RESERVE = 2048;
+enum class TxClass : uint8_t { Bulk, Reply };
 
-bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct) {
+bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, TxClass cls) {
     uint8_t frame[DC_MAX_FRAME];
     CobsCrcWriter writer;
     writer.init(frame, sizeof(frame));
@@ -122,22 +128,24 @@ bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct) {
     if (len == 0)
         return false;
 
-    if ((size_t)Serial.availableForWrite() < len)
+    size_t need = len + (cls == TxClass::Bulk ? TX_RESERVE : 0);
+    if ((size_t)Serial.availableForWrite() < need)
         return false;  // ホストが読んでいない / 追いつかない: 捨てる (loop を止めない)
 
     Serial.write(frame, len);
     return true;
 }
 
-void sendDeviceMessage(const dc_DeviceToHost& msg) {
-    encodeAndWrite(dc_DeviceToHost_fields, &msg);
+// cls は既定値を持たせない (旧 droppable のように付け忘れて判定が死ぬのを防ぐ)
+void sendDeviceMessage(const dc_DeviceToHost& msg, TxClass cls) {
+    encodeAndWrite(dc_DeviceToHost_fields, &msg, cls);
 }
 
 void sendResponseInternal(const dc_Response& resp) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_response_tag;
     env.payload.response = resp;
-    sendDeviceMessage(env);
+    sendDeviceMessage(env, TxClass::Reply);
 }
 
 }  // namespace
@@ -226,7 +234,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
     st.sys.log_drops = sys.logDrops;
     st.sys.loop_max_us_boot = sys.loopMaxUsBoot;
 
-    sendDeviceMessage(env);
+    sendDeviceMessage(env, TxClass::Bulk);
 }
 
 void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
@@ -237,7 +245,7 @@ void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
 
     vsnprintf(d.msg, sizeof(d.msg), fmt, args);
 
-    sendDeviceMessage(env);
+    sendDeviceMessage(env, TxClass::Bulk);
 }
 
 void SerialProtocol::sendDebugf(const char* fmt, ...) {
