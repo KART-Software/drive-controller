@@ -75,6 +75,10 @@ loop 停止の影響 (現状の配置):
 - 待たない根拠: `usb_serial_write` が待つのは「先頭バッファが満杯で次のバッファがまだ転送中」の時だけ。
   `availableForWrite()` は先頭以外の空きバッファ (2048 B 単位) の合計を返し、バッファはリング順に空く。
   フレーム最大 `DC_MAX_FRAME` < `TX_SIZE` (2048 B、`static_assert` で固定) なので、空きがあれば 1 フレームは必ず収まる。
+- **優先度**: 応答 (Reply) は `>= len`、telemetry / debug (Bulk) は `>= len + 2048` を要求し、TX バッファ
+  1 本分を応答用に残す。全フレームを同列に扱うと 50 Hz telemetry がリングを埋めて応答が捨てられ、
+  コマンドは実行済みなのに console が 3 s タイムアウトする (2 回目の自己レビューで発覚)。`TxClass` は
+  既定値を持たせず、旧 `droppable` のような付け忘れを防ぐ。
 - 当初案の **DTR ゲート (`Serial.dtr()==0` で破棄) は撤回** (自己レビュー 2026-10-06):
   - DTR フラグは SET_CONTROL_LINE_STATE でしか更新されず、ケーブル抜去・バスリセット・サスペンドで
     クリアされない。「console を閉じずにケーブルを抜く」でストールが残る。
@@ -82,8 +86,8 @@ loop 停止の影響 (現状の配置):
     コマンドは実行されるのに応答が返らなくなる。
   - 起動時の診断 (`SD log -> ...`、IMU WHO_AM_I、config 読込) がポート未オープン時に捨てられる。
     送信ガード方式なら TX リング (4 × 2 KB) に溜まり、後から開いたホストに届く。
-- console は open 直後に `port.setSignals({ dataTerminalReady: true, requestToSend: true })` を明示する
-  (無害なので残す。Q1)。
+- console は open 直後に `port.setSignals({ dataTerminalReady: true })` を明示する (Q1)。ファームは起動時に
+  DTR を最大 3 s 待つので意味がある。RTS は使わないので触らない (RTS でリセットがかかる機器があるため)。
 - 検証: ホストがポートを閉じる / DTR=0 で開く、のいずれでも `loop_max_us_boot` に 120 ms が出ないこと。
   DTR=0 のホストでもコマンド応答が返ること。
 
@@ -109,7 +113,8 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
   `loop_max_us_boot` は起動以来の最大で、ポート開閉後に 120 ms 停止が無くなったことを SD を抜かずに確認するための値。
   注意: `save` / `set_config` の flash 消去 (割り込み禁止で約 150 ms、モーター ISR も止まる) もここに記録される。
 - **SD ログ**: LogRecord **v4** (136 → 148 B): `uint32 loop_max_us, sd_max_us` + `uint16 safety_max_us, log_drops`
-  を末尾に追加 (4 バイト整列維持。µs を uint16 にすると 65 ms で飽和し、肝心の 120 ms 停止が記録できないため
+  を末尾に追加 (値は `LoopStats::forLog()` = 直前の窓と現在の窓のここまでの大きい方。停止直後のレコードから
+  値が上がるので、CSV で `t_ms` の穴と突き合わせられる。4 バイト整列維持。µs を uint16 にすると 65 ms で飽和し、肝心の 120 ms 停止が記録できないため
   loop/SD は uint32)。値は直近 1 s 窓のもの (全レコード同値で構わない。
   レコード単位で持つのは「窓の切り出し」を楽にするため)。`SENSOR_LOG_VERSION` 4、
   `decode_log.py` 対応。
@@ -249,7 +254,7 @@ launch (凍結)、telemetry、SD 書き出し + sync、コマンド処理、イ�
 
 | Q | 決定 |
 |---|---|
-| Q1 | console は open 直後に `setSignals` で DTR/RTS を明示。ファーム側の DTR ゲートは自己レビューで撤回し、全フレームの送信ガードに置換 (§4) |
+| Q1 | console は open 直後に `setSignals` で DTR を明示 (RTS は触らない)。ファーム側の DTR ゲートは自己レビューで撤回し、全フレームの送信ガードに置換 (§4) |
 | Q2 | `SysStats` は 50 Hz の State に同梱 |
 | Q3 | console 表示は読み出し 1 行 |
 | Q4 | `safetyISR` (安全層 ISR) = 3 本目の IntervalTimer ISR、1 ms、優先度 64。名前は「安全のための ISR」と分かるものにする (supervisor は別概念と衝突、arming は一工程に過ぎないため不採用) |

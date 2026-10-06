@@ -60,7 +60,7 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 1. **モーター制御 ISR** — `IntervalTimer`, 周期 1 ms, NVIC 優先度 **0 (最高)**。センサー状態を読み、PID を回し、PWM を書き出す。`motor_controller.cycle()`。
 2. **センサーサンプリング ISR** — `IntervalTimer`, 周期 125 µs (8 kHz)。既定 (`-DADC_DMA`, platformio.ini) では ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleAdcDmaIsr()`)。NVIC 優先度は **208** (USB より下) にして USB 送受信を阻害しないようにする。`-DADC_DMA` を外すとブロッキング読み (`sensor_hub.read()`) を `loop()` で行うフォールバックになる。
-3. **`loop()`** — 非 ISR: IMU 読み (DMA 経路では ADC と分離)、CAN poll/send (60 Hz)、パルスカウンタ更新 (車輪速 + RPM)、プラウシビリティチェック、シリアルプロトコル、コマンドディスパッチ、オートシフター tick (毎イテレーション)、launch FSM tick (凍結時はビルドから除外)、SD ロギング (1kHz, カード挿入時)。テレメトリ送信は TX バッファ満杯時にドロップする (loop をブロックさせない, `serial_protocol.cpp`)。
+3. **`loop()`** — 非 ISR: IMU 読み (DMA 経路では ADC と分離)、CAN poll/send (60 Hz)、パルスカウンタ更新 (車輪速 + RPM)、プラウシビリティチェック、シリアルプロトコル、コマンドディスパッチ、オートシフター tick (毎イテレーション)、launch FSM tick (凍結時はビルドから除外)、SD ロギング (1kHz, カード挿入時)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。telemetry / debug は TX バッファ 1 本分 (2 KB) を応答用に残して先に捨てるので、コマンド応答は最後まで届く。
 
 ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は既に `sum` の読み取りを `noInterrupts()` で守っている — このパターンを踏襲すること。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
 
