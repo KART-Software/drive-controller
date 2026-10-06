@@ -107,13 +107,15 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
 // 旧実装はこの判定を droppable=true のフレームにだけ掛けていたが、telemetry を含め誰も true を渡して
 // おらず判定は死んでいた (docs/loop_nonblocking_spec.md §4)。ホスト不在中に溜まった分 (起動時の debug 等) は
 // リングに残り、後からポートを開いたホストに届く。
-// 優先度: 応答 (Reply) はホストが待っているので最後まで送る。telemetry / debug (Bulk) は TX バッファ 1 本分
+// 優先度: 応答と debug (Important) は最後まで送る。telemetry (Bulk) は TX バッファ 1 本分
 // (TX_RESERVE) を応答用に残して先に捨てる。これが無いと 50 Hz telemetry がリングを埋め、応答が捨てられて
 // console が 3 s タイムアウトする (コマンド自体は実行済みなのに失敗表示 → 再送の危険)。
 // 前提: Teensy 4 コア usb_serial.c の TX は 4 本 × 2048 B で、送り出した順に完了する。
 static_assert(DC_MAX_FRAME < 2048, "送信ガードは 1 フレームが TX_SIZE(2048) に収まる前提");
 constexpr size_t TX_RESERVE = 2048;
-enum class TxClass : uint8_t { Bulk, Reply };
+// Bulk = 50 Hz telemetry (次のフレームが来るので捨ててよい)。Important = 応答と debug (一度きり: EXP abort の
+// 理由、起動時診断など)。debug は頻度が低いので応答と同じ扱いにしても予約を食い潰さない。
+enum class TxClass : uint8_t { Bulk, Important };
 
 bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, TxClass cls) {
     uint8_t frame[DC_MAX_FRAME];
@@ -145,7 +147,7 @@ void sendResponseInternal(const dc_Response& resp) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_response_tag;
     env.payload.response = resp;
-    sendDeviceMessage(env, TxClass::Reply);
+    sendDeviceMessage(env, TxClass::Important);
 }
 
 }  // namespace
@@ -245,7 +247,7 @@ void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
 
     vsnprintf(d.msg, sizeof(d.msg), fmt, args);
 
-    sendDeviceMessage(env, TxClass::Bulk);
+    sendDeviceMessage(env, TxClass::Important);
 }
 
 void SerialProtocol::sendDebugf(const char* fmt, ...) {
