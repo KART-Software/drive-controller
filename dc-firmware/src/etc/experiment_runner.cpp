@@ -40,11 +40,12 @@ double stepToTp(uint16_t k) {
 }  // namespace
 
 ExperimentRunner::ExperimentRunner(const SensorHub& hub,
+                                   const ControlInput& control,
                                    EtcTarget& target,
                                    const MotorController& motor,
                                    PlausibilityValidator& validator,
                                    const SensorLogger& logger)
-    : hub_(hub), target_(target), motor_(motor), validator_(validator), logger_(logger) {}
+    : hub_(hub), control_(control), target_(target), motor_(motor), validator_(validator), logger_(logger) {}
 
 uint16_t ExperimentRunner::totalSteps() const {
     switch (type_) {
@@ -76,8 +77,7 @@ bool ExperimentRunner::preconditionsOk() const {
     if (active())
         return false;  // 二重開始拒否
     // MOTOR_OFF はアーミング③が ETC を止めるため実験が進行できない (spec Q11)。
-    // 注: CONTROL_INPUT_VIA_CAN ビルドでも実験は GPIO ノブを直接見る (ベンチ専用機能)。
-    if (selectToEtcMode(hub_.modeSwitch().getStatus()) == CanEtcMode::MOTOR_OFF)
+    if (control_.etcMode() == EtcTarget::Mode::MotorOff)
         return false;
     if (hub_.pulseEngine().getFrequencyHz() > 0.5f)  // エンジン停止
         return false;
@@ -187,7 +187,7 @@ void ExperimentRunner::advance(unsigned long now) {
 }
 
 bool ExperimentRunner::guardsOk(unsigned long now) {
-    if (selectToEtcMode(hub_.modeSwitch().getStatus()) == CanEtcMode::MOTOR_OFF) {
+    if (control_.etcMode() == EtcTarget::Mode::MotorOff) {
         SerialProtocol::sendDebugf("EXP abort: MOTOR_OFF knob");
         return false;
     }

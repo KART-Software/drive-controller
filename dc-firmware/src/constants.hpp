@@ -165,46 +165,28 @@
 #define CAN_BITRATE 1000000       // 1 Mbps
 #define CAN_TX_INTERVAL_MS 16     // ~60Hz
 // CAN ID / メッセージ定義は kart-can (submodule: dc-firmware/lib/kart-can, 生成 kart_can.h) を単一ソースとする:
-//   TX: KART_CAN_DC_GYRO_XY / GYRO_Z_GEAR / ACCEL_XY / ACCEL_Z_FRAME_ID (0x600-0x603)
-//   RX: KART_CAN_KART_CONTROL_FRAME_ID (0x740, byte0=mode / byte1=launch / byte2=auto-shift)
+//   TX: 0x600-0x603 (IMU + ギア, CAN_TX_INTERVAL_MS) / 0x60A DC_Status (CAN_STATUS_INTERVAL_MS)
+//   RX: 0x740 Control (data_logger → ETC モード / launch / auto-shift / starter, 33 ms)
+//       0x741 Shift   (data_logger → シフトパドル上下, 10 ms)
+// 制御入力は CAN のみ (GPIO のモードノブ / スイッチ / パドルは廃止, docs/control_input_spec.md)。
+#define CAN_STATUS_INTERVAL_MS 33
 
-// 制御フレームが本値以上途絶したら各値を安全側へ戻す (フェールセーフ):
-//   launch → false, mode → NORMAL(MOTOR_OFF はラッチ), auto-shift → OFF(manual)
+// 途絶したら安全側へ戻す (kart-can docs/can-spec.md §4.1):
+//   Control: launch → false, mode → NORMAL (MOTOR_OFF はラッチ), auto-shift → OFF (manual), starter → 0
+//   Shift:   両パドル → 0
+// 起動後に一度も受信していない間は途絶扱いにしない (ETC モードは ControlInput が MOTOR_OFF で待たせる)。
 #define CAN_CONTROL_TIMEOUT_MS 200
-
-///////////////////////////////////
-/// 制御入力 (Control Input)     ///
-///////////////////////////////////
-
-// 制御信号 (ETC モード / auto-shift ON-OFF) の入力源。
-// CAN(0x740) 制御入力は一旦凍結し、GPIO 直入力を使う (既定)。
-// CAN 制御入力に戻すときは下を有効化 → main.cpp / can_data.cpp / log_record_builder.cpp が
-// CAN 経路へ切り替わる (0x740 の受信パースが復活)。
-// #define CONTROL_INPUT_VIA_CAN
-
-// ETC モード選択: 3 ピン セレクタ (SelectSwitch3Pin, 各ピン GND=選択 / 内部プルアップ)。
-// ポジション→モードの対応:
-//   未選択=CALIB / First(PIN_1)=NORMAL / Second(PIN_2)=RESTRICTED / Third(PIN_3)=MOTOR_OFF
-#define MODE_SELECT_SW_PIN_1 6
-#define MODE_SELECT_SW_PIN_2 7
-#define MODE_SELECT_SW_PIN_3 8
-
-// auto-shift ON/OFF: 単一トグル (ToggleSwitch 既定 = GND=ON=auto / 開放=OFF=manual)。
-#define AUTO_SHIFT_SW_PIN 41
-// launch は凍結中のため GPIO 入力なし (常に false)。
+#define CAN_SHIFT_TIMEOUT_MS 100
 
 ///////////////////////////////
 /// Auto Shifter (GPIO)     ///
 ///////////////////////////////
 
-// GPIO のみ (digitalRead/Write)。SPI1(0,1,26,27)・SPI0(10-13)・CAN3(30,31)・
+// 出力 GPIO。SPI1(0,1,26,27)・SPI0(10-13)・CAN3(30,31)・
 // モーター(20-23)・車輪速(24,25,28,36)・RPM(14,15) と被らない空きピンを使う。
-#define AUTO_SHIFT_UP_IN_PIN 40
-#define AUTO_SHIFT_DOWN_IN_PIN 39
 #define AUTO_SHIFT_UP_OUT_PIN 4
 #define AUTO_SHIFT_DOWN_OUT_PIN 5
-// 入力はプルアップ前提 (押下=LOW)。出力はアサート=HIGH。
-#define AUTO_SHIFT_IN_ACTIVE LOW
+// シフト信号の出力 (パドル入力は CAN 0x741)。アサート=HIGH。
 #define AUTO_SHIFT_OUT_ACTIVE HIGH
 #define AUTO_SHIFT_OUT_INACTIVE LOW
 

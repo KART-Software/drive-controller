@@ -260,13 +260,32 @@ void stopEtcExperiment(void* ctx, const dc_Command& cmd) {
     SerialProtocol::sendResponse(cmd.id, true);
 }
 
+// 制御入力の上書き (ベンチ用)。0x740 受信中は ControlInput が拒否する。
+void setControlOverride(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    const dc_SetControlOverrideCmd& d = cmd.body.set_control_override;
+    if (!d.enable) {
+        c->controlInput.clearOverride();
+        SerialProtocol::sendResponse(cmd.id, true);
+        return;
+    }
+    const ControlInput::Override o = {
+        .hasEtcMode = d.has_etc_mode,
+        .etcMode = etcModeFromProto(d.etc_mode),
+        .hasAutoShift = d.has_auto_shift,
+        .autoShift = d.auto_shift,
+    };
+    SerialProtocol::sendResponse(cmd.id, c->controlInput.setOverride(o));
+}
+
 }  // namespace
 
 CommandController::CommandController(Configurator& configurator,
                                      etc::MotorController& motorController,
                                      EtcTarget& target,
-                                     etc::ExperimentRunner& experimentRunner)
-    : container{configurator, motorController, target, experimentRunner} {}
+                                     etc::ExperimentRunner& experimentRunner,
+                                     ControlInput& controlInput)
+    : container{configurator, motorController, target, experimentRunner, controlInput} {}
 
 void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_etc_motor_off_tag, etcMotorOff, &container);
@@ -295,4 +314,5 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_format_fs_tag, formatFs, &container);
     router.on(dc_Command_start_etc_experiment_tag, startEtcExperiment, &container);
     router.on(dc_Command_stop_etc_experiment_tag, stopEtcExperiment, &container);
+    router.on(dc_Command_set_control_override_tag, setControlOverride, &container);
 }

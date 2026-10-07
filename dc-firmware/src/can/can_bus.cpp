@@ -13,16 +13,8 @@ void CanBus::send(const CanTxData& data) {
         can1.write(f);
 }
 
-void CanBus::sendControl(CanEtcMode mode, bool autoShift) {
-    struct kart_can_control_t c = {};
-    c.etc_mode = static_cast<uint8_t>(mode);
-    c.launch_active = 0;  // launch は凍結中 (GPIO 入力なし)
-    c.auto_shift = autoShift ? 1 : 0;
-    CAN_message_t msg = {};
-    msg.id = KART_CAN_CONTROL_FRAME_ID;
-    msg.len = KART_CAN_CONTROL_LENGTH;
-    kart_can_control_pack(msg.buf, &c, sizeof(msg.buf));
-    can1.write(msg);
+void CanBus::send(const CanStatusData& status) {
+    can1.write(status.toFrame());
 }
 
 std::optional<CAN_message_t> CanBus::read() {

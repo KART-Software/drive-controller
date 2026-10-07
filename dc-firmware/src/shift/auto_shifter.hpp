@@ -35,8 +35,15 @@ class AutoShifter {
     void setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx, uint32_t engineTeeth);
     // 毎ループ呼ぶ。autoOn = CAN オートシフト指令 (0x740 byte2, ON=auto / OFF=manual)。
     // オートシフターは ETC プラウシビリティに依存しない (安全フォールバックは CAN 断→manual,
-    // can_data.checkTimeouts)。ETC の停止/安全は別系統 (main.cpp の ETC アーミング)。
-    void update(bool autoOn);
+    // ControlInput::update)。ETC の停止/安全は別系統 (main.cpp の ETC アーミング)。
+    // 入力はすべて呼び出し側から渡す (入手元 = ControlInput: CAN 0x740 / 0x741 または console override)。
+    // パドルは押下状態 (レベル) で渡し、立ち上がり検出はここで行う。
+    struct Inputs {
+        bool autoOn;       // オートシフト ON
+        bool upPressed;    // シフトアップパドル押下中
+        bool downPressed;  // シフトダウンパドル押下中
+    };
+    void update(const Inputs& in);
 
     enum class State { Idle, Pulsing, Cooldown };
     State state() const { return state_; }
@@ -77,8 +84,6 @@ class AutoShifter {
     bool manualOverride_ = false;
 
     // -- helpers --
-    bool readUpIn() const;
-    bool readDownIn() const;
     void writeOutputs(bool up, bool down);
     float engineRpm() const;
     float wheelHz() const;

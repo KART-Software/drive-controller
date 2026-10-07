@@ -9,6 +9,7 @@ class CanController {
     explicit CanController(const SensorHub& sensorHub);
     void begin();
     void send();  // Call at 60Hz: build CanTxData from sensorHub and send
+    void sendStatus(const CanStatusData& status);  // 0x60A, 33 ms
     void poll();  // Drain RX FIFO into rxData_
     const CanRxData& rxData() const { return rxData_; }
 
