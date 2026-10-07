@@ -19,6 +19,7 @@
 #include "util/log/debug_logger.hpp"
 #include "util/log/sd_binary_writer.hpp"
 #include "util/log/sensor_logger.hpp"
+#include "util/loop_stats.hpp"
 
 IntervalTimer motorControlTimer;
 IntervalTimer sensorSamplingTimer;
@@ -46,7 +47,8 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.gps(),
                                sensorHub.apps1());
 SdBinaryWriter sdWriter;
-SensorLogger sensorLogger(sdWriter);
+LoopStats loopStats;  // loop/SD/安全層 ISR の所要時間 (1 s 窓)。telemetry + SD ログへ
+SensorLogger sensorLogger(sdWriter, loopStats);
 // ETC 同定実験モード (ベンチ専用, docs/etc_experiment_mode_spec.md)。目標注入は
 // manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
 // 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
@@ -89,6 +91,8 @@ void stopEtc() {
     motorController.setMotorOff();  // 先に PWM=0/出力停止 (cycle の write は _isOn=false で no-op)
     motorControlTimer.end();        // その後 ISR を止める
 }
+
+unsigned long lastStatsMs = 0;  // 計測窓 (LoopStats) の起点。setup() 末尾で初期化
 
 void setup() {
     SerialProtocol::initialize();
@@ -141,6 +145,9 @@ void setup() {
 
     // SD ロギング: カード挿入時のみ有効。RTC 日時 (未設定なら LOGNNNN) で新ファイルを作る。
     sensorLogger.begin();
+
+    // 計測窓の起点 (setup() の所要は計測しない。最初の窓は最初の loop から 1 s)
+    lastStatsMs = millis();
 }
 
 unsigned long lastLogTime = 0;
@@ -152,7 +159,14 @@ unsigned long lastSdLogMs = 0;
 // selectToEtcMode() は can_data.hpp/cpp に移動 (CanController の CAN 出力と共有)。
 
 void loop() {
+    loopStats.tick(micros());  // 前回 loop 先頭からの経過 = 1 周の所要 (停止の可視化)
     unsigned long now = millis();
+    // 計測窓の確定 (1 s)。tick 直後に置くので、直前の周 (= tick が計上した周) とその周の SD 所要が
+    // 同じ窓に入る (末尾に置くと SD 所要だけ 1 窓先行して組み合わせがずれる)
+    if ((uint32_t)(now - lastStatsMs) >= 1000) {
+        lastStatsMs = now;
+        loopStats.rollover(0 /* log_drops: Phase 3 */);
+    }
 
 #ifdef ADC_DMA
     sensorHub.readImu();  // ADC は 8kHz DMA ISR でサンプリング済み。loop は IMU のみ
@@ -249,19 +263,19 @@ void loop() {
     if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {
         lastLogTime = now;
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
-                                       plausibilityValidator.getErrorHandler(), motorController.lastOutput());
+                                       plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
+                                       loopStats.live());
     }
 
     // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が
     // 止まりサンプルが空く (レアな小ギャップ)。完全ギャップレスが要れば ISR 収集化する。
-    // TODO[実機計測]: 実カードで sensorLogger.log()/service() の最悪所要時間を micros()
-    // で計測する (通常はキャッシュへ memcpy で数us、512B セクタ書込で ~100-500us、1s 毎の
-    // flush で ~ms〜まれに数十ms)。loop への影響 (CAN/テレメトリ/コマンド遅延) を確認し、
-    // 長すぎれば SYNC_INTERVAL_MS 調整 or リングバッファ+ISR 収集へ変更を検討。
+    // SD の所要時間は LoopStats が計測している (telemetry SysStats.sd_max_us / LogRecord v4 sd_max_us)。
+    // 毎秒の flush で数 ms、カード遅延で数十 ms の停止がある。解消は Phase 3 (リングバッファ + ISR 採取,
+    // docs/loop_nonblocking_spec.md §7)。
     if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
         lastSdLogMs = now;
         sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter,
-                                        motorController, experimentRunner));
+                                        motorController, experimentRunner, loopStats.live()));
     }
     sensorLogger.service(now);
 

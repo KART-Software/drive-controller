@@ -99,10 +99,25 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
     return !w->overflow;
 }
 
-// droppable=true のフレーム(=高頻度テレメトリ)は、USB TX バッファに空きが無ければ
-// 送らずに捨てる。これがないと Serial.write がバッファ満杯でブロックし、loop() が止まって
-// コマンド受信/応答(commandRouter.poll)が滞り、ホスト側が 3s タイムアウトする。
-bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, bool droppable = false) {
+// 送信ガード: USB TX リングに 1 フレーム分の空きが無ければ送らずに捨てる (telemetry / 応答 / debug 共通)。
+// usb_serial_write は空きが無いと先頭バッファの完了を最大 TX_TIMEOUT_MSEC (120 ms) 待ち、その間 loop() が
+// 止まる (ホストがポートを閉じた / 読み出しが詰まった / ケーブル抜去)。バッファはリング順に空き、
+// availableForWrite() は先頭以外の空きバッファ (2048 B 単位) の合計を返す。フレーム最大 DC_MAX_FRAME は
+// TX_SIZE (2048) 未満なので、availableForWrite() >= len なら write は決して待たない。
+// 旧実装はこの判定を droppable=true のフレームにだけ掛けていたが、telemetry を含め誰も true を渡して
+// おらず判定は死んでいた (docs/loop_nonblocking_spec.md §4)。ホスト不在中に溜まった分 (起動時の debug 等) は
+// リングに残り、後からポートを開いたホストに届く。
+// 優先度: 応答と debug (Important) は最後まで送る。telemetry (Bulk) は TX バッファ 1 本分
+// (TX_RESERVE) を応答用に残して先に捨てる。これが無いと 50 Hz telemetry がリングを埋め、応答が捨てられて
+// console が 3 s タイムアウトする (コマンド自体は実行済みなのに失敗表示 → 再送の危険)。
+// 前提: Teensy 4 コア usb_serial.c の TX は 4 本 × 2048 B で、送り出した順に完了する。
+static_assert(DC_MAX_FRAME < 2048, "送信ガードは 1 フレームが TX_SIZE(2048) に収まる前提");
+constexpr size_t TX_RESERVE = 2048;
+// Bulk = 50 Hz telemetry (次のフレームが来るので捨ててよい)。Important = 応答と debug (一度きり: EXP abort の
+// 理由、起動時診断など)。debug は頻度が低いので応答と同じ扱いにしても予約を食い潰さない。
+enum class TxClass : uint8_t { Bulk, Important };
+
+bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, TxClass cls) {
     uint8_t frame[DC_MAX_FRAME];
     CobsCrcWriter writer;
     writer.init(frame, sizeof(frame));
@@ -115,22 +130,24 @@ bool encodeAndWrite(const pb_msgdesc_t* fields, const void* src_struct, bool dro
     if (len == 0)
         return false;
 
-    if (droppable && (size_t)Serial.availableForWrite() < len)
-        return false;  // ホストの取り込みが追いつかない: テレメトリをドロップ (loop を止めない)
+    size_t need = len + (cls == TxClass::Bulk ? TX_RESERVE : 0);
+    if ((size_t)Serial.availableForWrite() < need)
+        return false;  // ホストが読んでいない / 追いつかない: 捨てる (loop を止めない)
 
     Serial.write(frame, len);
     return true;
 }
 
-void sendDeviceMessage(const dc_DeviceToHost& msg, bool droppable = false) {
-    encodeAndWrite(dc_DeviceToHost_fields, &msg, droppable);
+// cls は既定値を持たせない (旧 droppable のように付け忘れて判定が死ぬのを防ぐ)
+void sendDeviceMessage(const dc_DeviceToHost& msg, TxClass cls) {
+    encodeAndWrite(dc_DeviceToHost_fields, &msg, cls);
 }
 
 void sendResponseInternal(const dc_Response& resp) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_response_tag;
     env.payload.response = resp;
-    sendDeviceMessage(env);
+    sendDeviceMessage(env, TxClass::Important);
 }
 
 }  // namespace
@@ -142,7 +159,11 @@ void SerialProtocol::initialize() {
     }
 }
 
-void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const etc::ErrorHandler& errorHandler, float duty) {
+void SerialProtocol::sendSensorData(const SensorHub& hub,
+                                    bool isValid,
+                                    const etc::ErrorHandler& errorHandler,
+                                    float duty,
+                                    const LoopStats::Snapshot& sys) {
     dc_DeviceToHost env = dc_DeviceToHost_init_zero;
     env.which_payload = dc_DeviceToHost_sensor_tag;
     dc_State& st = env.payload.sensor;
@@ -207,7 +228,15 @@ void SerialProtocol::sendSensorData(const SensorHub& hub, bool isValid, const et
     // Build error bitmask
     e.errors = errorHandler.bits();
 
-    sendDeviceMessage(env);
+    st.has_sys = true;
+    st.sys.loop_max_us = sys.loopMaxUs;
+    st.sys.loop_mean_us = sys.loopMeanUs;
+    st.sys.sd_max_us = sys.sdMaxUs;
+    st.sys.safety_max_us = sys.safetyMaxUs;
+    st.sys.log_drops = sys.logDrops;
+    st.sys.loop_max_us_boot = sys.loopMaxUsBoot;
+
+    sendDeviceMessage(env, TxClass::Bulk);
 }
 
 void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
@@ -218,7 +247,7 @@ void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
 
     vsnprintf(d.msg, sizeof(d.msg), fmt, args);
 
-    sendDeviceMessage(env);
+    sendDeviceMessage(env, TxClass::Important);
 }
 
 void SerialProtocol::sendDebugf(const char* fmt, ...) {

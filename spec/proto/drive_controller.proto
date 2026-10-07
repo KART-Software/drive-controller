@@ -192,11 +192,22 @@ message Sensor{
   float clutch_rpm = 35;  // クラッチ後(出力軸)の回転 [Hz] (engine_teeth と同様に要換算)
 }
 
+// loop() / SD / 安全層 ISR の所要時間 (直近に完了した 1 s 窓)。docs/loop_nonblocking_spec.md §5
+message SysStats {
+  uint32 loop_max_us      = 1;  // loop 1 周の最大 [µs]
+  uint32 loop_mean_us     = 2;  // 平均
+  uint32 sd_max_us        = 3;  // SD write/flush 1 回の最大
+  uint32 safety_max_us    = 4;  // 安全層 ISR 1 回の最大 (Phase 2 以降、それまで 0)
+  uint32 log_drops        = 5;  // リング溢れ累積 (Phase 3 以降、それまで 0)
+  uint32 loop_max_us_boot = 6;  // 起動以来の loop 1 周の最大
+}
+
 message State {
   uint32 timestamp = 1;
 
   Sensor   sensor = 2;
   EtcState etc    = 3;
+  SysStats sys    = 4;
 }
 
 message DebugMessage {
