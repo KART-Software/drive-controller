@@ -40,7 +40,7 @@ export function ExperimentPanel({ addLog, logs }: Props) {
     for (let i = logs.length - 1; i >= 0; i--) {
       const m = logs[i].msg;
       if (!m.startsWith("EXP ")) continue;
-      if (m.startsWith("EXP start")) return true;
+      if (m.startsWith("EXP start") || m.startsWith("EXP progress")) return true;
       return false; // done / stop / abort はいずれも終了
     }
     return false;
@@ -54,7 +54,8 @@ export function ExperimentPanel({ addLog, logs }: Props) {
       if (!resp.ok) {
         addLog(
           `実験開始が拒否されました (${exp.label})。前提条件を確認: ` +
-            "エンジン停止 / 車両静止 / SD カード挿入 / モードノブ≠MOTOR_OFF / plausibility 正常",
+            "ETC 稼働中 (SIG_IN=HIGH・モーター ON) / plausibility 正常 (未ラッチ) / エンジン停止 / 車両静止 / " +
+            "SD カード挿入 / モードノブ≠MOTOR_OFF",
         );
       }
     } catch (err) {

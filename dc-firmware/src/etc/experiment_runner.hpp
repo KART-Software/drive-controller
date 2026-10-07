@@ -78,7 +78,6 @@ class ExperimentRunner {
     unsigned long stallSinceMs_ = 0;
     float stallRefTp_ = 0.0f;
 
-    bool savedTargetCheckFlag_ = false;
 };
 
 }  // namespace etc

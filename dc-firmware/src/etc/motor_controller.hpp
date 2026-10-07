@@ -13,7 +13,7 @@ class MotorController {
     void cycle();
     void setMotorOn();
     void setMotorOff();
-    bool isOn();
+    bool isOn() const;
     void setPidGains(double kP, double kI, double kD);
     // 直近の実印加 duty (%)。±DC_MOTOR_OUTPUT_SCALE_MAX で飽和済み (= DcMotor の実出力)。
     // ISR が書き loop が読む: float の 32bit ストアは
