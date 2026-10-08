@@ -252,7 +252,7 @@ void startEtcExperiment(void* ctx, const dc_Command& cmd) {
     }
     // 前提条件 (spec §5: ノブ≠MOTOR_OFF・エンジン停止・車両静止・plausibility・SD) は
     // start() が検証し、不成立なら false 応答になる。
-    SerialProtocol::sendResponse(cmd.id, c->experimentRunner.start(t));
+    SerialProtocol::sendResponse(cmd.id, c->experimentRunner.start(t, millis()));
 }
 
 void stopEtcExperiment(void* ctx, const dc_Command& cmd) {

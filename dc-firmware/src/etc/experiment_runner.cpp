@@ -95,7 +95,7 @@ bool ExperimentRunner::preconditionsOk() const {
     return true;
 }
 
-bool ExperimentRunner::start(Type type) {
+bool ExperimentRunner::start(Type type, unsigned long now) {
     if (type == Type::None || !preconditionsOk())
         return false;
     // target-vs-TPS チェックはコースト/大ステップで必ず乖離するため一時無効化。
@@ -109,7 +109,7 @@ bool ExperimentRunner::start(Type type) {
     timeoutCount_ = 0;
     stallSinceMs_ = 0;
     target_.setManualTarget(currentTargetTp());
-    enterPhase(Phase::Settling, millis());
+    enterPhase(Phase::Settling, now);
     SerialProtocol::sendDebugf("EXP start type=%u steps=%u", (unsigned)type_, totalSteps());
     return true;
 }

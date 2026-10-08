@@ -1,13 +1,7 @@
 #include "log_record_builder.hpp"
 
-LogRecord buildLogRecord(uint32_t t_ms,
-                         const SensorHub& hub,
-                         const etc::PlausibilityValidator& plausibility,
-                         const CanController& can,
-                         const shift::AutoShifter& shifter,
-                         const etc::MotorController& motor,
-                         const etc::ExperimentRunner& experiment,
-                         const LoopStats::Snapshot& sys) {
+LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::Snapshot& sys) {
+    const auto& [hub, plausibility, can, shifter, motor, experiment] = src;
     static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
     const Adc& adc = hub.adc();
     const Imu* imu = hub.imu();

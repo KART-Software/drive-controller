@@ -33,7 +33,7 @@ class ExperimentRunner {
                      PlausibilityValidator& validator,
                      const SensorLogger& logger);
 
-    bool start(Type type);  // 前提条件 (§5) を満たさなければ false
+    bool start(Type type, unsigned long now);  // 前提条件 (§5) を満たさなければ false
     void stop();            // 完走/中断共通の後始末 (manual 解除・チェックフラグ復元)
     void tick(unsigned long now);
 
