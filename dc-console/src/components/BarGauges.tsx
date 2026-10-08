@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "preact/hooks";
 import type { SensorData } from "../types";
 import { protocol } from "../protocol";
-import { sensorStore } from "../sensor-store";
+import { useLatestSensor } from "../hooks/useSensorValue";
 
 interface BarProps {
   label: string;
@@ -34,15 +33,8 @@ interface Props {
 }
 
 export function BarGauges({ addLog, onDirty }: Props) {
-  const [data, setData] = useState<SensorData | null>(null);
+  const data = useLatestSensor();
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setData(d);
-    }, 100); // 10Hz
-    return () => clearInterval(iv);
-  }, []);
   if (!data) {
     return (
       <section>

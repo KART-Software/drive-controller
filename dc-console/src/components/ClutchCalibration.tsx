@@ -1,7 +1,6 @@
-import { useState, useEffect } from "preact/hooks";
 import type { DeviceConfig, SensorData } from "../types";
 import { protocol } from "../protocol";
-import { sensorStore } from "../sensor-store";
+import { useLatestSensor } from "../hooks/useSensorValue";
 
 interface Props {
   config: DeviceConfig | null;
@@ -11,14 +10,7 @@ interface Props {
 }
 
 export function ClutchCalibration({ config, addLog, onConfigUpdate, onDirty }: Props) {
-  const [live, setLive] = useState<SensorData | null>(null);
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setLive(d);
-    }, 100);
-    return () => clearInterval(iv);
-  }, []);
+  const live = useLatestSensor();
 
   async function capture(which: "min" | "max") {
     try {
