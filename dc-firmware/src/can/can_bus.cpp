@@ -9,9 +9,7 @@ void CanBus::begin() {
 }
 
 void CanBus::send(const CanTxData& data) {
-    CAN_message_t frames[CanTxData::FRAME_COUNT];
-    data.toFrames(frames);
-    for (const auto& f : frames)
+    for (const auto& f : data.toFrames())
         can1.write(f);
 }
 
@@ -27,9 +25,9 @@ void CanBus::sendControl(CanEtcMode mode, bool autoShift) {
     can1.write(msg);
 }
 
-void CanBus::poll(CanRxData& rx) {
-    CAN_message_t msg;
-    while (can1.read(msg)) {
-        rx.mergeFrame(msg);
-    }
+std::optional<CAN_message_t> CanBus::read() {
+    CAN_message_t msg;  // FlexCAN の read は出力引数なので、ここで値に変換する
+    if (can1.read(msg))
+        return msg;
+    return std::nullopt;
 }

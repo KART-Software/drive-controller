@@ -1,6 +1,5 @@
-import { useState, useEffect } from "preact/hooks";
 import { protocol } from "../protocol";
-import { sensorStore } from "../sensor-store";
+import { useSensorValue } from "../hooks/useSensorValue";
 
 const ERROR_LABELS: Record<number, string> = {
   0: "TPS Implausible",
@@ -36,19 +35,9 @@ interface Props {
 }
 
 export function ErrorStatus({ flags, addLog, onFlagsUpdate, onDirty }: Props) {
-  const [errors, setErrors] = useState<number>(0);
-  const [valid, setValid] = useState<boolean | undefined>(undefined);
+  const errors = useSensorValue((d) => d.err ?? 0, 0);
+  const valid = useSensorValue<boolean | undefined>((d) => d.v, undefined);
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) {
-        setErrors(d.err ?? 0);
-        setValid(d.v);
-      }
-    }, 100); // 10Hz
-    return () => clearInterval(iv);
-  }, []);
 
   function hasError(bitIndex: number): boolean {
     return (errors & (1 << bitIndex)) !== 0;

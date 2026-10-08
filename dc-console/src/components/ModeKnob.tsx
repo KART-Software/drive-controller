@@ -1,5 +1,4 @@
-import { useState, useEffect } from "preact/hooks";
-import { sensorStore } from "../sensor-store";
+import { useSensorValue } from "../hooks/useSensorValue";
 
 const CX = 200;
 const CY = 120;
@@ -22,15 +21,8 @@ function xy(r: number, deg: number): [number, number] {
 interface Props {}
 
 export function ModeKnob(_props: Props) {
-  const [mode, setMode] = useState<string | undefined>(undefined);
+  const mode = useSensorValue<string | undefined>((d) => d.m, undefined);
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setMode(d.m);
-    }, 100); // 10Hz
-    return () => clearInterval(iv);
-  }, []);
 
   const cur = MODES.find((m) => m.key === mode);
 

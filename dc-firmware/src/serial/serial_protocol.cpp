@@ -144,9 +144,7 @@ void sendDeviceMessage(const dc_DeviceToHost& msg, TxClass cls) {
 }
 
 void sendResponseInternal(const dc_Response& resp) {
-    dc_DeviceToHost env = dc_DeviceToHost_init_zero;
-    env.which_payload = dc_DeviceToHost_response_tag;
-    env.payload.response = resp;
+    const dc_DeviceToHost env = {.which_payload = dc_DeviceToHost_response_tag, .payload = {.response = resp}};
     sendDeviceMessage(env, TxClass::Important);
 }
 
@@ -164,88 +162,78 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
                                     const etc::ErrorHandler& errorHandler,
                                     float duty,
                                     const LoopStats::Snapshot& sys) {
-    dc_DeviceToHost env = dc_DeviceToHost_init_zero;
-    env.which_payload = dc_DeviceToHost_sensor_tag;
-    dc_State& st = env.payload.sensor;
-
-    st.timestamp = millis();
-
-    st.has_sensor = true;
-    dc_Sensor& s = st.sensor;
-    s.sps = hub.adc().sps();
-    s.apps1_raw = hub.apps1().getRawValue();
-    s.apps2_raw = hub.apps2().getRawValue();
-    s.ittr_raw = hub.ittr().getRawValue();
-    s.tps1_raw = hub.tps1().getRawValue();
-    s.tps2_raw = hub.tps2().getRawValue();
-    s.bps_raw = hub.bps().getRawValue();
-
-    s.apps1 = (float)hub.apps1().convertedValue();
-    s.apps2 = (float)hub.apps2().convertedValue();
-    s.ittr = (float)hub.ittr().convertedValue();
-    s.tps1 = (float)hub.tps1().convertedValue();
-    s.tps2 = (float)hub.tps2().convertedValue();
-    s.bps = (float)hub.bps().convertedValue();
-
-    s.target_tp = (float)hub.target().getTarget();
-
-    if (hub.imu() != nullptr) {
-        s.accel_x = hub.imu()->accel[0];
-        s.accel_y = hub.imu()->accel[1];
-        s.accel_z = hub.imu()->accel[2];
-        s.gyro_x = hub.imu()->gyro[0];
-        s.gyro_y = hub.imu()->gyro[1];
-        s.gyro_z = hub.imu()->gyro[2];
-    }
-
-    s.wheel_speed_fl = hub.pulseWheelFL().getFrequencyHz();
-    s.wheel_speed_fr = hub.pulseWheelFR().getFrequencyHz();
-    s.wheel_speed_rl = hub.pulseWheelRL().getFrequencyHz();
-    s.wheel_speed_rr = hub.pulseWheelRR().getFrequencyHz();
-    s.rpm = hub.pulseEngine().getFrequencyHz();
-
-    s.wheel_count_fl = hub.pulseWheelFL().count();
-    s.wheel_count_fr = hub.pulseWheelFR().count();
-    s.wheel_count_rl = hub.pulseWheelRL().count();
-    s.wheel_count_rr = hub.pulseWheelRR().count();
-    s.rpm_count = hub.pulseEngine().count();
-
-    s.gps_raw = hub.gps().getRawValue();
-    s.gear = hub.gps().getGear();
-
-    s.clutch_raw = hub.clutch().getRawValue();
-    s.clutch = (float)hub.clutch().convertedValue();
-    s.clutch_rpm = hub.pulseClutchRpm().getFrequencyHz();
-
-    st.has_etc = true;
-    dc_EtcState& e = st.etc;
-    e.mode = targetModeToProto(hub.target());
-    e.manual = hub.target().isManual();
-    e.ittr = hub.target().isIttr();
-    e.valid = isValid;
-    e.duty = duty;  // 実印加 duty (MotorController::lastOutput, ±100 飽和済み)
-
-    // Build error bitmask
-    e.errors = errorHandler.bits();
-
-    st.has_sys = true;
-    st.sys.loop_max_us = sys.loopMaxUs;
-    st.sys.loop_mean_us = sys.loopMeanUs;
-    st.sys.sd_max_us = sys.sdMaxUs;
-    st.sys.safety_max_us = sys.safetyMaxUs;
-    st.sys.log_drops = sys.logDrops;
-    st.sys.loop_max_us_boot = sys.loopMaxUsBoot;
-
+    static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
+    const Imu* imu = hub.imu();
+    const float* accel = imu ? imu->accel : kZero3;
+    const float* gyro = imu ? imu->gyro : kZero3;
+    const dc_DeviceToHost env = {
+        .which_payload = dc_DeviceToHost_sensor_tag,
+        .payload = {.sensor = {
+            .timestamp = millis(),
+            .has_sensor = true,
+            .sensor = {
+                .sps = hub.adc().sps(),
+                .apps1_raw = hub.apps1().getRawValue(),
+                .apps2_raw = hub.apps2().getRawValue(),
+                .ittr_raw = hub.ittr().getRawValue(),
+                .tps1_raw = hub.tps1().getRawValue(),
+                .tps2_raw = hub.tps2().getRawValue(),
+                .bps_raw = hub.bps().getRawValue(),
+                .apps1 = (float)hub.apps1().convertedValue(),
+                .apps2 = (float)hub.apps2().convertedValue(),
+                .ittr = (float)hub.ittr().convertedValue(),
+                .tps1 = (float)hub.tps1().convertedValue(),
+                .tps2 = (float)hub.tps2().convertedValue(),
+                .bps = (float)hub.bps().convertedValue(),
+                .target_tp = (float)hub.target().getTarget(),
+                .accel_x = accel[0],
+                .accel_y = accel[1],
+                .accel_z = accel[2],
+                .gyro_x = gyro[0],
+                .gyro_y = gyro[1],
+                .gyro_z = gyro[2],
+                .wheel_speed_fl = hub.pulseWheelFL().getFrequencyHz(),
+                .wheel_speed_fr = hub.pulseWheelFR().getFrequencyHz(),
+                .wheel_speed_rl = hub.pulseWheelRL().getFrequencyHz(),
+                .wheel_speed_rr = hub.pulseWheelRR().getFrequencyHz(),
+                .rpm = hub.pulseEngine().getFrequencyHz(),
+                .wheel_count_fl = hub.pulseWheelFL().count(),
+                .wheel_count_fr = hub.pulseWheelFR().count(),
+                .wheel_count_rl = hub.pulseWheelRL().count(),
+                .wheel_count_rr = hub.pulseWheelRR().count(),
+                .rpm_count = hub.pulseEngine().count(),
+                .gps_raw = hub.gps().getRawValue(),
+                .gear = hub.gps().getGear(),
+                .clutch_raw = hub.clutch().getRawValue(),
+                .clutch = (float)hub.clutch().convertedValue(),
+                .clutch_rpm = hub.pulseClutchRpm().getFrequencyHz(),
+            },
+            .has_etc = true,
+            .etc = {
+                .mode = targetModeToProto(hub.target()),
+                .manual = hub.target().isManual(),
+                .valid = isValid,
+                .errors = errorHandler.bits(),
+                .ittr = hub.target().isIttr(),
+                .duty = duty,  // 実印加 duty (MotorController::lastOutput, ±100 飽和済み)
+            },
+            .has_sys = true,
+            .sys = {
+                .loop_max_us = sys.loopMaxUs,
+                .loop_mean_us = sys.loopMeanUs,
+                .sd_max_us = sys.sdMaxUs,
+                .safety_max_us = sys.safetyMaxUs,
+                .log_drops = sys.logDrops,
+                .loop_max_us_boot = sys.loopMaxUsBoot,
+            },
+        }},
+    };
     sendDeviceMessage(env, TxClass::Bulk);
 }
 
 void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
-    dc_DeviceToHost env = dc_DeviceToHost_init_zero;
-    env.which_payload = dc_DeviceToHost_debug_tag;
-    dc_DebugMessage& d = env.payload.debug;
-    d.timestamp = millis();
-
-    vsnprintf(d.msg, sizeof(d.msg), fmt, args);
+    dc_DeviceToHost env = {.which_payload = dc_DeviceToHost_debug_tag, .payload = {.debug = {.timestamp = millis()}}};
+    vsnprintf(env.payload.debug.msg, sizeof(env.payload.debug.msg), fmt, args);  // 文字列は書式化で埋める
 
     sendDeviceMessage(env, TxClass::Important);
 }
@@ -258,21 +246,12 @@ void SerialProtocol::sendDebugf(const char* fmt, ...) {
 }
 
 void SerialProtocol::sendResponse(uint32_t id, bool ok) {
-    dc_Response resp = dc_Response_init_zero;
-    resp.id = id;
-    resp.ok = ok;
-    resp.which_data = 0;  // no payload
-    sendResponseInternal(resp);
+    sendResponseInternal({.id = id, .ok = ok, .which_data = 0});  // ペイロードなし
 }
 
 #define DEFINE_RESP_HELPER(NAME, TAG, FIELD, TYPE)                   \
     void SerialProtocol::NAME(uint32_t id, bool ok, const TYPE& p) { \
-        dc_Response resp = dc_Response_init_zero;                    \
-        resp.id = id;                                                \
-        resp.ok = ok;                                                \
-        resp.which_data = TAG;                                       \
-        resp.data.FIELD = p;                                         \
-        sendResponseInternal(resp);                                  \
+        sendResponseInternal({.id = id, .ok = ok, .which_data = TAG, .data = {.FIELD = p}}); \
     }
 
 DEFINE_RESP_HELPER(sendResponseWithConfig, dc_Response_config_tag, config, dc_ConfigResponse)
@@ -293,7 +272,7 @@ DEFINE_RESP_HELPER(sendResponseWithGpsGear, dc_Response_gps_gear_tag, gps_gear, 
 
 #undef DEFINE_RESP_HELPER
 
-bool SerialProtocol::readCommand(dc_Command& out) {
+std::optional<dc_Command> SerialProtocol::readCommand() {
     while (Serial.available() > 0) {
         int b = Serial.read();
         if (b < 0)
@@ -325,15 +304,14 @@ bool SerialProtocol::readCommand(dc_Command& out) {
         if (recv_crc != calc_crc)
             continue;
 
-        dc_HostToDevice msg = dc_HostToDevice_init_zero;
+        dc_HostToDevice msg = {};  // pb_decode は出力引数なので、ここだけ空で用意する
         pb_istream_t stream = pb_istream_from_buffer(decoded, payload_len);
         if (!pb_decode(&stream, dc_HostToDevice_fields, &msg))
             continue;
 
         if (msg.which_payload == dc_HostToDevice_command_tag) {
-            out = msg.payload.command;
-            return true;
+            return msg.payload.command;
         }
     }
-    return false;
+    return std::nullopt;
 }

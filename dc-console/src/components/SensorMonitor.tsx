@@ -1,6 +1,5 @@
-import { useState, useEffect } from "preact/hooks";
 import type { SensorData } from "../types";
-import { sensorStore } from "../sensor-store";
+import { useLatestSensor } from "../hooks/useSensorValue";
 
 interface Props {}
 
@@ -20,15 +19,8 @@ function SensorRow({ label, raw, val, unit }: { label: string; raw?: number; val
 }
 
 export function SensorMonitor(_props: Props) {
-  const [data, setData] = useState<SensorData | null>(null);
+  const data = useLatestSensor();
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setData(d);
-    }, 100); // 10Hz
-    return () => clearInterval(iv);
-  }, []);
   return (
     <section>
       <h2>Sensor Monitor</h2>
