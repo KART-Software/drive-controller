@@ -6,13 +6,14 @@
 namespace {
 
 void sendConfigResponse(CommandContainer* c, uint32_t id, bool ok) {
-    dc_ConfigResponse cfgResp = dc_ConfigResponse_init_zero;
-    cfgResp.has_config = true;
-    cfgResp.config = c->configurator.config;
-    cfgResp.changed = c->configurator.configChanged;
-    cfgResp.fs_used = (uint32_t)c->configurator.flash.usedSize();
-    cfgResp.fs_total = (uint32_t)c->configurator.flash.totalSize();
-    SerialProtocol::sendResponseWithConfig(id, ok, cfgResp);
+    SerialProtocol::sendResponseWithConfig(id, ok,
+                                           {
+                                               .has_config = true,
+                                               .config = c->configurator.config,
+                                               .changed = c->configurator.configChanged,
+                                               .fs_used = (uint32_t)c->configurator.flash.usedSize(),
+                                               .fs_total = (uint32_t)c->configurator.flash.totalSize(),
+                                           });
 }
 
 void etcMotorOff(void* ctx, const dc_Command& cmd) {
@@ -34,47 +35,31 @@ void save(void* ctx, const dc_Command& cmd) {
 void setAppsMin(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     c->configurator.setAppsMin();
-    dc_AppsMinResponse p = dc_AppsMinResponse_init_zero;
-    p.apps1_min = c->configurator.config.sensor_calib.apps1_min;
-    p.apps2_min = c->configurator.config.sensor_calib.apps2_min;
-    p.ittr_min = c->configurator.config.sensor_calib.ittr_min;
-    SerialProtocol::sendResponseWithAppsMin(cmd.id, true, p);
+    SerialProtocol::sendResponseWithAppsMin(cmd.id, true, {.apps1_min = c->configurator.config.sensor_calib.apps1_min, .apps2_min = c->configurator.config.sensor_calib.apps2_min, .ittr_min = c->configurator.config.sensor_calib.ittr_min});
 }
 
 void setAppsMax(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     c->configurator.setAppsMax();
-    dc_AppsMaxResponse p = dc_AppsMaxResponse_init_zero;
-    p.apps1_max = c->configurator.config.sensor_calib.apps1_max;
-    p.apps2_max = c->configurator.config.sensor_calib.apps2_max;
-    p.ittr_max = c->configurator.config.sensor_calib.ittr_max;
-    SerialProtocol::sendResponseWithAppsMax(cmd.id, true, p);
+    SerialProtocol::sendResponseWithAppsMax(cmd.id, true, {.apps1_max = c->configurator.config.sensor_calib.apps1_max, .apps2_max = c->configurator.config.sensor_calib.apps2_max, .ittr_max = c->configurator.config.sensor_calib.ittr_max});
 }
 
 void setTpsMin(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     c->configurator.setTpsMin();
-    dc_TpsMinResponse p = dc_TpsMinResponse_init_zero;
-    p.tps1_min = c->configurator.config.sensor_calib.tps1_min;
-    p.tps2_min = c->configurator.config.sensor_calib.tps2_min;
-    SerialProtocol::sendResponseWithTpsMin(cmd.id, true, p);
+    SerialProtocol::sendResponseWithTpsMin(cmd.id, true, {.tps1_min = c->configurator.config.sensor_calib.tps1_min, .tps2_min = c->configurator.config.sensor_calib.tps2_min});
 }
 
 void setTpsMax(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     c->configurator.setTpsMax();
-    dc_TpsMaxResponse p = dc_TpsMaxResponse_init_zero;
-    p.tps1_max = c->configurator.config.sensor_calib.tps1_max;
-    p.tps2_max = c->configurator.config.sensor_calib.tps2_max;
-    SerialProtocol::sendResponseWithTpsMax(cmd.id, true, p);
+    SerialProtocol::sendResponseWithTpsMax(cmd.id, true, {.tps1_max = c->configurator.config.sensor_calib.tps1_max, .tps2_max = c->configurator.config.sensor_calib.tps2_max});
 }
 
 void setIdling(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     c->configurator.setIdling();
-    dc_IdlingResponse p = dc_IdlingResponse_init_zero;
-    p.idling = c->configurator.config.sensor_calib.target_tp_idling;
-    SerialProtocol::sendResponseWithIdling(cmd.id, true, p);
+    SerialProtocol::sendResponseWithIdling(cmd.id, true, {.idling = c->configurator.config.sensor_calib.target_tp_idling});
 }
 
 void setEtcTargetBound(void* ctx, const dc_Command& cmd) {
@@ -85,11 +70,7 @@ void setEtcTargetBound(void* ctx, const dc_Command& cmd) {
     float restrictedMax =
         d.has_restricted_max ? d.restricted_max : c->configurator.config.sensor_calib.target_tp_restricted_max;
     c->configurator.setTargetBound(idling, normalMax, restrictedMax);
-    dc_TargetBoundResponse p = dc_TargetBoundResponse_init_zero;
-    p.idling = c->configurator.config.sensor_calib.target_tp_idling;
-    p.normal_max = c->configurator.config.sensor_calib.target_tp_normal_max;
-    p.restricted_max = c->configurator.config.sensor_calib.target_tp_restricted_max;
-    SerialProtocol::sendResponseWithTargetBound(cmd.id, true, p);
+    SerialProtocol::sendResponseWithTargetBound(cmd.id, true, {.idling = c->configurator.config.sensor_calib.target_tp_idling, .normal_max = c->configurator.config.sensor_calib.target_tp_normal_max, .restricted_max = c->configurator.config.sensor_calib.target_tp_restricted_max});
 }
 
 void setPlausibilityCheckFlags(void* ctx, const dc_Command& cmd) {
@@ -121,9 +102,7 @@ void setPlausibilityCheckFlags(void* ctx, const dc_Command& cmd) {
 void setIttr(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     c->configurator.setIttrFlag(cmd.body.set_ittr.use);
-    dc_IttrResponse p = dc_IttrResponse_init_zero;
-    p.use = cmd.body.set_ittr.use;
-    SerialProtocol::sendResponseWithIttr(cmd.id, true, p);
+    SerialProtocol::sendResponseWithIttr(cmd.id, true, {.use = cmd.body.set_ittr.use});
 }
 
 void setEtcPid(void* ctx, const dc_Command& cmd) {
@@ -213,25 +192,19 @@ void setGpsGear(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     int8_t gear = (int8_t)cmd.body.set_gps_gear.gear;
     c->configurator.setGpsGear(gear);
-    dc_GpsGearResponse p = dc_GpsGearResponse_init_zero;
-    p.gear = gear;
     const dc_GpsCalib& gc = c->configurator.config.sensor_calib.gps;
-    if (gc.type == dc_TransmissionType_TRANSMISSION_IST) {
-        const int8_t gearsArr[] = GPS_IST_GEARS;
-        p.raw_values_count = gc.ist_raw_values_count;
-        p.gears_count = gc.ist_raw_values_count;
-        for (uint8_t i = 0; i < gc.ist_raw_values_count && i < GPS_IST_GEAR_COUNT; i++) {
-            p.raw_values[i] = gc.ist_raw_values[i];
-            p.gears[i] = gearsArr[i];
-        }
-    } else {
-        const int8_t gearsArr[] = GPS_NORMAL_GEARS;
-        p.raw_values_count = gc.normal_raw_values_count;
-        p.gears_count = gc.normal_raw_values_count;
-        for (uint8_t i = 0; i < gc.normal_raw_values_count && i < GPS_NORMAL_GEAR_COUNT; i++) {
-            p.raw_values[i] = gc.normal_raw_values[i];
-            p.gears[i] = gearsArr[i];
-        }
+    const bool ist = gc.type == dc_TransmissionType_TRANSMISSION_IST;
+    static const int8_t kIstGears[] = GPS_IST_GEARS;
+    static const int8_t kNormalGears[] = GPS_NORMAL_GEARS;
+    const int8_t* gears = ist ? kIstGears : kNormalGears;
+    const uint32_t* raws = ist ? gc.ist_raw_values : gc.normal_raw_values;
+    const pb_size_t stored = ist ? gc.ist_raw_values_count : gc.normal_raw_values_count;
+    const pb_size_t cap = ist ? GPS_IST_GEAR_COUNT : GPS_NORMAL_GEAR_COUNT;
+    const pb_size_t n = stored < cap ? stored : cap;
+    dc_GpsGearResponse p = {.gear = gear, .raw_values_count = n, .gears_count = n};
+    for (pb_size_t i = 0; i < n; i++) {  // 配列メンバは指定子初期化できないので代入
+        p.raw_values[i] = raws[i];
+        p.gears[i] = gears[i];
     }
     SerialProtocol::sendResponseWithGpsGear(cmd.id, true, p);
 }

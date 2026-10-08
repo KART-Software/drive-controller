@@ -30,7 +30,8 @@ void CanController::send() {
 
 void CanController::poll() {
     // rxData_ は前回値を保持し、受信フレームのみ mergeFrame() で上書きする
-    bus_.poll(rxData_);
+    while (auto msg = bus_.read())
+        rxData_.mergeFrame(*msg);
     // LAUNCH_CTRL / MODE_SELECT / AUTO_SHIFT フレーム途絶時に各々を安全側へフォールバック (CAN 断対策)
     rxData_.checkTimeouts(millis());
 }

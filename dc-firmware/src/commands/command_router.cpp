@@ -8,10 +8,10 @@ void CommandRouter::on(pb_size_t which_body, CommandHandler handler, void* ctx) 
 }
 
 void CommandRouter::poll() {
-    dc_Command cmd = dc_Command_init_zero;
-    if (!SerialProtocol::readCommand(cmd)) {
+    const auto received = SerialProtocol::readCommand();
+    if (!received)
         return;
-    }
+    const dc_Command& cmd = *received;
 
     for (uint8_t i = 0; i < routeCount; i++) {
         if (routes[i].which_body == cmd.which_body) {

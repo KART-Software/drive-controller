@@ -12,18 +12,14 @@ class BitePointFile {
     explicit BitePointFile(Flash& flash) : flash_(flash) {}
 
     float load(float defaultPosition = 50.0f) const {
-        dc_BitePoint msg = dc_BitePoint_init_zero;
-        if (flash_.readProto(PATH, dc_BitePoint_fields, &msg)) {
-            if (msg.position > 0.0f && msg.position <= 100.0f) {
-                return msg.position;
-            }
-        }
+        const auto msg = flash_.readProto<dc_BitePoint>(PATH, dc_BitePoint_fields);
+        if (msg && msg->position > 0.0f && msg->position <= 100.0f)
+            return msg->position;
         return defaultPosition;
     }
 
     void save(float position) {
-        dc_BitePoint msg = dc_BitePoint_init_zero;
-        msg.position = position;
+        const dc_BitePoint msg = {.position = position};
         flash_.writeProto(PATH, dc_BitePoint_fields, &msg);
     }
 

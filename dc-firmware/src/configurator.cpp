@@ -109,10 +109,10 @@ void Configurator::overlayConfig(const dc_Config& src) {
 
 void Configurator::loadConfigFromFlash() {
     loadDefault();
-    dc_Config loaded = dc_Config_init_zero;
-    if (!flash.readProto(CONFIG_FILE_NAME, dc_Config_fields, &loaded))
+    const auto loaded = flash.readProto<dc_Config>(CONFIG_FILE_NAME, dc_Config_fields);
+    if (!loaded)
         return;
-    overlayConfig(loaded);
+    overlayConfig(*loaded);
 }
 
 void Configurator::calibrateFromFlash() {

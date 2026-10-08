@@ -6,13 +6,15 @@ bool SensorLogger::begin() {
     if (!writer_.begin())
         return false;
 
-    LogHeader h = {};
-    memcpy(h.magic, SENSOR_LOG_MAGIC, 8);
-    h.version = SENSOR_LOG_VERSION;
-    h.record_size = sizeof(LogRecord);
-    h.rtc_epoch = (year() >= 2020) ? (uint32_t)now() : 0;
-    h.log_hz = SENSOR_LOG_HZ;
-    h.boot_ms = millis();
+    LogHeader h = {
+        .magic = {'K', 'A', 'R', 'T', 'L', 'O', 'G', '1'},  // SENSOR_LOG_MAGIC (NUL 終端なしの 8 文字)
+        .version = SENSOR_LOG_VERSION,
+        .record_size = sizeof(LogRecord),
+        .rtc_epoch = (year() >= 2020) ? (uint32_t)now() : 0,
+        .log_hz = SENSOR_LOG_HZ,
+        .boot_ms = millis(),
+    };
+    static_assert(sizeof(SENSOR_LOG_MAGIC) - 1 == sizeof(h.magic), "magic は 8 文字");
     writer_.write(&h, sizeof(h));
 
     lastSyncMs_ = millis();
