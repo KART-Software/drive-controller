@@ -18,6 +18,7 @@ export interface SensorData {
   manual: boolean;
   tgt_ittr: boolean;
   duty: number; // モーター実印加 duty [%] (±100, ETC 停止中 0)
+  sys?: SysStatsT; // loop 停止の計測 (直近 1 s 窓)
   v: boolean;
   err: number;
   sps?: number;
@@ -39,6 +40,15 @@ export interface SensorData {
   gx?: number;
   gy?: number;
   gz?: number;
+}
+
+export interface SysStatsT {
+  loopMaxUs: number;
+  loopMeanUs: number;
+  sdMaxUs: number;
+  safetyMaxUs: number;
+  logDrops: number;
+  loopMaxUsBoot: number;
 }
 
 export interface DebugMessage {

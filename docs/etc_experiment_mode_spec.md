@@ -147,7 +147,8 @@ Idle ──start()──> Settling ──整定/timeout──> Holding ──┬
 | モードノブ ≠ MOTOR_OFF | MOTOR_OFF はアーミング③が ETC を止めるため実験が進行不能。それ以外の位置なら可 (Q11 決定: ノブによる実験許可は要求しない — console 接続時は走行時ではない) |
 | エンジン停止 | engine パルス ≈ 0 Hz |
 | 車両静止 | 車輪速 4 輪 ≈ 0 Hz |
-| plausibility 正常 | `currentlyValid()` |
+| plausibility 正常 | `currentlyValid()` かつ ① 未ラッチ (`validLatched()`) |
+| ETC 稼働中 | SIG_IN=HIGH (②) かつモーター ON。止まったまま開始すると TPS が休止位置で「静止」と判定され、無意味なデータで完走する (2026-10-06 修正) |
 | SD ログ動作中 | `sensorLogger.active()` — 記録できない実験は無意味 (Q13 決定) |
 | 実験非実行中 | 二重開始拒否 |
 
@@ -159,7 +160,9 @@ Idle ──start()──> Settling ──整定/timeout──> Holding ──┬
 |---|---|
 | ノブ MOTOR_OFF | MOTOR_OFF 位置になったら中断 (アーミング③で ETC が止まり進行不能のため)。他位置への移動は不問 (Q11 決定) |
 | エンジン始動 | engine パルス > 0 で中断 |
-| plausibility | `currentlyValid()` false で中断 (アーミング層のラッチとは独立に早期中断) |
+| plausibility | `currentlyValid()` false または ① ラッチで中断 |
+| SIG_IN | LOW になったら中断 (アーミング②で ETC が止まり進行不能) |
+| ETC 停止 | コースト区間以外でモーター OFF なら中断 (`ETC not armed`) |
 | TPS 上限 | tps1 > **110%** で中断 |
 | TPS 下限 | tps1 < **−10%** で中断。**ただし RELEASE 中は不適用** (バネ休止 −15% を通るのが正常。モーターは切れており押し付けは物理的に起きない) |
 | ストール | \|u\| > `STALL_DUTY` かつ \|tps − target\| > 2% かつ TPS が `STALL_MS` 動かない → 中断。※「目標付近で高 duty 保持」は正常動作 (高開度はバネで保持 duty が高い) なので target 乖離条件を必ず含める (Q14) |
@@ -169,8 +172,13 @@ Idle ──start()──> Settling ──整定/timeout──> Holding ──┬
 ## 7. プラウシビリティとの整合
 
 - **target-vs-TPS チェック** (乖離 10%×1s で復帰不可ラッチ): コースト・大ステップで
-  必ず乖離するため、**実験中のみ `PlausibilityValidator::targetCheckFlag` を退避して
-  false、`stop()` で復元**。config は触らない (バリデータの public フラグ操作のみ)。
+  必ず乖離するため、**実験中のみ `PlausibilityValidator::suspendTargetCheck(true)` で一時停止**し、
+  `stop()` で再開する。一時停止は config 由来の `targetCheckFlag` とは独立。
+  - **フラグを退避・復元する方式は使わないこと** (旧実装)。実験中に `set_config` / Revert /
+    `set_plausibility_flags` が来るとフラグが書き戻されてコーストで ① がラッチし、終了時には古い値で
+    上書きしていた (2026-10-06 修正)。
+  - 再開時は「最後に正常だった時刻」をリセットする (停止中の乖離を持ち越して即ラッチしないため)。
+  - 一時停止中は判定自体を呼ばない (呼ぶと `ERR_APPS_TPS_TARGET_FAILURE` が立って消えない)。
 - **回路チェック (断線検出) は有効のまま**。`TPS_MARGIN=15` により −15〜115% は
   正常扱いなので、±(−10/110) ガードが必ず先に効き誤ラッチしない。
 - APPS 系チェックも有効のまま (ベンチではペダル不使用で常時整合)。

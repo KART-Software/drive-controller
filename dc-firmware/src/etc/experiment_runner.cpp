@@ -84,7 +84,11 @@ bool ExperimentRunner::preconditionsOk() const {
     if (hub_.pulseWheelFL().getFrequencyHz() > 0.5f || hub_.pulseWheelFR().getFrequencyHz() > 0.5f ||
         hub_.pulseWheelRL().getFrequencyHz() > 0.5f || hub_.pulseWheelRR().getFrequencyHz() > 0.5f)
         return false;  // 車両静止
-    if (!validator_.currentlyValid())
+    if (!validator_.currentlyValid() || !validator_.validLatched())
+        return false;
+    // ETC が実際に稼働していること: ② SIG_IN=HIGH かつモーター ON。止まったまま開始すると
+    // TPS が休止位置で「静止」と判定され、無意味なデータで完走してしまう
+    if (!hub_.shutdownSig().isOn() || !motor_.isOn())
         return false;
     if (!logger_.active())  // SD 無しでは記録できない実験は無意味 (spec Q13)
         return false;
@@ -96,8 +100,7 @@ bool ExperimentRunner::start(Type type) {
         return false;
     // target-vs-TPS チェックはコースト/大ステップで必ず乖離するため一時無効化。
     // 回路チェック (断線検出) は有効のまま。stop() で復元する。
-    savedTargetCheckFlag_ = validator_.targetCheckFlag;
-    validator_.targetCheckFlag = false;
+    validator_.suspendTargetCheck(true);
     if (!target_.isManual())
         target_.setManual();
     type_ = type;
@@ -112,11 +115,15 @@ bool ExperimentRunner::start(Type type) {
 }
 
 void ExperimentRunner::stop() {
-    if (!active())
+    if (!active()) {
+        // 非実行中でも EXP stop を返す: 実験中に再起動 / USB 断があると console は EXP stop を受け取れず
+        // 「実行中」表示が張り付く。停止ボタンでそれを解除できるようにする
+        SerialProtocol::sendDebugf("EXP stop (not running)");
         return;
+    }
     if (target_.isManual())
         target_.setManual();  // manual 解除 → 通常のモード別ターゲットへ復帰
-    validator_.targetCheckFlag = savedTargetCheckFlag_;
+    validator_.suspendTargetCheck(false);
     type_ = Type::None;
     phase_ = Phase::Idle;
     SerialProtocol::sendDebugf("EXP stop");
@@ -188,8 +195,17 @@ bool ExperimentRunner::guardsOk(unsigned long now) {
         SerialProtocol::sendDebugf("EXP abort: engine running");
         return false;
     }
-    if (!validator_.currentlyValid()) {
+    if (!validator_.currentlyValid() || !validator_.validLatched()) {
         SerialProtocol::sendDebugf("EXP abort: plausibility");
+        return false;
+    }
+    if (!hub_.shutdownSig().isOn()) {
+        SerialProtocol::sendDebugf("EXP abort: SIG_IN low");
+        return false;
+    }
+    // コースト区間はモーターを意図的に止めている。それ以外で OFF なら ETC が止まっている
+    if (phase_ != Phase::Coasting && !motor_.isOn()) {
+        SerialProtocol::sendDebugf("EXP abort: ETC not armed");
         return false;
     }
     double tp = hub_.tps1().convertedValue();

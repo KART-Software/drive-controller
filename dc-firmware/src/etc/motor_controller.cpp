@@ -24,7 +24,10 @@ void MotorController::cycle() {
         applied = DC_MOTOR_OUTPUT_SCALE_MAX;
     else if (applied < -DC_MOTOR_OUTPUT_SCALE_MAX)
         applied = -DC_MOTOR_OUTPUT_SCALE_MAX;
-    lastOutput_ = (float)applied;
+    // stopEtc() は setMotorOff() → timer.end() の順なので、その間に ISR が来ることがある。DcMotor::write は
+    // OFF 中 no-op だが lastOutput_ は書かれてしまうため、OFF なら 0 (= 実印加値) にする。setMotorOff() は
+    // dcMotor.off() → lastOutput_=0 の順なので、どの位置で割り込まれても最終値は 0 になる。
+    lastOutput_ = dcMotor.isOn() ? (float)applied : 0.0f;
     dcMotor.write(output);
 }
 
@@ -38,7 +41,7 @@ void MotorController::setMotorOff() {
     lastOutput_ = 0.0f;  // 停止中の凍結値を残さない (duty ログ = 常に実印加値)
 }
 
-bool MotorController::isOn() {
+bool MotorController::isOn() const {
     return dcMotor.isOn();
 }
 

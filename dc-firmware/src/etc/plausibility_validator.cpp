@@ -42,7 +42,10 @@ bool PlausibilityValidator::isCurrentlyValid() {
         isValid &= isApps2CircuitValid() || !apps2CheckFlag;
         isValid &= isTps1CircuitValid() || !tps1CheckFlag;
         isValid &= isTps2CircuitValid() || !tps2CheckFlag;
-        isValid &= isAppsTpsTargetValid() || !targetCheckFlag;
+        // 一時停止中 (同定実験) は判定自体を呼ばない: 左辺評価で ERR_APPS_TPS_TARGET_FAILURE が立ち、
+        // 二度と消えない偽エラーになるため
+        if (!targetCheckSuspended_)
+            isValid &= isAppsTpsTargetValid() || !targetCheckFlag;
         isValid &= isBpsCircuitValid() || !bpsCheckFlag;
         isValid &= isBpsTpsPlausible() || !bpsTpsCheckFlag;
 
@@ -50,6 +53,12 @@ bool PlausibilityValidator::isCurrentlyValid() {
         lastCurrentlyValid_ = isValid;
         return isValid;
     }
+}
+
+void PlausibilityValidator::suspendTargetCheck(bool suspend) {
+    if (!suspend && targetCheckSuspended_)
+        lastAppsTpsTargetValidTime = millis();  // 再開: 停止中の乖離を持ち越さない
+    targetCheckSuspended_ = suspend;
 }
 
 bool PlausibilityValidator::isValid() {

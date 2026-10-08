@@ -7,6 +7,7 @@ import {
   StateSchema,
   SensorSchema,
   EtcStateSchema,
+  SysStatsSchema,
   ConfigSchema,
   DebugMessageSchema,
   EtcMode,
@@ -236,10 +237,20 @@ function sensorTick() {
     errors: 0,
     duty: +mockDuty.toFixed(2),
   });
+  // loop 停止計測のモック: 毎秒の SD flush 相当 (4〜9 ms) を loop max に見せる
+  const sys = create(SysStatsSchema, {
+    loopMaxUs: 4000 + Math.round(Math.random() * 5000),
+    loopMeanUs: 900 + Math.round(Math.random() * 200),
+    sdMaxUs: 3500 + Math.round(Math.random() * 5000),
+    safetyMaxUs: 0,
+    logDrops: 0,
+    loopMaxUsBoot: 9000,
+  });
   const state = create(StateSchema, {
     timestamp: Date.now() - t0,
     sensor,
     etc,
+    sys,
   });
   emitFrame(
     create(DeviceToHostSchema, { payload: { case: "sensor", value: state } }),
