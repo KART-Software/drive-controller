@@ -88,7 +88,7 @@ CAN_message_t CanStatusData::toFrame() const {
                      kart_can_dc_status_pack);
 }
 
-CanRxData::Kind CanRxData::mergeFrame(const CAN_message_t& msg) {
+CanRxData::Timing CanRxData::mergeFrame(const CAN_message_t& msg) {
     // Control (0x740): byte0 etc_mode / byte1 launch / byte2 auto_shift / byte3 starter。
     // byte0-2 は旧 DLC 3 フレームと互換なので len >= 3 で受け、starter は len >= 4 のときだけ読む。
     if (msg.id == KART_CAN_CONTROL_FRAME_ID && msg.len >= 3) {
@@ -99,7 +99,7 @@ CanRxData::Kind CanRxData::mergeFrame(const CAN_message_t& msg) {
         starter = (msg.len >= 4) && (c.starter == 0x01);
         controlFrames++;
         lastControlFrameMs = millis();
-        return Kind::Control;
+        return Timing::NextTick;
     }
     // Shift (0x741): byte0 shift_up / byte1 shift_down (押下中 1)
     if (msg.id == KART_CAN_SHIFT_FRAME_ID && msg.len >= KART_CAN_SHIFT_LENGTH) {
@@ -108,7 +108,7 @@ CanRxData::Kind CanRxData::mergeFrame(const CAN_message_t& msg) {
         shiftDown = (sh.shift_down == 0x01);
         shiftFrames++;
         lastShiftFrameMs = millis();
-        return Kind::Shift;
+        return Timing::Immediate;
     }
-    return Kind::Other;
+    return Timing::NextTick;
 }

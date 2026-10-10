@@ -49,6 +49,9 @@ struct CanRxData {
     uint32_t shiftFrames = 0;
     unsigned long lastShiftFrameMs = 0;
 
-    enum class Kind : uint8_t { Other, Control, Shift };
-    Kind mergeFrame(const CAN_message_t& msg);  // 受信割り込みから (millis() で受信時刻を刻む)
+    // 取り込んだ入力をいつ処理すべきか。
+    //   Immediate : 受信割り込みの中ですぐ処理する (シフトパドル 0x741。tick を待つと最大 1 ms 遅れる)
+    //   NextTick  : 次の tickISR で反映すれば足りる (0x740 など。取り込まなかったフレームもこれ)
+    enum class Timing : uint8_t { NextTick, Immediate };
+    Timing mergeFrame(const CAN_message_t& msg);  // 受信割り込みから (millis() で受信時刻を刻む)
 };

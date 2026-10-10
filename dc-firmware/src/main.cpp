@@ -194,9 +194,9 @@ void tickISR() {
 }
 
 // FlexCAN3 の受信割り込み (優先度 64 = tickISR と同じなので互いに割り込まない)。
-// 0x741 のシフト入力は受けたその場でシフターへ渡す (tick を待たない)
+// 即時に処理すべき入力 (0x741 のシフトパドル) は受けたその場でシフターへ渡す (tick を待たない)
 void canRxISR(const CAN_message_t& msg) {
-    if (canController.onFrame(msg) == CanRxData::Kind::Shift) {
+    if (canController.onFrame(msg) == CanRxData::Timing::Immediate) {
         const CanRxData& rx = canController.rxData();
         autoShifter.onPaddles(rx.shiftUp, rx.shiftDown, millis());
     }
