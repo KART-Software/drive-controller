@@ -1,29 +1,37 @@
-# loop() 非依存化・ギャップレスログ 仕様書 (ドラフト)
+# loop() 非依存化・ギャップレスログ 仕様書
 
-Status: **仕様確定 (Q1〜Q13 全決定, 2026-10-06) — 実装 GO 待ち。** Phase 1 から順に PR を分けて進める。
-作成: 2026-10-06。関連: [etc_experiment_mode_spec.md](etc_experiment_mode_spec.md) (記録の消費側)、
+Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂 — 実装 GO 待ち。**
+作成: 2026-10-06、改訂: 2026-10-11。関連: [control_input_spec.md](control_input_spec.md) (制御入力の CAN 化。Phase 2 の前提)、
+[etc_experiment_mode_spec.md](etc_experiment_mode_spec.md) (記録の消費側)、
 [etc_control_improvement_plan.md](etc_control_improvement_plan.md) §6 (同定計画。ギャップレス記録の動機)、
-CLAUDE.md「ファームウェア並行性」節 (本書で更新対象)。
+CLAUDE.md「ファームウェア並行性」「SD ロギング」節 (本書で更新対象)。
 
 ## 1. 目的とスコープ
 
 実機の SD ログ解析 (2026-10-06, `dc_log_0002..0004.bin`) で、`loop()` が周期的に停止している
-ことが分かった。本ファームは「制御は ISR、監視は loop」の分担なので、停止中もスロットル PID は
-回り続けるが、**安全層 (アーミング / SHUTDOWN)、シフターのパルス出力、記録**が止まる。
+ことが分かった。さらに 2026-10-09 には、SD カード満杯で **loop が 1 周ごとに 504 ms 止まる** (約 2 Hz でしか回らない)
+状態を実機で確認した (§2.2)。本ファームは「制御は ISR、監視は loop」の分担なので、停止中もスロットル PID は
+回り続けるが、**安全層 (アーミング / SHUTDOWN)、シフター、CAN、記録**が止まる。
 
-本書は次の 4 本柱で「loop() を止めない / 止まっても困らない」構造にする:
+改訂後の方針は「**時間の決まった処理はすべて割り込みで回し、loop には遅れてよい処理だけを残す**」。
+loop が SD で何百 ms 止まっても、遅れるのは console 送信とコマンド応答だけになる。
 
-| 柱 | 内容 | 効果 |
+| 柱 | 内容 | Phase |
 |---|---|---|
-| **A. USB 送信ガード** | TX リングに空きが無い時は送らない (全フレーム) | 120 ms 停止の根絶 |
-| **B. 計測** | loop / SD / 安全層 ISR の所要時間を毎秒集計して telemetry と SD ログに載せる | 停止の可視化。以後の判断材料 |
-| **C. 安全層 ISR 化** | アーミング層・プラウシビリティ・スイッチ読み・シフターを 1 kHz タイマー ISR (`safetyISR`) へ | loop 停止が安全層とシフターに影響しなくなる |
-| **D. ギャップレスログ** | 記録採取を ISR + リングバッファ化、SD ファイル事前確保、sync 間隔延長 | SD ストールで記録が途切れない |
+| **A. USB 送信ガード** | TX リングに空きが無い時は送らない (全フレーム) | 1 (済) |
+| **B. 計測** | loop / SD / ISR の所要時間を毎秒集計して telemetry と SD ログに載せる | 1 (済)、2 で ISR 分を追加 |
+| **C. 割り込みの階層化** | タイマーを分けて優先度を実際に効かせる。安全層・シフター・CAN・パルスカウンタ・IMU を割り込みへ | 2 |
+| **D. ギャップレスログ** | 記録を 1 ms 割り込みで採取してリングバッファへ。SD は exFAT・起動ごとのディレクトリ・100 MB 事前確保ファイル | 3 |
 
-スコープ外: SD 書き込みの完全非同期化 (Teensy の SdFat に非同期 API が無い)、CAN 制御入力 (凍結中)、
-Launch Control (凍結中)、既存の double 書き換え競合 (§6.5 で指摘のみ、Q12)。
+ベアメタル (Arduino / Teensy コア) のまま進める (2026-10-11 決定。RTOS 移行は見送り)。
+
+スコープ外: SD 書き込みの非同期化 (SdFat に非同期 API が無い。loop が止まってよい構成にして不要にする)、
+Launch Control (凍結中)、
+既存の double 書き換え競合 (§6.6、Q12)。
 
 ## 2. 根拠となる計測結果
+
+### 2.1 loop 停止 (2026-10-06, Phase 1 の根拠)
 
 | 事象 | 頻度 | 大きさ | 原因 (確定) |
 |---|---|---|---|
@@ -46,23 +54,71 @@ loop 停止の影響 (現状の配置):
 | 同定実験 FSM | `millis()` 基準なので無影響 | 同上 (記録窓に穴) |
 | SD ログ | 5 ms 欠落 | 120 ms 欠落 |
 
+### 2.2 SD 満杯時の停止 (2026-10-09)
+
+- 症状: telemetry の `loop_max_us` ≈ `sd_max_us` ≈ 504 ms、telemetry の到着間隔が 504 ms の倍数。
+  loop が 1 周ごとに 504 ms 止まっていた。
+- 原因 (MTP でカードを確認して確定): 16 GB (FAT32) が空き 0 B。ファイルがクラスタ境界に来るたびに SdFat の
+  `allocateCluster()` が FAT 全体 (約 3800 セクタ) を読んで空きを探し、見つからず失敗する。`write()` は失敗を覚えず、
+  ファームも戻り値を見ていないので、次の周でまた全探索する。
+- 副次的に、1 ファイルが FAT32 の上限 4 GiB に達していたもの (`dc_log_0018.bin` = 4,294,967,276 B) も見つかった。
+  こちらは即座に失敗するので loop は止まらないが、ログは黙って途切れる。
+
+### 2.3 CPU 使用率 (2026-10-11, ベンチ・ETC 動作中・CAN 無通信)
+
+DWT サイクルカウンタで 1 s 窓ごとに集計 (一時計測、コミットなし)。
+
+| 処理 | 割合 | 1 回の最大 |
+|---|---|---|
+| モーター ISR (1 kHz) | 0.13 % | 1.3 µs |
+| サンプリング ISR (16 kHz) | 1.5 % | 0.9 µs |
+| loop: IMU 読み (SPI ブロッキング、毎周 = 約 35,000 回/s) | 61.5 % | 20 µs |
+| loop: CAN 受信ポーリング (毎周) | 25.7 % | 11 µs |
+| loop: 安全層 | 5.9 % | 5 µs |
+| loop: オートシフター | 1.5 % | 3.5 µs |
+| loop: SD | 1.2〜2.1 % | **7.2 ms** |
+| loop: telemetry | 0.4 % | 69 µs |
+
+必要な処理だけを数えると 5 % 前後 (IMU を 8 kHz DMA、CAN を受信割り込みにした場合)。割り込みへ移しても CPU は足りる。
+
+### 2.4 IntervalTimer の共有 IRQ
+
+PIT の 4 チャネルは割り込み番号 `IRQ_PIT` を 1 つしか持たない。`IntervalTimer::priority()` は IRQ 全体の優先度を
+「全チャネル中で最も高いもの」にし、コールバックは 1 つの関数から順に呼ばれる。現状の
+「motor = 0、sampling = 208」は実際には **両方とも優先度 0** で動き、互いに割り込めない。
+旧版 §6 の「3 本目の IntervalTimer で安全層 ISR (優先度 64)」もこの理由で成立しない。
+
 ## 3. 全体像と段階
 
-```
-            ┌──────────── ISR (優先度) ────────────┐   ┌──────── loop() (非 ISR) ────────┐
-  1 ms  prio 0    motor:      PID → PWM            │   │ IMU 読み / CAN poll+send / pulse 更新
-  62.5µs prio 208 sampling:   ADC DMA → 移動平均    │   │ 同定実験 FSM tick / launch(凍結)
-  1 ms  prio 64   safetyISR:  ①スイッチ読み        │   │ telemetry 送信 (送信ガード)
-        (新設)                ②モード反映          │   │ SD: リング → 書き出し / 定期 sync
-                              ③plausibility       │   │ コマンド受信・ディスパッチ
-                              ④アーミング(①②③④)  │   │ シフター/監視のイベント → debug 送信
-                              ⑤autoShifter.update │   │ 計測集計 (毎秒)
-                              ⑥LogRecord 採取→リング│   └──────────────────────────────────┘
-```
+### 3.1 実行コンテキスト (Phase 2 / 3 完了後)
 
-- **Phase 1 = A + B** (小さく即効。既存構造は不変)
-- **Phase 2 = C** (構造変更。B の計測で ISR 所要時間を確認しながら)。名前は `safetyISR` (安全層 ISR): 既存の `motorControlISR` / `sensorSamplingISR` と同じ命名規則で、CLAUDE.md の「SHUTDOWN 安全層」を毎 ms 回す ISR であることを示す
-- **Phase 3 = D** (C の安全層 ISR に採取を乗せる。事前確保・sync 延長・デコーダ)
+NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。数字が小さいほど優先。
+
+| 優先度 | コンテキスト | タイマー / 起点 | 内容 |
+|---|---|---|---|
+| 48 | FlexPWM 入力キャプチャ | 車輪速のエッジ | FreqMeasureMulti 内部 (ライブラリ既定のまま) |
+| 64 | `tickISR` | **GPT2**、1 ms | 安全層、**モーター制御 (PID → PWM)**、モード反映、シフターの時間管理と自動判断、CAN 送信 (30 Hz)、CAN 途絶判定、回転計測の更新 (毎 ms)、同定実験の進行、ログ 1 レコード採取 |
+| 64 | `canRxISR` | FlexCAN3 の受信割り込み | 0x740 / 0x741 の取り込み。シフト入力のエッジは**その場で**シフターへ渡す |
+| 128 | USB | (Teensy 既定) | — |
+| 208 | `sensorSamplingISR` | **PIT** (単独使用)、16 kHz | ADC の DMA 取り込みと次の転送開始、**IMU の DMA (2 回に 1 回 = 8 kHz)** |
+| — | `loop()` | — | SD 書き出し、telemetry 送信、コマンド処理、ISR からのイベントの debug 送信、計測窓の集計 |
+
+- **`tickISR` と `canRxISR` は同じ優先度**にする。同優先度は互いに割り込めないので、シフター・`CanRxData`・
+  `ControlInput` をこの 2 つの間で排他しなくてよい (保留側は相手の終了直後に走る。遅れは最大で相手の 1 回分 = 数十 µs)。
+- **モーター制御は `tickISR` に統合する** (旧 `motorControlISR` は廃止)。安全層の判断の直後に回すので、tick の残りの処理を待たない。
+  モーターだけ別の割り込みにすると、ETC の停止をタイマーの停止で行う必要があり、出力とタイマー停止の順序を気にすることになる。
+- GPT1 / GPT2 は Teensy コアも使用中のライブラリも使っていない (確認済み)。GPT2 を tick に使い、GPT1 は空きのまま残す。PIT はサンプリング専用になり、優先度 208 が実際に効く。
+  その結果サンプリングは USB と制御 tick に割り込まれるようになる。62.5 µs を超えて待たされた回は 1 サンプル飛ぶが、
+  DMA 転送自体は止まらず、移動平均のサンプル数が 1 つ減るだけ。
+
+### 3.2 段階
+
+- **Phase 1 = A + B** (済、PR #9)
+- **Phase 2 = C**。前提: 制御入力の CAN 化 (`feature/can-control-input`, [control_input_spec.md](control_input_spec.md)) が先に入っていること。
+  - 2a: タイマーの付け替え (`tickISR` → GPT2、PIT はサンプリング専用) と、モーター制御・安全層・シフター・CAN・回転計測・同定実験の tick への移動、flash 保存の手順 (§6.8)
+  - 2b: IMU の DMA 化 (8 kHz)
+  - 2c: エンジン回転・クラッチ後回転を周期計測へ (QuadTimer の入力キャプチャ、§6.7)。最初にベンチで成立確認
+- **Phase 3 = D** (SD: exFAT・ディレクトリ・100 MB 事前確保・リングバッファ・`t_us`)
 
 各フェーズは独立にコミット・検証する。Phase 2 以降は CLAUDE.md の並行性節を更新する。
 
@@ -120,150 +176,297 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
   `decode_log.py` 対応。
 - **console**: DebugLog 見出し付近に `loop max / SD max / drops` の読み出し 1 行 (Q3 決定)。
 
-## 6. C: 安全層 ISR (安全層の ISR 化)
 
-### 6.1 構成
+## 6. C: 割り込みの階層化 (Phase 2)
 
-- 「安全層 ISR」(`safetyISR`): motor / sampling と同じ `IntervalTimer` コールバック (3 本目の PIT) で、
-  `loop()` が担っていた監視と判断を毎 ms 確実に回す ISR。RTOS のタスクではない。
-- `IntervalTimer safetyTimer`、周期 **1 ms**、NVIC 優先度 **64** (motor 0 より低く、
-  USB 128 / sampling 208 より高い。USB に遅らされない。Q4 決定)。PIT は 4 本中 2 本使用 → 3 本目。
-- 所要時間目標 **< 50 µs** (B の `safety_us` で実測・監視)。
+### 6.1 タイマー
 
-### 6.2 loop から安全層 ISR へ移すもの (順序はこのまま)
+- `util/gpt_timer.{hpp,cpp}` (新規): GPT を 1 本扱う小さなクラス (GPT2 を使う)。`begin(periodUs, isr, priority)` / `end()`。
+  クロックは 24 MHz の固定源を使い、周期は整数カウントで誤差なし。`IntervalTimer` と同じく `begin` / `end` は
+  レジスタと NVIC の操作だけなので ISR から呼べる。
+- `motorControlISR` と `IntervalTimer motorControlTimer` は廃止し、モーター制御は `tickISR` の中で回す (§6.2 の 6)。
+  `startEtc()` / `stopEtc()` はタイマーを触らず、`MotorController` の ON / OFF (`setMotorOn()` は内部で `pid.reset()`、
+  `setMotorOff()` は PWM 0) だけを行う。tick は「ON なら `cycle()` を呼ぶ」。
+- `tickISR`: GPT2 (優先度 64)、`setup()` の最後で開始し、以後止めない。
+- `sensorSamplingISR`: PIT のまま (単独使用なので優先度 208 が効く)。
 
-1. スイッチ読み: `shutdownSig / modeSwitch / autoShiftSwitch` の `read()` (デバウンスは `millis()`
-   基準で ISR 内でも成立)。`SensorHub::readImu()` からは外す。
-2. モード反映: `selectToEtcMode()` → `EtcTarget::setMode*()`。
-3. プラウシビリティ: `plausibilityValidator.isValid()` (内部で `isCurrentlyValid()`)。
-   **loop 側は `isCurrentlyValid()` を呼ばない** (副作用あり)。telemetry / launch 用に
-   副作用なしの `validLatched() const` を追加。
-4. アーミング ①②③④ とリレー。`startEtc()` / `stopEtc()` は安全層 ISR からのみ呼ぶ
-   (呼び出しコンテキストを 1 つにして競合を消す)。
-5. `autoShifter.update(autoShiftOn)` 全体 (入力エッジ検出・判断・出力整形)。(Q11 決定: 丸ごと移す。
-   ただしオートシフターは将来 CAN 側 (IST) へ移す予定なので、作り込みは最小限に留める)
+### 6.2 `tickISR` (1 ms) — 実行順
 
-loop に残るもの: IMU 読み、CAN poll/send、`updatePulse()`、`experimentRunner.tick()`、
-launch (凍結)、telemetry、SD 書き出し + sync、コマンド処理、イベントの debug 送信、計測集計。
+| 順 | 処理 | 周期 | 旧所在 |
+|---|---|---|---|
+| 1 | SIG_IN 読み (`shutdownSig().read()`) | 毎回 | loop (`readImu` 内) |
+| 2 | 制御入力: `ControlInput::update()` (新しいフレームの取り込み・途絶時のフォールバック、PR #12) | 毎回 | loop |
+| 3 | モード反映 (`ControlInput::etcMode()` → `EtcTarget`) | 毎回 | loop |
+| 4 | プラウシビリティ (`plausibilityValidator.isValid()`) | 毎回 | loop |
+| 5 | アーミング ①〜⑤ と SHUTDOWN リレー。`startEtc()` / `stopEtc()` は**ここからのみ**呼ぶ (⑤ = flash 保存の待機、§6.8) | 毎回 | loop |
+| 6 | **モーター制御** (`motorController.cycle()`。ON のときだけ。PID → PWM) | 毎回 | motor ISR (PIT、優先度 0) |
+| 7 | 同定実験の進行 (`experimentRunner.tick()`) | 毎回 | loop |
+| 8 | シフターの時間管理 (パルス終端・最短間隔・自動判断) (`autoShifter.tick()`) | 毎回 | loop (`update`) |
+| 9 | 回転計測の更新 (`sensorHub.updatePulse()`。車輪速・エンジン・クラッチ後、§6.7) | **毎回** | loop (100 ms) |
+| 10 | CAN 送信 0x600〜0x603 + 0x60A (DC_Status) | **33 ms (≈30 Hz)** | loop (0x600〜は 16 ms) |
+| 11 | ログ 1 レコード採取 → リング (Phase 3) | 毎回 | loop |
+| 12 | 自身の所要時間を計測 (`LoopStats` の ISR 枠) | 毎回 | — |
 
-### 6.3 ISR 内の禁止事項
+- 時刻: ISR 内の周期判定は tick 回数 (1 ms 単位の `uint32_t` カウンタ) で行い、`millis()` の読み直しはしない。
+  ログの時刻は DWT サイクルカウンタから作る (§7.2)。
+- 1〜5 は数 µs なので、モーター制御の開始時刻のずれも数 µs (1 ms 周期の PID には影響しない)。
+- 所要時間の目標 **< 50 µs** (安全層 + モーター + 送信 + 採取。2.3 の実測から 10〜20 µs 程度の見込み)。B の計測で監視する。
+- 同定実験の開始 / 停止は loop (コマンド) からの**要求フラグ**にし、tick が取り込んで状態を変える
+  (実験の状態遷移の書き手を tick だけにする)。
 
-`Serial` / `sendDebugf` / SD / flash / `malloc` / `delay` を呼ばない。`AutoShifter` の
-`sendDebugf` 4 箇所は **イベントキュー** (`ShiftEvent { kind, gear, widthMs }`、8 要素リング) に
-置き換え、loop が `autoShifter.pollEvent()` で取り出して `sendDebugf` する。
+### 6.3 `canRxISR` — CAN 受信
 
-### 6.4 startEtc / stopEtc を ISR から呼ぶ際の注意
+- FlexCAN_T4 を割り込み受信にする (`enableMBInterrupts()` + `onReceive()`)。**`events()` は呼ばない**:
+  呼ばない場合、ライブラリは受信割り込みの中でそのままコールバックを呼ぶ (`FlexCAN_T4.tpp` の `struct2queueRx` で確認済み)。
+  `begin()` の後で NVIC 優先度を 64 に設定する (ライブラリは設定せず、Teensy 既定の 128 のまま)。
+- 0x740 (Control): `CanRxData` に取り込むだけ。モードの反映は次の tick (1 ms 以内)。
+- 0x741 (Shift): 取り込み、UP / DOWN の押下エッジを**その場で** `autoShifter.onDriverInput()` に渡し、パルスを開始する。
+  チャタリング除去は送信側 (data-logger) の責務なので、受信側ではしない。
+- **パルス出力の最短間隔 0.5 s**: 前のパルスの開始から 0.5 s 経つまで次のパルスを出さない。間隔内に来た入力は捨てる
+  (ためて後で出すと、ドライバーの意図と違うタイミングでシフトするため)。既存の `cooldown_ms` (パルス終了後の待ち、
+  既定 200 ms) はこの最短間隔に置き換え、config の既定値を 500 にする。
+- 送信 (§6.2 の 10) は tick から行う。受信と送信が同じ優先度なので、FlexCAN のメールボックス操作は競合しない。
+  loop は CAN に一切触らない。
 
-- `stopEtc()`: `setMotorOff()` (PWM 0・SLP/リレー LOW) → `motorControlTimer.end()`。
-  motor ISR (優先度 0) が間に割り込んでも `cycle()` の `write` は `_isOn=false` で no-op。
-- `startEtc()`: `setMotorOn()` (`pid.reset()`) → `begin()`。`IntervalTimer::begin/end` は PIT
-  レジスタと NVIC の操作のみで ISR から呼べる。全呼び出しが安全層 ISR に集約されるため
-  loop との競合は無い。
+### 6.4 IMU の DMA 化 (Phase 2b)
 
-### 6.5 共有状態 (書き手 → 読み手)
+- 現状: loop が毎周 SPI1 でブロッキング読み (1 回 20 µs、約 35,000 回/s、CPU の 61 %)。
+- 変更: ADC と同じ方式にする。`sensorSamplingISR` (16 kHz) の 2 回に 1 回 (= **8 kHz**、ジャイロの内部更新レートの上限) で
+  SPI1 の DMA 転送 (加速度 + 温度 + ジャイロの 14 B + アドレス 1 B、8 MHz で約 15 µs) を開始し、次の回に前回の結果を
+  移動平均へ反映する。加速度の更新は 4 kHz なので同じ値を 2 回取り込むことがあるが、平均に影響はない。
+- 移動平均の窓 **8 サンプル (= 1 ms 分)** 経由で、telemetry・CAN・ログは平均値を読む (`MovingAverage<N>` の `noInterrupts()` 保護を踏襲)。
+- 初期化 (`WHO_AM_I` 確認とレジスタ設定) は今どおり `setup()` でブロッキング。
+- `SensorHub::readImu()` は削除。
 
-| 状態 | 書き手 | 読み手 | 幅 | 扱い |
-|---|---|---|---|---|
-| `EtcTarget::mode` | 安全層 ISR | motor ISR, loop | enum (1 B) | アトミック |
-| `EtcTarget::manualTarget` | loop (コマンド / 実験) | motor ISR, 安全層 ISR | **double** | 既存の競合 (Q12 決定: 別課題、競合は許容) |
-| plausibility check flags | loop (configurator / 実験) | 安全層 ISR | bool | アトミック |
-| `experimentRunner.wantsCoast()` | loop | 安全層 ISR | bool | アトミック |
-| validator 内部 (時刻・ラッチ・errorBits) | 安全層 ISR | loop (telemetry / log) | u16 / bool | アトミック (const getter 経由) |
-| `autoShifter.state()` | 安全層 ISR | loop (log) | enum | アトミック |
-| スイッチ `isOn()/getStatus()` | 安全層 ISR | loop (CAN TX / log) | bool / enum | アトミック |
-| `motorController.isOn()` | 安全層 ISR (start/stop) | loop (無し) | bool | — |
-| センサー校正 (slope/intercept) | loop (`calibrate()`) | 全 ISR | **double** | 既存の競合 (Q12 決定: 別課題、競合は許容) |
+### 6.5 ISR 内の禁止事項と、loop への伝達
 
-## 7. D: ギャップレスログ
+- ISR (`tickISR` / `canRxISR` / サンプリング) から `Serial` / `sendDebugf` / SD / flash / `malloc` / `delay` を呼ばない。
+  いずれも中で割り込みや完了を待つので、上の優先度から呼ぶと固まる。
+- 伝えたいことは**イベントキュー** (固定長リング、ISR が積み loop が取り出す) に積み、loop が `sendDebugf` する。
+  対象: シフター (`ShiftEvent { kind, gear, widthMs }`)、同定実験 (開始 / 中断理由 / 終了)、`ControlInput` (上書きの自動解除)。
+  今は `sendDebugf` / `DebugLogger::log` を直接呼んでいる (同定実験 13 か所、シフター 4 か所、`ControlInput` 1 か所)。
 
-### 7.1 採取 (ISR)
+### 6.6 共有状態 (書き手 → 読み手)
 
-- 安全層 ISR の最後 (⑥) で `buildLogRecord(...)` を呼び、リングに書く。同じ tick の判断結果が
-  レコードに反映される。`buildLogRecord` は const getter 読みの純粋関数で、読む値はほぼ 32 bit
-  単位 (MovingAverage は `noInterrupts()` で保護済み)。
-- `millis()` ベースの 1 kHz ではなくタイマー周期で採取するので、`t_ms` は `millis()` を記録しつつ
-  サンプル間隔はタイマー精度になる。
+| 状態 | 書き手 | 読み手 | 扱い |
+|---|---|---|---|
+| `EtcTarget::mode` | tick | tick (モーター制御), loop | 1 B、アトミック |
+| `EtcTarget::manualTarget` | loop (コマンド)、tick (実験) | tick (モーター制御) | **double**。既存の競合 (Q12: 別課題) |
+| `CanRxData` | canRxISR | tick (同優先度で排他不要)、loop (telemetry) | loop 側は多少の不整合を許容 (表示のみ) |
+| `ControlInput` の override | loop (コマンド) | tick | 構造体の書き込みを `noInterrupts()` で囲む (数 µs) |
+| プラウシビリティのチェックフラグ | loop (`setCheckFlags`) | tick | bool、アトミック |
+| validator 内部 (ラッチ・errorBits) | tick | loop (telemetry) | const getter 経由、アトミック |
+| シフターの状態 | tick, canRxISR | loop (telemetry) | enum、アトミック |
+| 回転計測の結果 | tick | loop (telemetry)、tick (ログ) | float、アトミック |
+| IMU / ADC の移動平均 | サンプリング ISR | tick, loop | 既存の `noInterrupts()` 保護 |
+| ログのリング | tick (書き) | loop (読み) | 書き手 1・読み手 1。head / tail を `volatile uint32_t` で |
+| 実験の開始 / 停止要求 | loop | tick | 要求フラグ (§6.2) |
+| センサー校正 (slope / intercept) | loop (`calibrate()`) | 全 ISR | **double**。既存の競合 (Q12: 別課題) |
 
-### 7.2 リングバッファ
+| flash 書き込みの要求 / 準備完了 | loop / tick | tick / loop | bool 2 つ (§6.8) |
 
-- `DMAMEM static LogRecord ring[LOG_RING_RECORDS]`、**2048 レコード (≈2 s, 303 KB @148 B)**。
-  RAM2 空き約 500 KB (現ビルド)。(Q5 決定)
-- head (ISR が書く) / tail (loop が読む) は `volatile uint32_t`。満杯時は**新しいレコードを捨てて**
-  `log_drops++` (順序を保つ。古い方を捨てる方式は tail の競合管理が要る。Q6 決定)。
-- 記録窓 (実験) との関係: 2 s のリングは観測済み最大ストール (121 ms) と SD の多ブロック書き込みを
-  十分吸収する。
+flash への書き込みは割り込み禁止で約 150 ms かかり、その間は tick・CAN 受信を含むすべての割り込みが止まる (§6.8)。
 
-### 7.3 書き出し (loop)
+### 6.7 回転計測 (Phase 2a / 2c)
 
-- `SensorLogger::service()` が tail から **4 KB 以上たまったら最大 8 KB** をまとめて
-  `sdFile.write()` (多ブロック書き込みで効率化。1 回の所要を B で計測し上限を調整。Q7 決定)。
-- `sync()` 間隔 `SYNC_INTERVAL_MS` を **1000 → 2000** (電源断時の損失上限 2 s ≈ 290 KB。Q8 決定)。
-  事前確保 (7.4) と合わせて flush 自体も軽くなる見込み。
+動機: 将来の Launch Control はエンゲージ率 (車輪側回転 ÷ エンジン回転) をフィードバックするので、回転の遅れと分解能が効く。
+現状のエンジン回転・クラッチ後回転は「100 ms 窓のパルス数 ÷ 100 ms」で、遅れ約 50 ms・分解能 50 rpm (エンジン 12 歯)。
+窓を縮めると分解能が落ちる (20 ms で 250 rpm)。
 
-### 7.4 ファイル事前確保
+| センサー | 機構 | 歯数 | 最大パルス |
+|---|---|---|---|
+| 車輪速 FL/FR/RL/RR | FreqMeasureMulti (FlexPWM 入力キャプチャ、周期計測) | config | — |
+| エンジン (pin 14) | QuadTimer3 ch2 | 12 (等間隔) | 2.4 kHz (12,000 rpm) |
+| クラッチ後 (pin 15) | QuadTimer3 ch3 | 100 (等間隔) | 20 kHz (エンジンと同回転と仮定) |
 
-- `SD.open()` の代わりに `SDClass::sdfs` (SdFs) 経由で `FsFile` を開き (`O_RDWR|O_CREAT|O_TRUNC`)、
-  `preAllocate(LOG_PREALLOC_BYTES)` で連続クラスタを確保する (FAT 更新が書き込み経路から消える)。
-  サイズ **512 MB ≈ 1 時間** (148 B × 1 kHz)。上限到達時は新ファイルを開く。(Q9 決定)
-  (`SDClass::sdfs` が public か要確認。非公開なら `SdFs` を自前で `begin(BUILTIN_SDCARD)`)。
-- **電源断対策**: 確保領域の末尾は未初期化データなので、デコーダが終端を知る手段が要る。
-  - `LogHeader` に `uint32 record_count` を追加 (32 B) し **`SENSOR_LOG_VERSION` を 5 に上げる**。
-    v4 (Phase 1: 24 B ヘッダ + 148 B レコード) と同じ版番号で混在するとデコーダが無言で 8 B ずれるため。`sync()` の直前にヘッダへ seek して
-    更新 (+1 ブロック書き込み/sync)。
-  - デコーダは `record_count > 0` ならそれを使い、0 (初回 sync 前の電源断) なら
-    `t_ms` の単調性 (前レコード以上かつ +10 s 未満) が崩れた所で止める。
-  - 正常終了 (reboot コマンド) 時は `truncate()` + `close()`。
-- 起動時の既存ファイル検出 (`dc_log_NNNN` 採番) は不変。
+- **2a**: 更新を tick の毎回にする。車輪速は周期計測なので精度は変わらない。エンジン・クラッチ後は当面、毎 ms のカウント値を
+  リングに残し「今 − 100 ms 前」で求める (分解能は現状と同じ、100 ms ごとの段差が消える)。
+- **2c**: エンジン・クラッチ後を周期計測にする。**ピンは変えない。**
+  - ch2 / ch3 はこれまでどおり外部エッジを数える。
+  - 空いている ch0 / ch1 を IP バスクロックで自走させ、副入力 (SCS) に入力 2 / 3 を選んでエッジ時刻をキャプチャする
+    (同一モジュールのチャネルは互いの入力を選べる、i.MX RT RM の記載に基づく。未検証)。
+  - tick で「エッジ数」と「最後のエッジ時刻」を読み、直近 N 歯にかかった時間から回転を出す。歯ごとの割り込みは不要。
+  - キャプチャ側は 16 bit なので tick ごとに上位をソフトで拡張する (4 チャネルとも使うのでカスケードで 32 bit にはできない)。
+  - 平均歯数 N: エンジン 12 (1 回転。歯の加工誤差と燃焼ごとの回転変動を 1 回転で平均。揺れるなら 24)、クラッチ後 10
+    (1/10 回転。発進直後の低回転でも遅れが小さい: 500 rpm で 12 ms、3,000 rpm で 2 ms)。
+  - 300 ms エッジが無ければ 0 rpm (車輪速の `STALE_MS` と同じ)。
+  - 成立確認: ベンチで空きピンの PWM を pin 14 / 15 にループバックし、周波数を振って精度と追従を見る。
+- 影響: ピン 18 / 19 (QuadTimer3 ch1 / ch0) は以後 `analogWrite` に使えない (GPIO / I2C としては使える)。
+- Launch Control の FSM (現在 50 ms) は、凍結解除時に tick へ移す (本書のスコープ外、注記のみ)。
 
-### 7.5 検証
+### 6.8 flash 保存 (Phase 2a)
 
-- 10 分のログ中にポート開閉・コマンド送信・`set_config` (flash 保存) を混ぜても
-  `t_ms` 差分が全て 1 ms (ギャップ 0)、`log_drops == 0`。
-- ストール注入 (§8) 500 ms → ギャップ 0 / drops 0。3 s → drops が計上され、その後記録再開。
+flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され、tick が止まる。モーター制御も止まるので、
+**書き込みの直前に ETC を止め、終わったら再開する** (2026-10-11 決定)。対象は flash に書く 3 コマンド:
+`save` (保存ボタン)、`set_config` (Config のインポート、反映してすぐ保存)、`format_fs` (FS のフォーマット)。
+
+手順:
+1. loop (コマンド処理) が「flash 書き込み要求」を立てる。
+2. tick は要求を見たら、**シフターのパルス出力中でないこと**を待ってから (パルスが止まった tick の中で伸びないように)、
+   ETC を止め (アーミング ⑤、PWM 0)、「準備完了」を立てる。
+3. loop は準備完了を待ち (上限 1 s。超えたらコマンドを失敗で返す)、flash に書く。
+4. 書き終えたら要求を下ろす。次の tick でアーミングの通常判定に戻り、条件を満たしていれば ETC を再開する (PID はリセット)。
+
+書き込み中 (約 150 ms) の影響:
+- スロットルはバネで閉じる。ピットやベンチでは問題ないが、走行中に保存するとスロットルが一瞬閉じる。
+- 安全層・CAN 送受信・ログ採取も止まる。0x60A は約 150 ms 途切れる。CAN 受信のハードウェア FIFO は 6 フレームなので、
+  あふれた分は失われる (0x741 は状態を 10 ms ごとに送り直すので、150 ms より長い押下は書き込み後に拾える)。
+- `millis()` / `micros()` は SysTick 割り込みで進むので、止まっていた間の時間 (約 149 ms) を失い、以後ずっと遅れたままになる。
+  そのためログの時刻は `micros()` ではなく DWT サイクルカウンタから作り、止まっていた時間が穴として現れるようにする (§7.2)。
+
+## 7. D: ギャップレスログ (Phase 3)
+
+### 7.1 採取
+
+- `tickISR` の最後 (§6.2 の 11) で `buildLogRecord()` を呼び、リングに書く。GPT2 の 1 ms 周期なので**等間隔**。
+  同じ tick の判断結果 (アーミング・シフター) がそのレコードに入る。
+
+### 7.2 レコードと時刻 (v5)
+
+- `t_ms` (`millis()`) を **`t_us`** (µs、`uint32_t`) に置き換える。レコードは 148 B のまま。
+- 時刻源は **DWT サイクルカウンタ** (`ARM_DWT_CYCCNT`。Cortex-M7 内蔵、Teensy コアが起動時に有効化済み、600 MHz で 7.16 s で一周)。
+  `micros()` は SysTick 割り込みでミリ秒を足すので、flash 保存のように割り込みが長く止まるとその時間を失う (§6.8)。
+  - `tickISR` が毎回カウンタを読み、前回より小さければ上位に 2^32 を足して 64 bit に伸ばす (1 ms ごとに読むので一周を取りこぼさない。
+    割り込みが 7 s 以上止まらない限り時間を失わない)。
+  - µs への換算は `cycles / (F_CPU_ACTUAL / 1000000)`。64 bit に伸ばす処理は tick の 1 か所だけで行い、他 (loop の計測など) は tick が出した値を読む。
+- `t_us` は 2^32 µs = **71.6 分で一周**する。レコードには 32 bit のまま入れ、デコーダが「前のレコードより小さくなったら
+  上位桁を 1 足す」で 64 bit に戻す。レコードは 1 ms 間隔で並ぶので取り違えは起きない。ファーム内の差分計算は
+  符号なしの引き算なので一周しても正しい。
+- `LogHeader` v5 (各ファイルの先頭、32 B): `magic[8]`、`version`=5、`record_size`、`log_hz`、予約、
+  `dir_number` (起動ごとの通し番号)、`file_index` (ディレクトリ内の連番)、`rtc_epoch`。
+- `SENSOR_LOG_VERSION` を 5 に上げ、`tools/decode_log.py` はディレクトリ単位でファイルを連結して読む。
+
+### 7.3 リングバッファ
+
+- `DMAMEM` に 2048 レコード (≈2 s、303 KB)。RAM2 空き約 500 KB に収まる。
+- 満杯時は新しいレコードを捨てて `log_drops` を数える (順序を保つ。Q6)。
+- 必要量の見込み: カード内部の待ち 最大 0.5 s、ファイル切り替え・古いファイルの削除 (exFAT なら数 ms〜数十 ms) を合わせても 1 s 未満。
+
+### 7.4 カードとファイルシステム
+
+- **exFAT** でフォーマットする。空き管理がビットマップ (1 クラスタ 1 bit) なので、確保と削除が FAT32 より約 30 倍速く、
+  連続ファイルはクラスタの連結 (FAT チェーン) を書かずに済む。
+- クラスタ境界をカードの消去単位にそろえてフォーマットする (カード内部の待ちが減る)。公式の SD Card Formatter は
+  32 GB 以下のカードを FAT32 にし、OS 標準のフォーマットは境界がそろう保証がない。そこで **Teensy 自身が SdFat の
+  `ExFatFormatter` (SD 規格どおりに境界をそろえる) でフォーマットする**。console にフォーマットのコマンドを追加し、
+  確認ダイアログを出したうえで、ETC 停止中のみ実行できる。実行前にログ書き込みを止める。どの PC でもブラウザだけで同じ結果になる。
+- FAT32 のカードが挿されても動作はする (SdFat は両対応)。ただし確保が遅く、§7.6 の終端判定が使えない (§7.6 末尾)。
+- 推奨カード: 高耐久 (High Endurance) または産業用で、A1 / A2 か V30 の表示があるもの。
+
+### 7.5 ディレクトリとファイル
+
+- 起動ごとに 1 ディレクトリ: `dc_NNNN_YYYYMMDD_HHMMSS/` (RTC 未設定なら `dc_NNNN/`)。`NNNN` は起動時にルートを走査した
+  最大番号 + 1。日時ではなく番号で新旧を決める (RTC 設定あり / なしの起動が混ざっても順序が崩れない)。
+- その中に `0000.bin`, `0001.bin`, … を **100 MB (100,000,000 B) ずつ**作る。各ファイルは作成時に `preAllocate()` で
+  連続領域を確保し、先頭にヘッダ、続けてレコードを書く (レコードはファイルをまたがない)。1 ファイル ≈ 67.5 万レコード ≈ 11.3 分。
+- **ファイルが埋まったら** (Q3 決定: a): loop がそのファイルを `sync()` して閉じ、次のファイルを作って確保する。その間 loop は
+  止まるが、リングが吸収する。
+- **カードが満杯で確保できなかったら**: 一番古いファイル (最小の `NNNN` の最小の番号) を削除し、空になったディレクトリも削除して、
+  確保をやり直す。今回の起動のファイルしか残っていなければ、今回の起動の古いファイルから消す。書き込み中のファイルは消さない。
+- **書き込み・`sync()`・確保の失敗**: その起動ではログを止める (`active = false`)。失敗した書き込みを毎周やり直して loop が
+  止まる事象 (§2.2) を防ぐ。**通知はしない** (2026-10-11 決定)。止まった後のレコードは `log_drops` に数えられ、telemetry の
+  `SysStats` で見える。
+
+### 7.6 書き出しと終端の判定
+
+- loop の `SensorLogger::service()` がリングから 4 KB 以上たまったら最大 8 KB をまとめて `write()` (Q7)。
+- `sync()` は 2 s ごと (Q8)。exFAT の事前確保ファイルは「確保済みの長さ (DataLength)」と「有効な長さ (ValidDataLength)」を
+  別に持つ。`preAllocate()` は前者だけを 100 MB にし、後者は `sync()` のたびにディレクトリへ書かれる。
+  **有効な長さより後ろは、PC からはゼロとして読める** (SdFat の `fileSize()` も有効な長さを返す)。
+- そのため、以前消したファイルの古いデータが確保領域に残っていても、PC やデコーダからは見えない。終端は
+  「全バイトがゼロのレコード」で判定できるので、起動ごとの識別子 (旧案) は不要。
+- 電源断で失うのは、最後の `sync()` 以降に書いた分 (最大 2 s) と、リングに残っていた分。
+- FAT32 カードの場合は有効な長さの仕組みがないので、末尾に古いデータが見えうる。デコーダは `t_us` の連続性
+  (前のレコードから 0〜1 s 後でなければ終端) でも止める。
+
+### 7.7 検証
+
+- 30 分のログ中にポート開閉・コマンド送信・`set_config` (flash 保存) を混ぜても、`t_us` の差分が全て 1000 µs ± ジッタ、
+  `log_drops == 0`。ただし flash 保存の間 (約 150 ms) はレコードが欠ける (§6.8)。
+- 100 MB のファイル切り替えをまたいで連続していること (ファイル境界で欠けがない)。
+- `t_us` の一周 (起動から 71.6 分) をまたいでデコーダが連続した時刻を出すこと。
+- 小容量のカード (または確保サイズを一時的に小さくしたビルド) で満杯にし、一番古いファイルが消えて記録が続くこと。
+- ストール注入 (§8) 500 ms → 欠け 0 / drops 0。3 s → drops が計上され、その後も記録が続く。
 
 ## 8. 検証用デバッグコマンド (ベンチ専用)
 
 「ストール注入」= SD や USB の停止を人工的に再現する**ベンチ専用コマンド**。
 `DebugStallCmd { uint32 ms }` を追加し、loop 内で `delay(ms)` する (**`-DBENCH_DEBUG` ビルドのみ
-登録**、本番は ok=false。Q10 決定: 含める)。これで次を実機で確認できる:
+登録**、本番は ok=false。Q10)。これで次を実機で確認できる:
 
-- Phase 2: 200 ms ストール中に SIG_IN を落とすと ETC が 1 ms 以内に止まる (SD ログの flags/duty で確認)。
-  シフターのパルス幅がストールの影響を受けない (ログの `autoshift_state` 遷移時刻で確認)。
+- Phase 2: 200 ms ストール中に SIG_IN を落とすと ETC が 1 ms 以内に止まる。CAN の送信間隔が乱れない。
+  0x741 のシフト入力に対するパルス開始と、パルス幅がストールの影響を受けない (SD ログで確認)。
 - Phase 3: ストール中も記録が途切れない。
 
 ## 9. 実装タッチポイント
 
 | ファイル | Phase | 変更 |
 |---|---|---|
-| `src/serial/serial_protocol.cpp` | 1 | 全フレームに送信ガード (`availableForWrite`)、`droppable` 引数削除 |
-| `dc-console/src/serial.ts` | 1 | `setSignals({dataTerminalReady:true, requestToSend:true})` |
-| `src/util/loop_stats.{hpp,cpp}` | 1 | 新規: 所要時間集計 |
-| `src/util/log/sd_binary_writer.cpp` | 3 | `FsFile` + `preAllocate` + ヘッダ `record_count` |
-| `spec/proto/drive_controller.proto` | 1 / 2 | `SysStats`、`DebugStallCmd` → 両側再生成 |
-| `src/util/log/log_record.hpp` + `tools/decode_log.py` | 1 / 3 | v4 (stats フィールド) / v5 (ヘッダ `record_count`、終端判定) |
-| `src/main.cpp` | 2 / 3 | 安全層 ISR タイマー、loop の再編、イベント送信 |
-| `src/sensor/sensor_hub.{hpp,cpp}` | 2 | `readImu()` からスイッチ読みを分離 (`readSwitches()`) |
-| `src/etc/plausibility_validator.{hpp,cpp}` | 2 | `validLatched() const` |
-| `src/shift/auto_shifter.{hpp,cpp}` | 2 | `sendDebugf` → イベントキュー + `pollEvent()` |
-| `src/util/log/sensor_logger.{hpp,cpp}` | 1 / 3 | write/flush 所要を `LoopStats` へ直接報告 / リング採取 API (`captureFromIsr`) + まとめ書き出し + drops |
-| `src/commands/command_controller.cpp` | 2 | `DebugStallCmd` (BENCH_DEBUG) |
-| `dc-console/` | 1 | SysStats 表示 |
-| `CLAUDE.md` | 2 / 3 | 並行性節 (安全層 ISR 追加、SD ログ節) |
+| `src/util/gpt_timer.{hpp,cpp}` | 2a | 新規: GPT2 タイマー |
+| `src/main.cpp` | 2a / 3 | `motorControlISR` を廃止しモーター制御を `tickISR` (GPT2) へ、loop を SD / telemetry / コマンド / イベント送信だけに |
+| `src/can/can_bus.{hpp,cpp}`、`can_controller.{hpp,cpp}` | 2a | 受信割り込み + `onReceive`、優先度 64、`poll()` 削除、送信 33 ms |
+| `src/constants.hpp` | 2a | `CAN_TX_INTERVAL_MS` 33、優先度定数 |
+| `src/control/control_input.{hpp,cpp}` | 2a | override の書き込みを割り込み禁止区間に |
+| `src/shift/auto_shifter.{hpp,cpp}` | 2a | `onDriverInput()` (CAN 受信から即時) と `tick()` (1 ms) に分割、最短間隔 0.5 s、`sendDebugf` → イベントキュー |
+| `src/etc/experiment_runner.{hpp,cpp}` | 2a | 開始 / 停止の要求フラグ、イベントキュー |
+| `src/etc/plausibility_validator.{hpp,cpp}` | 2a | `validLatched() const` (loop 側の読み出し用) |
+| `src/util/loop_stats.{hpp,cpp}` | 2a | tick / CAN 受信 ISR の所要時間 |
+| `src/sensor/iam20680hp.{hpp,cpp}`、`sensor_hub.{hpp,cpp}` | 2b | SPI1 の DMA、移動平均、`readImu()` 削除 |
+| `src/sensor/pulse_counter.{hpp,cpp}`、`sensor_hub.{hpp,cpp}` | 2a / 2c | 毎 ms 更新とカウント値のリング (2a)、QuadTimer3 ch0 / ch1 のキャプチャで周期計測 (2c) |
+| `src/commands/command_controller.cpp`、`spec/proto/drive_controller.proto`、`dc-console/` | 3 | SD フォーマットのコマンド (確認ダイアログ、ETC 停止中のみ) |
+| `src/util/log/sd_binary_writer.{hpp,cpp}` | 3 | `SdFs` / `FsFile`、ディレクトリ・100 MB 事前確保・切り替え・古いファイルの削除・失敗時停止 |
+| `src/util/log/sensor_logger.{hpp,cpp}` | 3 | リング (ISR から採取)、まとめ書き出し、drops |
+| `src/util/log/log_record.hpp`、`src/log_record_builder.cpp` | 3 | v5 (`t_us`、ヘッダ) |
+| `tools/decode_log.py` | 3 | v5、ディレクトリ単位の連結、`t_us` の一周補正、終端判定 |
+| `spec/proto/drive_controller.proto` | 2a | `SysStats` に tick / CAN 受信 ISR の最大、`DebugStallCmd` → 両側再生成 |
+| `src/commands/command_controller.cpp` | 2a | `DebugStallCmd` (BENCH_DEBUG)、実験は要求フラグ経由 |
+| `src/configurator.{hpp,cpp}`、`src/util/flash.{hpp,cpp}` | 2a | flash 書き込みの前後で要求 / 準備完了の受け渡し (§6.8) |
+| `dc-console/` | 2a | SysStats の表示項目追加 |
+| `CLAUDE.md` | 2 / 3 | 並行性節 (コンテキストと優先度の表)、CAN 節 (受信割り込み・30 Hz)、SD ロギング節 |
 
-## 10. 決定事項 (2026-10-06 レビュー)
+## 10. 決定事項
+
+### 10.1 2026-10-06 (Phase 1 時点。改訂後も有効なもの)
 
 | Q | 決定 |
 |---|---|
-| Q1 | console は open 直後に `setSignals` で DTR を明示 (RTS は触らない)。ファーム側の DTR ゲートは自己レビューで撤回し、全フレームの送信ガードに置換 (§4) |
+| Q1 | console は open 直後に `setSignals` で DTR を明示 (RTS は触らない)。ファーム側の DTR ゲートは撤回し、全フレームの送信ガードに置換 (§4) |
 | Q2 | `SysStats` は 50 Hz の State に同梱 |
 | Q3 | console 表示は読み出し 1 行 |
-| Q4 | `safetyISR` (安全層 ISR) = 3 本目の IntervalTimer ISR、1 ms、優先度 64。名前は「安全のための ISR」と分かるものにする (supervisor は別概念と衝突、arming は一工程に過ぎないため不採用) |
 | Q5 | リング 2048 レコード (≈2 s) を RAM2 に |
 | Q6 | 溢れ時は新規を捨てて `log_drops` を数える |
 | Q7 | 4 KB たまったら最大 8 KB をまとめ書き (実測で調整) |
-| Q8 | `SYNC_INTERVAL_MS` = 2000 |
-| Q9 | 事前確保 512 MB、上限到達で新ファイル |
+| Q8 | `sync()` は 2 s ごと |
 | Q10 | ストール注入コマンドを `-DBENCH_DEBUG` ビルドにのみ登録 |
-| Q11 | `autoShifter.update()` を丸ごと安全層 ISR へ。将来 CAN 側へ移す予定のため最小限の作り込み |
-| Q12 | 既存の double 競合 (`manualTarget`、校正 slope/intercept) は**別課題**。競合は許容 |
-| Q13 | PR #5 のブランチから派生した stacked ブランチで Phase 1 → 2 → 3 を PR 単位で進め、#5 マージ後にリベース |
+| Q12 | 既存の double 競合 (`manualTarget`、校正 slope / intercept) は**別課題**。競合は許容 |
+
+旧 Q4 (3 本目の IntervalTimer で安全層 ISR)、Q9 (512 MB 1 ファイル)、Q11 (シフターを丸ごと安全層 ISR へ)、
+Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え。
+
+### 10.2 2026-10-11 (改訂)
+
+| 項目 | 決定 |
+|---|---|
+| 基盤 | ベアメタル (Arduino / Teensy コア) のまま。RTOS (Zephyr 等) は見送り |
+| 方針 | 時間の決まった処理はすべて割り込み。loop には遅れてよい処理 (console 送信・コマンド・SD 書き出し) だけ |
+| IMU | 割り込み + DMA で 8 kHz、移動平均 |
+| CAN | 受信は割り込み (即時)。送信は等間隔で **30 Hz** (0x600〜0x603 も 0x60A も) |
+| パルスカウンタ | 等間隔 (100 ms) で割り込みから更新 |
+| シフター | 入力は CAN 0x741 の受信で即時処理。チャタリング除去は送信側。パルス出力の最短間隔 0.5 s |
+| ログの時刻 | µs で記録。一周はデコーダで補正。時刻源は DWT サイクルカウンタを tick で 64 bit に伸ばしたもの (旧 Q-G。`micros()` は割り込みが長く止まると時間を失うため) |
+| SD | exFAT。起動ごとに 1 ディレクトリ、100 MB の事前確保ファイルを順に作る。満杯なら一番古いファイルを消す |
+| 失敗時 | ログを止めるだけ。通知はしない |
+| 仕様書 | 本書 (Phase 2 / 3) にまとめる |
+| シフトの最短間隔 (旧 Q-B) | パルス**開始**から次のパルス開始まで 0.5 s。間隔内の入力は捨てる。`cooldown_ms` を置き換え、既定 500 |
+| IMU の平均窓 (旧 Q-C) | 8 サンプル (= 1 ms 分) |
+| 同定実験 (旧 Q-D) | 進行を tick に移す (§6.2 の 7)。開始 / 停止は loop からの要求フラグ |
+| exFAT のフォーマット (旧 Q-E) | Teensy が `ExFatFormatter` で行う。console のコマンドから、確認ダイアログ付き・ETC 停止中のみ |
+| 1 ms 割り込みの名前 (旧 Q-A) | `tickISR`。既存の `sensorSamplingISR` と同じ書き方。安全層を含むことはコメントと §6.2 の表で示す |
+| モーター制御 | `tickISR` に統合 (旧 `motorControlISR` と GPT1 は使わない)。安全層の直後に回す |
+| flash 保存 | 書き込みの直前に ETC を止め、終わったら再開 (§6.8)。シフターのパルス中は待つ |
+| 回転計測の平均歯数 (旧 Q-F) | 定数 (`constants.hpp`)。エンジン 12、クラッチ後 10 |
+| 回転計測 | 毎 ms 更新。エンジン (12 歯)・クラッチ後 (100 歯) は Phase 2c で QuadTimer の入力キャプチャによる周期計測へ。ピンは変えない (§6.7) |
+
+## 11. 未決事項
+
+なし (2026-10-11 時点)。
