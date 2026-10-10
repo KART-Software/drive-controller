@@ -1,6 +1,6 @@
 # loop() 非依存化・ギャップレスログ 仕様書
 
-Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂 — 実装 GO 待ち。**
+Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-11)、2b / 2c / 3 は未着手。**
 作成: 2026-10-06、改訂: 2026-10-11。関連: [control_input_spec.md](control_input_spec.md) (制御入力の CAN 化。Phase 2 の前提)、
 [etc_experiment_mode_spec.md](etc_experiment_mode_spec.md) (記録の消費側)、
 [etc_control_improvement_plan.md](etc_control_improvement_plan.md) §6 (同定計画。ギャップレス記録の動機)、
@@ -156,7 +156,7 @@ NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。�
 |---|---|---|
 | `loop_us` | `loop()` 1 周の `micros()` 差 | max / mean |
 | `sd_us` | `SensorLogger` の write / flush 1 回の所要 (呼び出しごとに `LoopStats` へ直接報告) | max |
-| `safety_us` | 安全層 ISR 1 回の所要 (Phase 2 以降) | max |
+| `safety_us` | tickISR 1 回の所要 (Phase 2 以降) | max |
 | `log_drops` | リング溢れで捨てたレコード数 (Phase 3 以降) | 累積 (uint16 ラップ) |
 
 `util/loop_stats.hpp` に `LoopStats` を新設し、`loop()` 先頭で `tick()`、その直後に毎秒 `rollover()`
