@@ -14,7 +14,7 @@ const FIELDS: { key: keyof AutoShiftConfigT; label: string; step: number }[] = [
   { key: "downshiftRpm", label: "Downshift RPM", step: 100 },
   { key: "minWheelHz", label: "Min Wheel Hz", step: 0.5 },
   { key: "throttleOnPct", label: "Throttle On %", step: 1 },
-  { key: "cooldownMs", label: "Cooldown ms", step: 10 },
+  { key: "cooldownMs", label: "Min interval ms (≥500)", step: 10 },
   { key: "istPulseMs", label: "IST Pulse ms", step: 1 },
   { key: "normalDrivePulseMs", label: "NORMAL Drive ms", step: 5 },
   { key: "normalNeutralPulseMs", label: "NORMAL Neutral ms", step: 5 },

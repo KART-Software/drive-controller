@@ -49,5 +49,6 @@ struct CanRxData {
     uint32_t shiftFrames = 0;
     unsigned long lastShiftFrameMs = 0;
 
-    void mergeFrame(const CAN_message_t& msg);
+    enum class Kind : uint8_t { Other, Control, Shift };
+    Kind mergeFrame(const CAN_message_t& msg);  // 受信割り込みから (millis() で受信時刻を刻む)
 };

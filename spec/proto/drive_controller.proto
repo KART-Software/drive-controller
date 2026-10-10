@@ -113,7 +113,7 @@ message AutoShiftConfig {
   float  upshift_rpm             = 1;  // UP しきい値 (RPM)
   float  downshift_rpm           = 2;  // DOWN しきい値 (RPM)
   float  min_wheel_hz            = 3;  // 停止/走行 境界 (兼 ON 時の停車抑止しきい)
-  uint32 cooldown_ms             = 4;  // シフト間ロックアウト (両モード)
+  uint32 cooldown_ms             = 4;  // シフト間の最短間隔 [ms] (パルス開始→次の開始、両モード)。500 未満は 500
   uint32 ist_pulse_ms            = 5;  // IST: 全シフト共通パルス幅 (ms)
   uint32 normal_drive_pulse_ms   = 6;  // NORMAL 走行中/通常: N スキップ (ms)
   uint32 normal_neutral_pulse_ms = 7;  // NORMAL 停車中 1速UP/2速DOWN: N 入れ (ms)
@@ -192,12 +192,12 @@ message Sensor{
   float clutch_rpm = 35;  // クラッチ後(出力軸)の回転 [Hz] (engine_teeth と同様に要換算)
 }
 
-// loop() / SD / 安全層 ISR の所要時間 (直近に完了した 1 s 窓)。docs/loop_nonblocking_spec.md §5
+// loop() / SD / tickISR の所要時間 (直近に完了した 1 s 窓)。docs/loop_nonblocking_spec.md §5
 message SysStats {
   uint32 loop_max_us      = 1;  // loop 1 周の最大 [µs]
   uint32 loop_mean_us     = 2;  // 平均
   uint32 sd_max_us        = 3;  // SD write/flush 1 回の最大
-  uint32 safety_max_us    = 4;  // 安全層 ISR 1 回の最大 (Phase 2 以降、それまで 0)
+  uint32 safety_max_us    = 4;  // tickISR 1 回の最大 (安全層・モーター制御などを含む)
   uint32 log_drops        = 5;  // リング溢れ累積 (Phase 3 以降、それまで 0)
   uint32 loop_max_us_boot = 6;  // 起動以来の loop 1 周の最大
 }
@@ -416,6 +416,12 @@ message SetControlOverrideCmd {
   optional bool    auto_shift = 3;
 }  // 実行中の実験を中断 (manual 解除 → 通常制御へ復帰)
 
+// ベンチ専用: loop を ms だけ止める (SD / USB の停止の再現。docs/loop_nonblocking_spec.md §8)。
+// -DBENCH_DEBUG ビルドでのみ有効。それ以外は ok=false
+message DebugStallCmd {
+  uint32 ms = 1;
+}
+
 message SetGpsGearCmd {
   sint32 gear = 1;  // which gear position to calibrate (0=N, 1-6)
 }
@@ -458,6 +464,7 @@ message Command {
     StartEtcExperimentCmd      start_etc_experiment   = 34;
     StopEtcExperimentCmd       stop_etc_experiment    = 35;
     SetControlOverrideCmd      set_control_override   = 36;
+    DebugStallCmd              debug_stall            = 37;
   }
 }
 

@@ -1,7 +1,7 @@
 #include "experiment_runner.hpp"
 
 #include "constants.hpp"
-#include "serial/serial_protocol.hpp"
+#include "util/isr_debug.hpp"
 
 namespace etc {
 
@@ -95,6 +95,28 @@ bool ExperimentRunner::preconditionsOk() const {
     return true;
 }
 
+bool ExperimentRunner::waitRequest(Request r) {
+    reqResult_ = false;
+    req_ = r;
+    const uint32_t t0 = millis();
+    while (req_ != Request::None) {
+        if (millis() - t0 >= 50) {  // tick が止まっている (flash 書き込み中など)
+            req_ = Request::None;
+            return false;
+        }
+    }
+    return reqResult_;
+}
+
+bool ExperimentRunner::requestStart(Type type) {
+    reqType_ = type;
+    return waitRequest(Request::Start);
+}
+
+void ExperimentRunner::requestStop() {
+    waitRequest(Request::Stop);
+}
+
 bool ExperimentRunner::start(Type type, unsigned long now) {
     if (type == Type::None || !preconditionsOk())
         return false;
@@ -110,7 +132,7 @@ bool ExperimentRunner::start(Type type, unsigned long now) {
     stallSinceMs_ = 0;
     target_.setManualTarget(currentTargetTp());
     enterPhase(Phase::Settling, now);
-    SerialProtocol::sendDebugf("EXP start type=%u steps=%u", (unsigned)type_, totalSteps());
+    isrDebugf("EXP start type=%u steps=%u", (unsigned)type_, totalSteps());
     return true;
 }
 
@@ -118,7 +140,7 @@ void ExperimentRunner::stop() {
     if (!active()) {
         // 非実行中でも EXP stop を返す: 実験中に再起動 / USB 断があると console は EXP stop を受け取れず
         // 「実行中」表示が張り付く。停止ボタンでそれを解除できるようにする
-        SerialProtocol::sendDebugf("EXP stop (not running)");
+        isrDebugf("EXP stop (not running)");
         return;
     }
     if (target_.isManual())
@@ -126,7 +148,7 @@ void ExperimentRunner::stop() {
     validator_.suspendTargetCheck(false);
     type_ = Type::None;
     phase_ = Phase::Idle;
-    SerialProtocol::sendDebugf("EXP stop");
+    isrDebugf("EXP stop");
 }
 
 void ExperimentRunner::resetStationaryWindow(unsigned long now) {
@@ -176,47 +198,47 @@ void ExperimentRunner::advance(unsigned long now) {
     index_++;
     stepPost_ = false;
     if (index_ >= totalSteps()) {
-        SerialProtocol::sendDebugf("EXP done type=%u timeouts=%u", (unsigned)type_, timeoutCount_);
+        isrDebugf("EXP done type=%u timeouts=%u", (unsigned)type_, timeoutCount_);
         stop();
         return;
     }
     if ((index_ % 10) == 0)
-        SerialProtocol::sendDebugf("EXP progress %u/%u", index_, totalSteps());
+        isrDebugf("EXP progress %u/%u", index_, totalSteps());
     target_.setManualTarget(currentTargetTp());
     enterPhase(Phase::Settling, now);
 }
 
 bool ExperimentRunner::guardsOk(unsigned long now) {
     if (control_.etcMode() == EtcTarget::Mode::MotorOff) {
-        SerialProtocol::sendDebugf("EXP abort: MOTOR_OFF knob");
+        isrDebugf("EXP abort: MOTOR_OFF knob");
         return false;
     }
     if (hub_.pulseEngine().getFrequencyHz() > 0.5f) {
-        SerialProtocol::sendDebugf("EXP abort: engine running");
+        isrDebugf("EXP abort: engine running");
         return false;
     }
     if (!validator_.currentlyValid() || !validator_.validLatched()) {
-        SerialProtocol::sendDebugf("EXP abort: plausibility");
+        isrDebugf("EXP abort: plausibility");
         return false;
     }
     if (!hub_.shutdownSig().isOn()) {
-        SerialProtocol::sendDebugf("EXP abort: SIG_IN low");
+        isrDebugf("EXP abort: SIG_IN low");
         return false;
     }
     // コースト区間はモーターを意図的に止めている。それ以外で OFF なら ETC が止まっている
     if (phase_ != Phase::Coasting && !motor_.isOn()) {
-        SerialProtocol::sendDebugf("EXP abort: ETC not armed");
+        isrDebugf("EXP abort: ETC not armed");
         return false;
     }
     double tp = hub_.tps1().convertedValue();
     if (tp > EXPERIMENT_TP_GUARD_HIGH) {
-        SerialProtocol::sendDebugf("EXP abort: tps high %.1f", tp);
+        isrDebugf("EXP abort: tps high %d (x0.1%%)", (int)(tp * 10));
         return false;
     }
     // 低側ガード: リリース試験はコースト~再アームでバネ休止位置 (-15% 付近) を
     // 通るのが正常挙動なので適用しない (モーターは切れており押し付けは起きない)。
     if (type_ != Type::Release && tp < EXPERIMENT_TP_GUARD_LOW) {
-        SerialProtocol::sendDebugf("EXP abort: tps low %.1f", tp);
+        isrDebugf("EXP abort: tps low %d (x0.1%%)", (int)(tp * 10));
         return false;
     }
     // ストール: PID がほぼ飽和 + 目標乖離 + 不動の継続 (固着/想定外の押し付け)。
@@ -230,7 +252,7 @@ bool ExperimentRunner::guardsOk(unsigned long now) {
             stallRefTp_ = (float)tp;
         } else if (now - stallSinceMs_ >= EXPERIMENT_STALL_MS) {
             if (fabsf((float)tp - stallRefTp_) < 0.5f) {
-                SerialProtocol::sendDebugf("EXP abort: stall u=%.0f tp=%.1f", (double)u, tp);
+                isrDebugf("EXP abort: stall u=%d tp=%d (x0.1%%)", (int)u, (int)(tp * 10));
                 return false;
             }
             stallSinceMs_ = now;  // 動いてはいる → 監視窓を更新して継続
@@ -243,6 +265,19 @@ bool ExperimentRunner::guardsOk(unsigned long now) {
 }
 
 void ExperimentRunner::tick(unsigned long now) {
+    switch (req_) {
+        case Request::Start:
+            reqResult_ = start(reqType_, now);
+            req_ = Request::None;
+            break;
+        case Request::Stop:
+            stop();
+            reqResult_ = true;
+            req_ = Request::None;
+            break;
+        case Request::None:
+            break;
+    }
     if (!active())
         return;
     if (!guardsOk(now)) {

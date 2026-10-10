@@ -7,10 +7,12 @@
 class CanController {
    public:
     explicit CanController(const SensorHub& sensorHub);
-    void begin();
-    void send();  // Call at 60Hz: build CanTxData from sensorHub and send
-    void sendStatus(const CanStatusData& status);  // 0x60A, 33 ms
-    void poll();  // Drain RX FIFO into rxData_
+    // onRx は受信割り込み (canRxISR) から 1 フレームごとに呼ばれる。中で onFrame() を呼ぶこと
+    void begin(void (*onRx)(const CAN_message_t& msg), uint8_t priority);
+    void send();                                   // 0x600-0x603 (tickISR, CAN_TX_INTERVAL_MS)
+    void sendStatus(const CanStatusData& status);  // 0x60A (tickISR, CAN_TX_INTERVAL_MS)
+    // 受信フレームを rxData_ に取り込む (canRxISR)。どのフレームだったかを返す
+    CanRxData::Kind onFrame(const CAN_message_t& msg) { return rxData_.mergeFrame(msg); }
     const CanRxData& rxData() const { return rxData_; }
 
    private:

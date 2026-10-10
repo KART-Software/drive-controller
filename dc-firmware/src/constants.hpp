@@ -75,15 +75,25 @@
 /// Motor Control Settings ///
 //////////////////////////////
 
-#define MOTOR_CONTROLL_CYCLE_TIME 1  // ms
+#define MOTOR_CONTROLL_CYCLE_TIME 1  // ms (= tickISR の周期。モーター制御は tick の中で回す)
+
+///////////////////////////////////////////////
+/// 割り込み (docs/loop_nonblocking_spec.md §3.1) ///
+///////////////////////////////////////////////
+
+// NVIC 優先度 (上位 4 bit のみ有効、小さいほど優先)。tickISR と canRxISR は同じ優先度にして互いに割り込ませない
+// (シフター・CanRxData・ControlInput を排他なしで共有できる)
+#define TICK_ISR_PRIORITY 64
+#define CAN_RX_ISR_PRIORITY 64
+#define SENSOR_SAMPLING_ISR_PRIORITY 208  // USB (128) より下
+#define TICK_PERIOD_US 1000
 
 ///////////////////////////////
 /// Launch Control Settings ///
 ///////////////////////////////
 
-// Launch FSM tick 周期。pulse counter (PULSE_UPDATE_INTERVAL_MS=100ms) と
-// 整合させつつ FSM 応答性を確保するため 50ms (20Hz) とする。
-// CAN_TX 周期 (16ms) からは切り離されている。
+// Launch FSM tick 周期 (50ms, 20Hz)。凍結中は loop に残している。凍結解除時に tickISR へ移す
+// (docs/loop_nonblocking_spec.md §6.7)。
 #define LAUNCH_UPDATE_INTERVAL_MS 50
 
 ///////////////////////
@@ -156,20 +166,19 @@
 //   Engine=14(QuadTimer3_2)  ClutchRPM=15(QuadTimer3_3)
 #define PULSE_ENGINE_PIN 14
 #define PULSE_CLUTCH_RPM_PIN 15
-#define PULSE_UPDATE_INTERVAL_MS 100
+// 回転計測は tickISR が毎 ms 更新する。エンジン / クラッチ後は直近 100 ms の窓 (PulseCounter::WINDOW_TICKS)
 
 ////////////////////
 /// CAN Settings ///
 ////////////////////
 
 #define CAN_BITRATE 1000000       // 1 Mbps
-#define CAN_TX_INTERVAL_MS 16     // ~60Hz
+#define CAN_TX_INTERVAL_MS 33     // ~30Hz (0x600-0x603 と 0x60A を同じ tick で送る)
 // CAN ID / メッセージ定義は kart-can (submodule: dc-firmware/lib/kart-can, 生成 kart_can.h) を単一ソースとする:
-//   TX: 0x600-0x603 (IMU + ギア, CAN_TX_INTERVAL_MS) / 0x60A DC_Status (CAN_STATUS_INTERVAL_MS)
+//   TX: 0x600-0x603 (IMU + ギア) / 0x60A DC_Status。どちらも CAN_TX_INTERVAL_MS ごとに tickISR から
 //   RX: 0x740 Control (data_logger → ETC モード / launch / auto-shift / starter, 33 ms)
 //       0x741 Shift   (data_logger → シフトパドル上下, 10 ms)
 // 制御入力は CAN のみ (GPIO のモードノブ / スイッチ / パドルは廃止, docs/control_input_spec.md)。
-#define CAN_STATUS_INTERVAL_MS 33
 
 // 途絶したら安全側へ戻す (kart-can docs/can-spec.md §4.1):
 //   Control: launch → false, mode → NORMAL (MOTOR_OFF はラッチ), auto-shift → OFF (manual), starter → 0
@@ -189,6 +198,8 @@
 // シフト信号の出力 (パドル入力は CAN 0x741)。アサート=HIGH。
 #define AUTO_SHIFT_OUT_ACTIVE HIGH
 #define AUTO_SHIFT_OUT_INACTIVE LOW
+// パルスの開始から次の開始までの最短 (ms)。config の cooldown_ms がこれより短ければこちらを使う
+#define SHIFT_MIN_INTERVAL_MS 500
 
 //////////////////////////////////////
 /// ETC Experiment Mode (同定実験) ///

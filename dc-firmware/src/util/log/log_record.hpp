@@ -58,7 +58,7 @@ struct __attribute__((packed)) LogRecord {
     // ── v4: loop 停止の可視化 (LoopStats::live() = 直前の窓と現在の窓のここまでの大きい方) ※ caller ──
     uint32_t loop_max_us;    // loop 1 周の最大 [µs] (120 ms 停止を記録するため uint32)
     uint32_t sd_max_us;      // SD write/flush 1 回の最大 [µs]
-    uint16_t safety_max_us;  // 安全層 ISR 1 回の最大 [µs] (Phase 2 以降、それまで 0)
+    uint16_t safety_max_us;  // tickISR 1 回の最大 [µs] (安全層・モーター制御などを含む)
     uint16_t log_drops;      // リング溢れ累積 (Phase 3 以降、それまで 0)
 };
 

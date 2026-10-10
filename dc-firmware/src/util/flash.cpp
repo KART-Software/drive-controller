@@ -19,6 +19,20 @@ bool Flash::initialize() {
     return false;
 }
 
+bool Flash::beginWrite() {
+    if (writeDepth_ == 0 && gate_ != nullptr && !gate_->acquire(kGateTimeoutMs)) {
+        DebugLogger::log("Flash: ETC did not stop within %u ms, write skipped", (unsigned)kGateTimeoutMs);
+        return false;
+    }
+    writeDepth_++;
+    return true;
+}
+
+void Flash::endWrite() {
+    if (writeDepth_ > 0 && --writeDepth_ == 0 && gate_ != nullptr)
+        gate_->release();
+}
+
 bool Flash::writeProto(const char* fileName, const pb_msgdesc_t* fields, const void* msg) {
     uint8_t buf[kBufSize];
     pb_ostream_t stream = pb_ostream_from_buffer(buf, sizeof(buf));
@@ -27,15 +41,19 @@ bool Flash::writeProto(const char* fileName, const pb_msgdesc_t* fields, const v
         return false;
     }
     size_t len = stream.bytes_written;
+    if (!beginWrite())
+        return false;
     if (fs.exists(fileName))
         fs.remove(fileName);
     File file = fs.open(fileName, FILE_WRITE);
     if (!file) {
+        endWrite();
         DebugLogger::log("Flash writeProto: open failed");
         return false;
     }
     file.write(buf, len);
     file.close();
+    endWrite();
     DebugLogger::log("Saved %u bytes to %s", (unsigned)len, fileName);
     return true;
 }
@@ -59,13 +77,19 @@ bool Flash::readProto(const char* fileName, const pb_msgdesc_t* fields, void* ms
 }
 
 void Flash::remove(const char* fileName) {
+    if (!beginWrite())
+        return;
     fs.remove(fileName);
+    endWrite();
 }
 
 bool Flash::format() {
     // LittleFS を消去。保持したいデータ (config 等) は呼び出し側が事前に RAM 保持し、
     // フォーマット後に書き戻すこと。
+    if (!beginWrite())
+        return false;
     bool ok = fs.quickFormat();
+    endWrite();
     if (!ok)
         DebugLogger::log("Flash format failed");
     return ok;

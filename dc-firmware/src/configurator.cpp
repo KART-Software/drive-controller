@@ -244,18 +244,20 @@ bool Configurator::importConfig(const dc_Config& cfg) {
     overlayConfig(cfg);
     calibrate();
     configChanged = true;
-    save();
-    return true;
+    return save();
 }
 
-void Configurator::save() {
-    if (configChanged) {
-        flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config);
-        SerialProtocol::sendDebugf("save: normalMax=%g restrictedMax=%g",
-                                   (double)config.sensor_calib.target_tp_normal_max,
-                                   (double)config.sensor_calib.target_tp_restricted_max);
-    }
+bool Configurator::save() {
+    if (!configChanged)
+        return true;
+    // 書き込みの間 (約 150 ms) は ETC を止める (Flash が tick と受け渡す、§6.8)。失敗したら未保存のまま残す
+    if (!flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config))
+        return false;
+    SerialProtocol::sendDebugf("save: normalMax=%g restrictedMax=%g",
+                               (double)config.sensor_calib.target_tp_normal_max,
+                               (double)config.sensor_calib.target_tp_restricted_max);
     configChanged = false;
+    return true;
 }
 
 void Configurator::revert() {
@@ -266,9 +268,12 @@ void Configurator::revert() {
 bool Configurator::formatFs() {
     // 現在の config は RAM(this->config) に保持済み。FS を消去してから無条件で書き戻す。
     // save() は configChanged を見るためここでは使わず直接書き込む (フォーマットで消えるため)。
-    if (!flash.format())
+    // 消去と書き戻しを 1 回の ETC 停止でまとめる (間で ETC が再開しないように)
+    if (!flash.beginWrite())
         return false;
-    bool ok = flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config);
-    configChanged = false;
+    bool ok = flash.format() && flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config);
+    flash.endWrite();
+    if (ok)
+        configChanged = false;
     return ok;
 }

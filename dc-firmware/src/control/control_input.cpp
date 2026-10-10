@@ -1,7 +1,7 @@
 #include "control_input.hpp"
 
 #include "constants.hpp"
-#include "util/log/debug_logger.hpp"
+#include "util/isr_debug.hpp"
 
 namespace {
 
@@ -27,11 +27,25 @@ void ControlInput::update(unsigned long nowMs) {
         canMode_ = EtcTarget::Mode::Normal;
     if (overrideActive_ && controlLinkAlive()) {
         overrideActive_ = false;
-        DebugLogger::log("control: override cleared (CAN 0x740 received)");
+        isrDebugf("control: override cleared (CAN 0x740 received)");
     }
 }
 
 bool ControlInput::setOverride(const Override& o) {
+    // loop (コマンド) から。tickISR が update() / getter で読むので、判定と書き込みを割り込み禁止で囲む (数 µs)
+    noInterrupts();
+    const bool ok = setOverrideLocked(o);
+    interrupts();
+    return ok;
+}
+
+void ControlInput::clearOverride() {
+    noInterrupts();
+    overrideActive_ = false;
+    interrupts();
+}
+
+bool ControlInput::setOverrideLocked(const Override& o) {
     if (controlLinkAlive())
         return false;
     // 上書き中なら未指定の項目は今の上書き値を保つ (オートシフトだけ切り替えてもモードの上書きが消えない)
