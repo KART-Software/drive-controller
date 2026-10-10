@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <TimeLib.h>
+#include <kart_can.h>
 
 #include "can/can_controller.hpp"
 #include "commands/command_controller.hpp"
@@ -175,9 +176,10 @@ void tickISR() {
     // 9 回転計測 (車輪速・エンジン・クラッチ後)
     sensorHub.updatePulse(nowUs);
 
-    // 10 CAN 送信 (30 Hz)。0x600-0x603 と 0x60A DC_Status
-    if (n % CAN_TX_INTERVAL_MS == 0) {
+    // 10 CAN 送信。周期は kart-can の定義 (can.yaml の cycle_ms) どおり
+    if (n % KART_CAN_DC_GYRO_XY_CYCLE_TIME_MS == 0)  // 0x600-0x603 (4 フレームとも同じ周期)
         canController.send();
+    if (n % KART_CAN_DC_STATUS_CYCLE_TIME_MS == 0) {  // 0x60A DC_Status
         canController.sendStatus({
             .etcMode = sensorHub.target().getMode(),
             .launchActive = false,

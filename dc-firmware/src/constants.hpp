@@ -172,10 +172,10 @@
 /// CAN Settings ///
 ////////////////////
 
-#define CAN_BITRATE 1000000       // 1 Mbps
-#define CAN_TX_INTERVAL_MS 33     // ~30Hz (0x600-0x603 と 0x60A を同じ tick で送る)
+#define CAN_BITRATE 1000000       // 1 Mbps。kart-can can.yaml の baudrate と同じ値にする (生成ヘッダにはマクロが出ない)
 // CAN ID / メッセージ定義は kart-can (submodule: dc-firmware/lib/kart-can, 生成 kart_can.h) を単一ソースとする:
-//   TX: 0x600-0x603 (IMU + ギア) / 0x60A DC_Status。どちらも CAN_TX_INTERVAL_MS ごとに tickISR から
+//   TX: 0x600-0x603 (IMU + ギア) / 0x60A DC_Status。tickISR から送る。周期は kart-can の
+//       KART_CAN_*_CYCLE_TIME_MS (can.yaml の cycle_ms) をそのまま使い、ここでは定義しない
 //   RX: 0x740 Control (data_logger → ETC モード / launch / auto-shift / starter, 33 ms)
 //       0x741 Shift   (data_logger → シフトパドル上下, 10 ms)
 // 制御入力は CAN のみ (GPIO のモードノブ / スイッチ / パドルは廃止, docs/control_input_spec.md)。

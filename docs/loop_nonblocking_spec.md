@@ -97,7 +97,7 @@ NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。�
 | 優先度 | コンテキスト | タイマー / 起点 | 内容 |
 |---|---|---|---|
 | 48 | FlexPWM 入力キャプチャ | 車輪速のエッジ | FreqMeasureMulti 内部 (ライブラリ既定のまま) |
-| 64 | `tickISR` | **GPT2**、1 ms | 安全層、**モーター制御 (PID → PWM)**、モード反映、シフターの時間管理と自動判断、CAN 送信 (30 Hz)、CAN 途絶判定、回転計測の更新 (毎 ms)、同定実験の進行、ログ 1 レコード採取 |
+| 64 | `tickISR` | **GPT2**、1 ms | 安全層、**モーター制御 (PID → PWM)**、モード反映、シフターの時間管理と自動判断、CAN 送信 (kart-can の周期)、CAN 途絶判定、回転計測の更新 (毎 ms)、同定実験の進行、ログ 1 レコード採取 |
 | 64 | `canRxISR` | FlexCAN3 の受信割り込み | 0x740 / 0x741 の取り込み。シフト入力のエッジは**その場で**シフターへ渡す |
 | 128 | USB | (Teensy 既定) | — |
 | 208 | `sensorSamplingISR` | **PIT** (単独使用)、16 kHz | ADC の DMA 取り込みと次の転送開始、**IMU の DMA (2 回に 1 回 = 8 kHz)** |
@@ -203,7 +203,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 | 7 | 同定実験の進行 (`experimentRunner.tick()`) | 毎回 | loop |
 | 8 | シフターの時間管理 (パルス終端・最短間隔・自動判断) (`autoShifter.tick()`) | 毎回 | loop (`update`) |
 | 9 | 回転計測の更新 (`sensorHub.updatePulse()`。車輪速・エンジン・クラッチ後、§6.7) | **毎回** | loop (100 ms) |
-| 10 | CAN 送信 0x600〜0x603 + 0x60A (DC_Status) | **33 ms (≈30 Hz)** | loop (0x600〜は 16 ms) |
+| 10 | CAN 送信 0x600〜0x603 / 0x60A (DC_Status)。周期は kart-can の `KART_CAN_*_CYCLE_TIME_MS` をそのまま使う | 16 ms / 33 ms | loop |
 | 11 | ログ 1 レコード採取 → リング (Phase 3) | 毎回 | loop |
 | 12 | 自身の所要時間を計測 (`LoopStats` の ISR 枠) | 毎回 | — |
 
@@ -424,7 +424,7 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 | `src/commands/command_controller.cpp` | 2a | `DebugStallCmd` (BENCH_DEBUG)、実験は要求フラグ経由 |
 | `src/configurator.{hpp,cpp}`、`src/util/flash.{hpp,cpp}` | 2a | flash 書き込みの前後で要求 / 準備完了の受け渡し (§6.8) |
 | `dc-console/` | 2a | SysStats の表示項目追加 |
-| `CLAUDE.md` | 2 / 3 | 並行性節 (コンテキストと優先度の表)、CAN 節 (受信割り込み・30 Hz)、SD ロギング節 |
+| `CLAUDE.md` | 2 / 3 | 並行性節 (コンテキストと優先度の表)、CAN 節 (受信割り込み・送信周期)、SD ロギング節 |
 
 ## 10. 決定事項
 
@@ -452,7 +452,7 @@ Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え�
 | 基盤 | ベアメタル (Arduino / Teensy コア) のまま。RTOS (Zephyr 等) は見送り |
 | 方針 | 時間の決まった処理はすべて割り込み。loop には遅れてよい処理 (console 送信・コマンド・SD 書き出し) だけ |
 | IMU | 割り込み + DMA で 8 kHz、移動平均 |
-| CAN | 受信は割り込み (即時)。送信は等間隔で **30 Hz** (0x600〜0x603 も 0x60A も) |
+| CAN | 受信は割り込み (即時)。送信は等間隔で、周期は kart-can の定義 (`can.yaml` の `cycle_ms` → `KART_CAN_*_CYCLE_TIME_MS`) をそのまま使う: 0x600〜0x603 は 16 ms、0x60A は 33 ms、0x604〜0x609 (未実装) は 20 ms。周期を変えるときは kart-can を先に変える (当初の「30 Hz」は kart-can の設計を確認する前の決定で、取り消し) |
 | パルスカウンタ | 等間隔 (100 ms) で割り込みから更新 |
 | シフター | 入力は CAN 0x741 の受信で即時処理。チャタリング除去は送信側。パルス出力の最短間隔 0.5 s |
 | ログの時刻 | µs で記録。一周はデコーダで補正。時刻源は DWT サイクルカウンタを tick で 64 bit に伸ばしたもの (旧 Q-G。`micros()` は割り込みが長く止まると時間を失うため) |

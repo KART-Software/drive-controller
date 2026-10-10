@@ -3,8 +3,8 @@
 #include <stdint.h>
 
 // loop() の「N ms ごとに」を表す。due(now) は前回成立から periodMs 経っていれば true を返し、起点を now に進める。
-//   Every canTx{CAN_TX_INTERVAL_MS};
-//   if (canTx.due(now)) canController.send();
+//   Every telemetry{SENSOR_SEND_INTERVAL};
+//   if (telemetry.due(now)) SerialProtocol::sendSensorData(...);
 class Every {
    public:
     explicit constexpr Every(uint32_t periodMs) : periodMs_(periodMs) {}
