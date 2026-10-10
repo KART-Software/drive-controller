@@ -1,7 +1,5 @@
 #include "can_controller.hpp"
 
-#include "constants.hpp"
-
 CanController::CanController(const SensorHub& sensorHub) : sensorHub_(sensorHub) {}
 
 void CanController::begin(void (*onRx)(const CAN_message_t& msg), uint8_t priority) {
