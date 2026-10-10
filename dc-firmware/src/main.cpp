@@ -5,6 +5,7 @@
 #include "commands/command_controller.hpp"
 #include "commands/command_router.hpp"
 #include "configurator.hpp"
+#include "control/control_input.hpp"
 #include "constants.hpp"
 #include "etc/experiment_runner.hpp"
 #include "etc/motor_controller.hpp"
@@ -28,6 +29,8 @@ IntervalTimer sensorSamplingTimer;
 Flash flash;
 SensorHub sensorHub;
 CanController canController(sensorHub);
+// ドライバー指令の唯一の入口 (CAN 0x740 / 0x741 + console override)。docs/control_input_spec.md
+ControlInput controlInput(canController.rxData());
 
 etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
                                                  sensorHub.apps2(),
@@ -54,13 +57,18 @@ SensorLogger sensorLogger(sdWriter, loopStats);
 // manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
 // 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
 etc::ExperimentRunner experimentRunner(sensorHub,
+                                       controlInput,
                                        sensorHub.mut.target(),
                                        motorController,
                                        plausibilityValidator,
                                        sensorLogger);
 Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController, autoShifter);
 CommandRouter commandRouter;
-CommandController commandController(configurator, motorController, sensorHub.mut.target(), experimentRunner);
+CommandController commandController(configurator,
+                                    motorController,
+                                    sensorHub.mut.target(),
+                                    experimentRunner,
+                                    controlInput);
 
 void motorControlISR() {
     motorController.cycle();
@@ -98,6 +106,7 @@ void stopEtc() {
 Every statsWindow{1000};                        // 計測窓 (LoopStats) の確定。起点は setup() 末尾
 Every pulseUpdate{PULSE_UPDATE_INTERVAL_MS};    // パルスカウンタ (車輪速・回転数)
 Every canTx{CAN_TX_INTERVAL_MS};                // CAN 送信 0x600-0x603
+Every canStatusTx{CAN_STATUS_INTERVAL_MS};      // CAN 送信 0x60A DC_Status
 Every launchTick{LAUNCH_UPDATE_INTERVAL_MS};    // Launch FSM (凍結中は未使用)
 Every telemetry{SENSOR_SEND_INTERVAL};          // テレメトリ送信
 Every sdLog{1000 / SENSOR_LOG_HZ};              // SD ログ 1 レコード
@@ -106,7 +115,7 @@ Every sdLog{1000 / SENSOR_LOG_HZ};              // SD ログ 1 レコード
 const LogSources logSources = {
     .hub = sensorHub,
     .plausibility = plausibilityValidator,
-    .can = canController,
+    .control = controlInput,
     .shifter = autoShifter,
     .motor = motorController,
     .experiment = experimentRunner,
@@ -137,8 +146,9 @@ void setup() {
 #endif
     autoShifter.begin();
 
-    // Default mode until CAN mode-select frame is received
-    sensorHub.mut.target().setModeNormal();
+    // 起動直後の既定モード。0x740 受信前は loop の ControlInput が MOTOR_OFF を返すので、最初の loop で
+    // MotorOff に切り替わり、アーミング③が ETC を止めたまま待つ
+    sensorHub.mut.target().setMode(EtcTarget::Mode::MotorOff);
     motorController.initialize();
     // モーターは起動時に回さない。SIG_IN=HIGH かつプラウシビリティ違反ラッチなし
     // かつ MOTOR_OFF でない場合に loop() の ETC アーミングが startEtc() で ON にする。
@@ -169,7 +179,6 @@ void setup() {
 }
 
 
-// selectToEtcMode() は can_data.hpp/cpp に移動 (CanController の CAN 出力と共有)。
 
 void loop() {
     loopStats.tick(micros());  // 前回 loop 先頭からの経過 = 1 周の所要 (停止の可視化)
@@ -186,34 +195,12 @@ void loop() {
     sensorHub.read();     // 非DMA: ADC(ブロッキング) + sensor.update + IMU を loop で
 #endif
 
-    // Poll CAN (TX/RX バス駆動)。制御入力(0x740)は一旦凍結し GPIO 直入力を使う (下記)。
+    // CAN 受信 (0x740 Control / 0x741 Shift) → 制御入力。override の自動解除もここで判定する
     canController.poll();
-
-    // 制御入力 (ETC モード / auto-shift) の取得元を切替。既定は GPIO 直入力。
-    // CONTROL_INPUT_VIA_CAN 定義時のみ CAN 0x740 経路 (can_data の受信パースも復活)。
-#if defined(CONTROL_INPUT_VIA_CAN)
-    CanEtcMode ctrlMode = canController.rxData().etcMode;
-    bool autoShiftOn = canController.rxData().autoShiftActive;
-#else
-    CanEtcMode ctrlMode = selectToEtcMode(sensorHub.modeSwitch().getStatus());
-    bool autoShiftOn = sensorHub.autoShiftSwitch().isOn();
-#endif
-
-    switch (ctrlMode) {
-        case CanEtcMode::CALIB:
-            sensorHub.mut.target().setModeCalibration();
-            break;
-        case CanEtcMode::NORMAL:
-            sensorHub.mut.target().setModeNormal();
-            break;
-        case CanEtcMode::RESTRICTED:
-            sensorHub.mut.target().setModeRestricted();
-            break;
-        case CanEtcMode::MOTOR_OFF:
-            // target モードのみ設定。実際の ETC 停止は下の ETC アーミングで行う。
-            sensorHub.mut.target().setModeMotorOff();
-            break;
-    }
+    controlInput.update(now);
+    const EtcTarget::Mode ctrlMode = controlInput.etcMode();
+    // target のモードのみ設定。MotorOff の実際の ETC 停止は下の ETC アーミングで行う
+    sensorHub.mut.target().setMode(ctrlMode);
 
     // Update pulse counters periodically
     if (pulseUpdate.due(now)) {
@@ -240,7 +227,7 @@ void loop() {
     if (!plausibilityValidator.isValid()) {
         digitalWrite(SHUTDOWN_RELAY_PIN, LOW);  // ① 点火系を遮断 (恒久)
         stopEtc();
-    } else if (!sensorHub.shutdownSig().isOn() || ctrlMode == CanEtcMode::MOTOR_OFF) {
+    } else if (!sensorHub.shutdownSig().isOn() || ctrlMode == EtcTarget::Mode::MotorOff) {
         stopEtc();  // ② SIG_IN=LOW または ③ MOTOR_OFF → ETC 停止 (RELAY は HIGH のまま)
     } else if (experimentRunner.wantsCoast()) {
         stopEtc();  // ④ 同定実験リリース試験のコースト区間 (①②③が常に優先)
@@ -252,27 +239,41 @@ void loop() {
     if (canTx.due(now)) {
         canController.send();
     }
+    // CAN TX — 0x60A DC_Status (33 ms)。0x740 送信の後継 (適用中のモード・オートシフト・Shutdown 回路)
+    if (canStatusTx.due(now)) {
+        canController.sendStatus({
+            .etcMode = sensorHub.target().getMode(),
+            .launchActive = false,
+            .autoShift = controlInput.autoShiftOn(),
+            .starterRelay = false,
+            .shutdownLoopClosed = sensorHub.shutdownSig().isOn(),
+        });
+    }
 
 #if defined(LAUNCH_CONTROL_ENABLED)
     // Launch FSM tick — 20Hz (pulse counter 周期 100ms と整合)
     // Plausibility 違反 / MOTOR_OFF 時は launchRequested を強制 false にして
     // FSM を Idle に戻す (handler 側の !launchRequested パスで motor_.off() 経由)。
     if (launchTick.due(now)) {
-        bool safe = plausibilityValidator.isCurrentlyValid() && ctrlMode != CanEtcMode::MOTOR_OFF;
-        launchController.update(safe && canController.rxData().launchActive);
+        bool safe = plausibilityValidator.isCurrentlyValid() && ctrlMode != EtcTarget::Mode::MotorOff;
+        launchController.update(safe && controlInput.launchOn());
     }
 #endif
 
     // Auto-shifter — 毎イテレーション (passthrough レイテンシ最小化, パルス計時は内部 millis)
     // auto-shift スイッチ ON のときだけ auto。OFF や、auto 実行中にドライバーが手動シフトした
     // 場合は manual(ドライバー入力スルー整形)。オートシフターは ETC プラウシビリティに依存しない。
-    autoShifter.update(autoShiftOn);
+    autoShifter.update({
+        .autoOn = controlInput.autoShiftOn(),
+        .upPressed = controlInput.shiftUpPressed(),
+        .downPressed = controlInput.shiftDownPressed(),
+    });
 
     // Send sensor data via serial protocol (50Hz)
     if (telemetry.due(now)) {
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
                                        plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
-                                       loopStats.live());
+                                       loopStats.live(), controlInput);
     }
 
     // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が

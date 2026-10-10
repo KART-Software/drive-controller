@@ -1,7 +1,7 @@
 #include "log_record_builder.hpp"
 
 LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::Snapshot& sys) {
-    const auto& [hub, plausibility, can, shifter, motor, experiment] = src;
+    const auto& [hub, plausibility, control, shifter, motor, experiment] = src;
     static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
     const Adc& adc = hub.adc();
     const Imu* imu = hub.imu();
@@ -16,13 +16,9 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         f |= LOG_FLAG_SHUTDOWN_SIG;
     if (plausibility.currentlyValid())
         f |= LOG_FLAG_VALID;
-#if defined(CONTROL_INPUT_VIA_CAN)
-    if (can.rxData().autoShiftActive)
-#else
-    if (hub.autoShiftSwitch().isOn())  // GPIO 直入力 (CAN 制御入力は凍結中)
-#endif
+    if (control.autoShiftOn())  // 適用中のオートシフト (CAN 0x740 または console override)
         f |= LOG_FLAG_AUTOSHIFT;
-    if (can.rxData().launchActive)  // launch は凍結 (常に false)
+    if (control.launchOn())  // launch は凍結 (消費側なし)
         f |= LOG_FLAG_LAUNCH;
 
     const LogRecord rec = {

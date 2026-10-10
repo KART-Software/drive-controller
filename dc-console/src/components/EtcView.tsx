@@ -13,6 +13,7 @@ import { TargetBoundTuner } from "./TargetBoundTuner";
 import { TargetCurveTuner } from "./TargetCurveTuner";
 import { CurvePreview } from "./CurvePreview";
 import { ModeKnob } from "./ModeKnob";
+import { ControlInputPanel } from "./ControlInputPanel";
 import { ExperimentPanel } from "./ExperimentPanel";
 
 type SetConfig = (
@@ -38,6 +39,7 @@ export function EtcView({ config, setConfig, addLog, setDirty, logs }: Props) {
       <div class="area-sensors"><SensorMonitor /></div>
       <div class="area-mode">
         <ModeKnob />
+        <ControlInputPanel addLog={addLog} />
       </div>
       <div class="area-errors"><ErrorStatus flags={config?.plausibilityFlags ?? {}} addLog={addLog} onFlagsUpdate={(pf) => {
         setConfig((prev) => prev ? { ...prev, plausibilityFlags: pf } : prev);

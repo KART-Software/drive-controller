@@ -80,22 +80,22 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### CAN
 
-- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み) — TX は ~60 Hz でジャイロ・加速度・ギアフレーム (`0x600-0x603`) を送信。RX (poll 駆動): 制御フレーム `CONTROL (0x740)` の byte0=ETC モード / byte1=launch / byte2=オートシフター ON/OFF (byte1・byte2 は 0x01 で ON)。制御用 CAN ID は `0x740` から始まり、制御信号が増えれば `0x741`, `0x742`... を割り当てる。
-- `CanRxData::checkTimeouts()` が安全層。制御フレーム受信時刻を `lastControlFrameMs` に刻み、途絶時はモードを NORMAL に、launch を false に、autoShift を false (OFF=手動) にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。
+- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み)。CAN 定義の単一ソースは submodule `lib/kart-can` (`can.yaml` → 生成 `kart_can.h`、仕様は同リポジトリの `docs/can-spec.md`)。TX: IMU + ギア (`0x600-0x603`, ~60 Hz)、状態 `DC_Status (0x60A)` (33 ms: 適用中の ETC モード・オートシフト・Shutdown 回路)。RX: `Control (0x740)` (data_logger、33 ms: ETC モード / launch / auto-shift / starter) と `Shift (0x741)` (10 ms: シフトパドル上下)。
+- 途絶時のフォールバックは `ControlInput::update()` が持つ (`CanRxData` は受信した値と時刻だけを持つ)。Control が 200 ms 途絶したら mode を NORMAL に、launch / auto-shift / starter を false にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。Shift は 100 ms 途絶で両パドル 0。起動後に一度も受信していない間は途絶扱いにしない。
 - 制御フレームの byte0 で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastControlFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
-- **【現在: CAN 制御入力は一旦凍結し GPIO 直入力】** ETC モード / auto-shift ON-OFF は CAN 0x740 ではなく **GPIO 直入力**で受ける。`SensorHub` が所有し毎ループ read: モード選択 = 3 ピン `SelectSwitch3Pin` (`MODE_SELECT_SW_PIN_1..3` = 6/7/8, 各ピン GND=選択/内部プルアップ)、auto-shift = `ToggleSwitch` (`AUTO_SHIFT_SW_PIN` = 41, GND=ON=auto)。マッピングは data-logger `feature/control-switches` と一致 (暫定): First(6)=CALIB / Second(7)=RESTRICTED / Third(8)=MOTOR_OFF / 未選択=NORMAL。上記の CAN 制御受信 (mergeFrame/checkTimeouts の 0x740 パース) は `#if defined(CONTROL_INPUT_VIA_CAN)` で**無効化して残してある** (未定義=GPIO 既定)。main.cpp / log_record_builder.cpp も同マクロで取得元を切替。CAN TX (0x600-0x603) は継続。GPIO では **MOTOR_OFF は knob 位置が真実なのでラッチしない** (knob を戻せば ETC 再開)。launch は凍結中で GPIO 入力なし (常に false)。
+- **制御入力は `ControlInput` (`src/control/`) が唯一の入口** (docs/control_input_spec.md)。消費側 (main のモード反映・アーミング③、`AutoShifter`、`ExperimentRunner`、ログ、telemetry) は入力元を知らない。ETC モードは (1) console の上書き → (2) 0x740 を起動後に一度も受信していなければ **MOTOR_OFF で待つ** → (3) CAN の受信値、の順で決まる。console の上書き (`SetControlOverrideCmd`) はベンチ用で RAM のみ。**0x740 を受信している間は拒否し、受信が始まったら自動解除**する (車載時にドライバーのスイッチを上書きしないため)。GPIO のモードノブ / auto-shift スイッチ / シフトパドル入力は廃止した。
 
 ### オートシフター
 
 `shift::AutoShifter` (`dc-firmware/src/shift/`) — クイックシフター/シーケンシャル
 ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/auto_shifter_spec.md` が一次ソース。
 
-- ON/OFF は現在 **GPIO の auto-shift スイッチ** (`AUTO_SHIFT_SW_PIN`=41, GND=ON) で切替 (CAN 0x740 byte2 は一旦凍結。CAN 節参照)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。
+- ON/OFF とシフトパドルは `ControlInput` から `update({.autoOn, .upPressed, .downPressed})` で渡される (入手元は CAN 0x740 byte2 / 0x741、または console の上書き)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。パドルは押下状態で渡され、立ち上がり検出は `AutoShifter` が行う。
 - 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。
 - パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
 - ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
 - 4 層構成: 判断ロジック (`evaluate`, 将来の拡張点) / 調停 / 出力整形 / I/O。
-- `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る。`update()` は `loop()` から毎イテレーション呼ばれ、`autoOn = CAN オートシフト指令` のみで判定 (ETC プラウシビリティには非依存。auto-shift の安全フォールバックは CAN 断→manual)。
+- `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る。`update()` は `loop()` から毎イテレーション呼ばれ、オートシフトの ON/OFF だけで判定する (ETC プラウシビリティには非依存。auto-shift の安全フォールバックは CAN 断→manual)。
 - シフト機構制御 (クラッチ/点火カット/ブリッピング/オーバーレブ保護) は IST コントローラ責務。
 
 ### Launch Control (現在凍結)
@@ -135,13 +135,13 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 - **① プラウシビリティ違反** → ETC 停止 + `SHUTDOWN_RELAY_PIN`=LOW (点火系 SHUTDOWN 回路を遮断、**復帰不可ラッチ**)。
 - **② `SHUTDOWN_SIG_IN_PIN`=LOW** (外部 AND 回路が開いた) → ETC 停止 (RELAY は HIGH 維持、SIG が HIGH に戻れば**自動再開**)。
-- **③ `MOTOR_OFF` モード** (現在は GPIO モード選択スイッチ由来 / CAN 凍結中) → ETC 停止 (RELAY 維持)。GPIO では knob を戻せば再開 (ラッチしない)。
+- **③ `MOTOR_OFF` モード** (CAN 0x740 由来、または 0x740 未受信の待機、または console の上書き) → ETC 停止 (RELAY 維持)。別モードを受信 / 上書きすれば再開。CAN 途絶時は MOTOR_OFF を保持する。
 
 ETC 停止 = モーター OFF + モーター ISR 停止 (`motorControlTimer.end()`)、再開 = `setMotorOn()` (内部で `pid.reset()`) + ISR 再起動。① は復帰不可で電源再投入が必要。詳細ロジックは `main.cpp` の「ETC アーミング」コメントが一次ソース。**`SHUTDOWN_RELAY_PIN`(点火系) を落とすのは①だけ**で、`DcMotor` が持つモーター電源リレー `DC_MOTOR_RELAY_PIN` とは別系統。(燃料ポンプ制御は削除済み — 燃料カットはエンジン ECU 責務。)
 
 ### ピンアサイン
 
-`dc-firmware/src/constants.hpp` で `#define` によりモータードライバを選択 (現在は `G2_18V17`)。主要ピンは実配線に合わせて確定済み: モーター(G2)=SLP21/PWM22/DIR23/FLT20、車輪速=24/25/28/36 (FlexPWM, 別サブモジュール)、RPM=Engine14/クラッチ後15 (QuadTimer)、オートシフター=UP_IN40/DOWN_IN39/UP_OUT4/DOWN_OUT5、CAN=CAN3(30/31)、ADC(SPI0)=10-13、IMU(SPI1)=0/1/26/27。パルスカウントのピンはペリフェラル制約あり (上記「パルスカウント」節)。ベンチテスト前に実配線と必ず照合すること。
+`dc-firmware/src/constants.hpp` で `#define` によりモータードライバを選択 (現在は `G2_18V17`)。主要ピンは実配線に合わせて確定済み: モーター(G2)=SLP21/PWM22/DIR23/FLT20、車輪速=24/25/28/36 (FlexPWM, 別サブモジュール)、RPM=Engine14/クラッチ後15 (QuadTimer)、オートシフター出力=UP_OUT4/DOWN_OUT5 (パドル入力は CAN 0x741)、CAN=CAN3(30/31)、ADC(SPI0)=10-13、IMU(SPI1)=0/1/26/27。パルスカウントのピンはペリフェラル制約あり (上記「パルスカウント」節)。ベンチテスト前に実配線と必ず照合すること。
 
 ## 規約
 

@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "can/can_controller.hpp"
+#include "control/control_input.hpp"
 #include "etc/experiment_runner.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
@@ -18,7 +18,7 @@
 struct LogSources {
     const SensorHub& hub;
     const etc::PlausibilityValidator& plausibility;
-    const CanController& can;
+    const ControlInput& control;
     const shift::AutoShifter& shifter;
     const etc::MotorController& motor;
     const etc::ExperimentRunner& experiment;

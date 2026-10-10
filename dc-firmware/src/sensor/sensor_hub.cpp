@@ -10,8 +10,6 @@ void SensorHub::begin() {
     pulseEngine_.begin();
     pulseClutchRpm_.begin();
     shutdownSig_.initialize();
-    modeSwitch_.initialize();
-    autoShiftSwitch_.initialize();
 }
 
 void SensorHub::read() {
@@ -26,8 +24,6 @@ void SensorHub::read() {
     clutch_.update(adc_.value[CLUTCH_CH]);
     imu_impl_.read();
     shutdownSig_.read();  // SHUTDOWN 回路出力をデバウンス更新 (毎ループ)
-    modeSwitch_.read();
-    autoShiftSwitch_.read();  // 制御入力スイッチ (GPIO) をデバウンス更新
 }
 
 #ifdef ADC_DMA
@@ -47,8 +43,6 @@ void SensorHub::sampleAdcDmaIsr() {
 void SensorHub::readImu() {
     imu_impl_.read();
     shutdownSig_.read();  // SHUTDOWN 回路出力をデバウンス更新 (毎ループ)
-    modeSwitch_.read();
-    autoShiftSwitch_.read();  // 制御入力スイッチ (GPIO) をデバウンス更新
 }
 #endif
 
