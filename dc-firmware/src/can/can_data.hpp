@@ -2,6 +2,8 @@
 
 #include <FlexCAN_T4.h>
 
+#include <array>
+
 #include "util/toggle_switch.hpp"
 
 // Data to transmit over CAN at each 60Hz tick
@@ -15,7 +17,7 @@ struct CanTxData {
     // 0x602: ax(float32) ay(float32)
     // 0x603: az(float32)
     static constexpr uint8_t FRAME_COUNT = 4;
-    void toFrames(CAN_message_t (&out)[FRAME_COUNT]) const;
+    std::array<CAN_message_t, FRAME_COUNT> toFrames() const;
 };
 
 // CAN 受信フレーム由来の ETC モード (proto の dc_EtcMode とは独立)

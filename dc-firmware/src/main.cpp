@@ -19,6 +19,7 @@
 #include "util/log/debug_logger.hpp"
 #include "util/log/sd_binary_writer.hpp"
 #include "util/log/sensor_logger.hpp"
+#include "util/every.hpp"
 #include "util/loop_stats.hpp"
 
 IntervalTimer motorControlTimer;
@@ -92,7 +93,24 @@ void stopEtc() {
     motorControlTimer.end();        // その後 ISR を止める
 }
 
-unsigned long lastStatsMs = 0;  // 計測窓 (LoopStats) の起点。setup() 末尾で初期化
+
+// loop() の周期処理。何をどの周期で回すかの一覧
+Every statsWindow{1000};                        // 計測窓 (LoopStats) の確定。起点は setup() 末尾
+Every pulseUpdate{PULSE_UPDATE_INTERVAL_MS};    // パルスカウンタ (車輪速・回転数)
+Every canTx{CAN_TX_INTERVAL_MS};                // CAN 送信 0x600-0x603
+Every launchTick{LAUNCH_UPDATE_INTERVAL_MS};    // Launch FSM (凍結中は未使用)
+Every telemetry{SENSOR_SEND_INTERVAL};          // テレメトリ送信
+Every sdLog{1000 / SENSOR_LOG_HZ};              // SD ログ 1 レコード
+
+// SD ログの入力 (buildLogRecord が読む相手)。参照は起動時に一度だけ束ねる
+const LogSources logSources = {
+    .hub = sensorHub,
+    .plausibility = plausibilityValidator,
+    .can = canController,
+    .shifter = autoShifter,
+    .motor = motorController,
+    .experiment = experimentRunner,
+};
 
 void setup() {
     SerialProtocol::initialize();
@@ -147,14 +165,9 @@ void setup() {
     sensorLogger.begin();
 
     // 計測窓の起点 (setup() の所要は計測しない。最初の窓は最初の loop から 1 s)
-    lastStatsMs = millis();
+    statsWindow.restart(millis());
 }
 
-unsigned long lastLogTime = 0;
-unsigned long lastPulseUpdateTime = 0;
-unsigned long lastCanTime = 0;
-unsigned long lastLaunchTime = 0;
-unsigned long lastSdLogMs = 0;
 
 // selectToEtcMode() は can_data.hpp/cpp に移動 (CanController の CAN 出力と共有)。
 
@@ -163,8 +176,7 @@ void loop() {
     unsigned long now = millis();
     // 計測窓の確定 (1 s)。tick 直後に置くので、直前の周 (= tick が計上した周) とその周の SD 所要が
     // 同じ窓に入る (末尾に置くと SD 所要だけ 1 窓先行して組み合わせがずれる)
-    if ((uint32_t)(now - lastStatsMs) >= 1000) {
-        lastStatsMs = now;
+    if (statsWindow.due(now)) {
         loopStats.rollover(0 /* log_drops: Phase 3 */);
     }
 
@@ -204,8 +216,7 @@ void loop() {
     }
 
     // Update pulse counters periodically
-    if (now - lastPulseUpdateTime >= PULSE_UPDATE_INTERVAL_MS) {
-        lastPulseUpdateTime = now;
+    if (pulseUpdate.due(now)) {
         sensorHub.updatePulse();
     }
 
@@ -238,8 +249,7 @@ void loop() {
     }
 
     // CAN TX — 60Hz
-    if (now - lastCanTime >= CAN_TX_INTERVAL_MS) {
-        lastCanTime = now;
+    if (canTx.due(now)) {
         canController.send();
     }
 
@@ -247,8 +257,7 @@ void loop() {
     // Launch FSM tick — 20Hz (pulse counter 周期 100ms と整合)
     // Plausibility 違反 / MOTOR_OFF 時は launchRequested を強制 false にして
     // FSM を Idle に戻す (handler 側の !launchRequested パスで motor_.off() 経由)。
-    if (now - lastLaunchTime >= LAUNCH_UPDATE_INTERVAL_MS) {
-        lastLaunchTime = now;
+    if (launchTick.due(now)) {
         bool safe = plausibilityValidator.isCurrentlyValid() && ctrlMode != CanEtcMode::MOTOR_OFF;
         launchController.update(safe && canController.rxData().launchActive);
     }
@@ -260,8 +269,7 @@ void loop() {
     autoShifter.update(autoShiftOn);
 
     // Send sensor data via serial protocol (50Hz)
-    if (now - lastLogTime >= SENSOR_SEND_INTERVAL) {
-        lastLogTime = now;
+    if (telemetry.due(now)) {
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.isValid(),
                                        plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
                                        loopStats.live());
@@ -272,10 +280,8 @@ void loop() {
     // SD の所要時間は LoopStats が計測している (telemetry SysStats.sd_max_us / LogRecord v4 sd_max_us)。
     // 毎秒の flush で数 ms、カード遅延で数十 ms の停止がある。解消は Phase 3 (リングバッファ + ISR 採取,
     // docs/loop_nonblocking_spec.md §7)。
-    if (sensorLogger.active() && (uint32_t)(now - lastSdLogMs) >= (1000 / SENSOR_LOG_HZ)) {
-        lastSdLogMs = now;
-        sensorLogger.log(buildLogRecord(now, sensorHub, plausibilityValidator, canController, autoShifter,
-                                        motorController, experimentRunner, loopStats.live()));
+    if (sensorLogger.active() && sdLog.due(now)) {
+        sensorLogger.log(buildLogRecord(now, logSources, loopStats.live()));
     }
     sensorLogger.service(now);
 

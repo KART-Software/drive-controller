@@ -1,6 +1,5 @@
-import { useState, useEffect } from "preact/hooks";
 import type { SensorData } from "../types";
-import { sensorStore } from "../sensor-store";
+import { useLatestSensor } from "../hooks/useSensorValue";
 
 function fmt(v: number | undefined | null, d = 1): string {
   return v != null ? v.toFixed(d) : "-";
@@ -24,14 +23,7 @@ function Row({ label, raw, val, unit }: { label: string; raw?: number; val?: num
 }
 
 export function DrivetrainMonitor() {
-  const [data, setData] = useState<SensorData | null>(null);
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setData(d);
-    }, 100);
-    return () => clearInterval(iv);
-  }, []);
+  const data = useLatestSensor();
 
   return (
     <section>

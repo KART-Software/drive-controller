@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include <optional>
+
 #include "etc/error_handler.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
@@ -50,5 +52,5 @@ class SerialProtocol {
 
     // Drain Serial input, decoding any complete frames. If a Command was
     // decoded this call, copies it into `out` and returns true.
-    static bool readCommand(dc_Command& out);
+    static std::optional<dc_Command> readCommand();  // 1 フレーム揃えば返す (無ければ nullopt)
 };

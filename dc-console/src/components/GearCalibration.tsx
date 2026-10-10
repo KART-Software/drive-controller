@@ -1,7 +1,7 @@
-import { useState, useEffect } from "preact/hooks";
+import { useState } from "preact/hooks";
 import type { DeviceConfig, SensorData } from "../types";
 import { protocol } from "../protocol";
-import { sensorStore } from "../sensor-store";
+import { useLatestSensor } from "../hooks/useSensorValue";
 
 interface Props {
   config: DeviceConfig | null;
@@ -19,7 +19,7 @@ function gearName(g: number): string {
 }
 
 export function GearCalibration({ config, addLog, onDirty, onConfigUpdate }: Props) {
-  const [live, setLive] = useState<SensorData | null>(null);
+  const live = useLatestSensor();
   const [rawByGear, setRawByGear] = useState<Record<number, number>>({});
 
   async function switchType(type: number) {
@@ -39,13 +39,6 @@ export function GearCalibration({ config, addLog, onDirty, onConfigUpdate }: Pro
     }
   }
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setLive(d);
-    }, 100);
-    return () => clearInterval(iv);
-  }, []);
 
   const gears = config?.gpsType === 1 ? NORMAL_GEARS : IST_GEARS;
 

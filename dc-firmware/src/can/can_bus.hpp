@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
+
+#include <optional>
 #include "can_data.hpp"
 
 class CanBus {
@@ -14,8 +16,8 @@ class CanBus {
     // GPIO 制御入力 (ETCモード / auto-shift) を Control(0x740) フレームとして CAN 出力。
     void sendControl(CanEtcMode mode, bool autoShift);
 
-    // Poll RX FIFO and merge all received frames into rx.
-    void poll(CanRxData& rx);
+    // RX FIFO から 1 フレーム取り出す (空なら nullopt)
+    std::optional<CAN_message_t> read();
 
    private:
     // CAN3 = Teensy 4.1 の pin 30/31 (CAN1 の 22/23 はモーター PWM/DIR に割当のため)

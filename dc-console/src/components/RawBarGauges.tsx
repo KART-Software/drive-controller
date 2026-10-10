@@ -1,7 +1,6 @@
-import { useState, useEffect } from "preact/hooks";
 import type { SensorData, DeviceConfig } from "../types";
 import { protocol } from "../protocol";
-import { sensorStore } from "../sensor-store";
+import { useLatestSensor } from "../hooks/useSensorValue";
 
 interface RawBarProps {
   label: string;
@@ -46,15 +45,8 @@ interface Props {
 const SCALE_MAX = 65535;
 
 export function RawBarGauges({ config, addLog, onConfigUpdate, onDirty }: Props) {
-  const [data, setData] = useState<SensorData | null>(null);
+  const data = useLatestSensor();
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const d = sensorStore.latest;
-      if (d) setData(d);
-    }, 100); // 10Hz
-    return () => clearInterval(iv);
-  }, []);
 
   const sv = config?.sensorValues;
 
