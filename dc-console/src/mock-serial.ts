@@ -8,6 +8,8 @@ import {
   SensorSchema,
   EtcStateSchema,
   SysStatsSchema,
+  ControlStatusSchema,
+  ControlStatus_Source,
   ConfigSchema,
   DebugMessageSchema,
   EtcMode,
@@ -33,7 +35,6 @@ let t0 = 0;
 let manualMode = false;
 let manualTarget = 30;
 let configChanged = false;
-const MOCK_MODES = [EtcMode.CALIB, EtcMode.NORMAL, EtcMode.RESTRICT, EtcMode.MOTOR_OFF] as const;
 const flags = {
   apps: true,
   tps: true,
@@ -46,6 +47,10 @@ const flags = {
   bpsTps: true,
 };
 let useIttr = false;
+// 制御入力のモック: CAN 0x740 は来ない (= 起動後 MOTOR_OFF 待機)。console の上書きだけ効く
+let ovActive = false;
+let ovMode: EtcMode | undefined;
+let ovAutoShift: boolean | undefined;
 const sensorValues = {
   apps1Min: 200,
   apps1Max: 3800,
@@ -230,7 +235,7 @@ function sensorTick() {
     gyroZ: +(Math.sin(elapsed) * 20).toFixed(2),
   });
   const etc = create(EtcStateSchema, {
-    mode: MOCK_MODES[Math.floor(elapsed / 3) % MOCK_MODES.length],
+    mode: ovActive && ovMode !== undefined ? ovMode : EtcMode.MOTOR_OFF,
     manual: manualMode,
     ittr: useIttr,
     valid: true,
@@ -246,11 +251,21 @@ function sensorTick() {
     logDrops: 0,
     loopMaxUsBoot: 9000,
   });
+  const control = create(ControlStatusSchema, {
+    source: ovActive ? ControlStatus_Source.CONTROL_SOURCE_OVERRIDE : ControlStatus_Source.CONTROL_SOURCE_WAITING_FOR_CAN,
+    controlLinkAlive: false,
+    shiftLinkAlive: false,
+    controlRxAgeMs: 0,
+    canEtcMode: EtcMode.UNSPECIFIED,
+    canAutoShift: false,
+    autoShiftOn: ovActive && ovAutoShift === true,
+  });
   const state = create(StateSchema, {
     timestamp: Date.now() - t0,
     sensor,
     etc,
     sys,
+    control,
   });
   emitFrame(
     create(DeviceToHostSchema, { payload: { case: "sensor", value: state } }),
@@ -582,6 +597,20 @@ function handleCommand(cmd: Command): void {
           create(ResponseSchema, { id, ok: startMockExperiment(body.value.type) }),
         );
         break;
+      case "setControlOverride": {
+        const v = body.value;
+        if (!v.enable) {
+          ovActive = false;
+          ovMode = undefined;
+          ovAutoShift = undefined;
+        } else {
+          ovActive = true;
+          if (v.etcMode !== undefined) ovMode = v.etcMode;
+          if (v.autoShift !== undefined) ovAutoShift = v.autoShift;
+        }
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
+      }
       case "stopEtcExperiment":
         stopMockExperiment(true);
         emitResponse(create(ResponseSchema, { id, ok: true }));

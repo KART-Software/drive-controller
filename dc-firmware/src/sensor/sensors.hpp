@@ -116,10 +116,7 @@ class EtcTarget {
 
     EtcTarget(Apps& apps, Ittr& ittr);
     double getTarget() const;
-    void setModeCalibration();
-    void setModeNormal();
-    void setModeRestricted();
-    void setModeMotorOff();
+    void setMode(Mode m);
     Mode getMode() const { return mode; }
     bool isIttr() const;
     void setIttr(bool isIttr);

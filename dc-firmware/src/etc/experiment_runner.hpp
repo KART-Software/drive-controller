@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#include "can/can_data.hpp"
+#include "control/control_input.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
@@ -28,6 +28,7 @@ class ExperimentRunner {
     enum class Phase : uint8_t { Idle = 0, Settling = 1, Holding = 2, Coasting = 3 };
 
     ExperimentRunner(const SensorHub& hub,
+                     const ControlInput& control,
                      EtcTarget& target,
                      const MotorController& motor,
                      PlausibilityValidator& validator,
@@ -56,6 +57,7 @@ class ExperimentRunner {
     bool stationaryOrTimeout(unsigned long now);  // 静止判定 + タイムアウト (共通部品)
 
     const SensorHub& hub_;
+    const ControlInput& control_;
     EtcTarget& target_;
     const MotorController& motor_;
     PlausibilityValidator& validator_;

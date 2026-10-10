@@ -2,20 +2,6 @@
 #include <kart_can.h>
 #include "constants.hpp"
 
-CanEtcMode selectToEtcMode(SelectSwitch3Pin::Status s) {
-    switch (s) {
-        case SelectSwitch3Pin::Status::First:
-            return CanEtcMode::NORMAL;
-        case SelectSwitch3Pin::Status::Second:
-            return CanEtcMode::RESTRICTED;
-        case SelectSwitch3Pin::Status::Third:
-            return CanEtcMode::MOTOR_OFF;
-        case SelectSwitch3Pin::Status::Zero:
-        default:
-            return CanEtcMode::CALIB;
-    }
-}
-
 namespace {
 
 // kart-can の pack 関数でペイロードを詰めたフレームを返す
@@ -32,6 +18,42 @@ Msg unpackFrame(const CAN_message_t& f, int (*unpack)(Msg*, const uint8_t*, size
     Msg m = {};
     unpack(&m, f.buf, f.len);
     return m;
+}
+
+// kart-can の etc_mode の値 (1=CALIB 2=NORMAL 3=RESTRICTED 4=MOTOR_OFF、0=UNSPECIFIED)
+enum class CanEtcMode : uint8_t {
+    CALIB = 1u,
+    NORMAL = 2u,
+    RESTRICTED = 3u,
+    MOTOR_OFF = 4u,
+};
+
+std::optional<EtcTarget::Mode> modeFromCan(uint8_t v) {
+    switch (static_cast<CanEtcMode>(v)) {
+        case CanEtcMode::CALIB:
+            return EtcTarget::Mode::Calibration;
+        case CanEtcMode::NORMAL:
+            return EtcTarget::Mode::Normal;
+        case CanEtcMode::RESTRICTED:
+            return EtcTarget::Mode::Restricted;
+        case CanEtcMode::MOTOR_OFF:
+            return EtcTarget::Mode::MotorOff;
+    }
+    return std::nullopt;  // UNSPECIFIED (0) や未知値
+}
+
+CanEtcMode modeToCan(EtcTarget::Mode m) {
+    switch (m) {
+        case EtcTarget::Mode::Calibration:
+            return CanEtcMode::CALIB;
+        case EtcTarget::Mode::Normal:
+            return CanEtcMode::NORMAL;
+        case EtcTarget::Mode::Restricted:
+            return CanEtcMode::RESTRICTED;
+        case EtcTarget::Mode::MotorOff:
+            return CanEtcMode::MOTOR_OFF;
+    }
+    return CanEtcMode::MOTOR_OFF;
 }
 
 }  // namespace
@@ -54,49 +76,37 @@ std::array<CAN_message_t, CanTxData::FRAME_COUNT> CanTxData::toFrames() const {
     };
 }
 
-void CanRxData::mergeFrame(const CAN_message_t& msg) {
-#if defined(CONTROL_INPUT_VIA_CAN)
-    // 制御フレーム(0x740): byte0=mode, byte1=launch, byte2=auto-shift
-    if (msg.id == KART_CAN_CONTROL_FRAME_ID && msg.len >= KART_CAN_CONTROL_LENGTH) {
-        const auto c = unpackFrame(msg, kart_can_control_unpack);
-        switch (static_cast<CanEtcMode>(c.etc_mode)) {
-            case CanEtcMode::CALIB:
-            case CanEtcMode::NORMAL:
-            case CanEtcMode::RESTRICTED:
-            case CanEtcMode::MOTOR_OFF:
-                etcMode = static_cast<CanEtcMode>(c.etc_mode);
-                break;
-            default:
-                // UNSPECIFIED (0) や未知値: モードは変更しない (現在値を維持)。
-                // フレーム自体は受信できているので lastControlFrameMs だけ更新する。
-                break;
-        }
-        launchActive = (c.launch_active == 0x01);
-        autoShiftActive = (c.auto_shift == 0x01);
-        lastControlFrameMs = millis();
-    }
-#else
-    // CAN 制御入力は一旦凍結 (GPIO 直入力を使用, main.cpp)。0x740 は無視し、
-    // etcMode/launchActive/autoShiftActive はデフォルト(安全側)のまま保持する。
-    (void)msg;
-#endif
+CAN_message_t CanStatusData::toFrame() const {
+    return makeFrame(KART_CAN_DC_STATUS_FRAME_ID, KART_CAN_DC_STATUS_LENGTH,
+                     kart_can_dc_status_t{
+                         .etc_mode = static_cast<uint8_t>(modeToCan(etcMode)),
+                         .launch_active = launchActive,
+                         .auto_shift = autoShift,
+                         .starter_relay = starterRelay,
+                         .shutdown_loop = shutdownLoopClosed,
+                     },
+                     kart_can_dc_status_pack);
 }
 
-void CanRxData::checkTimeouts(unsigned long nowMs) {
-#if defined(CONTROL_INPUT_VIA_CAN)
-    // 制御フレームが起動以来未受信 (== 0) なら判定スキップ — 各値はデフォルトのまま。
-    if (lastControlFrameMs == 0 || (nowMs - lastControlFrameMs) <= CAN_CONTROL_TIMEOUT_MS) {
+void CanRxData::mergeFrame(const CAN_message_t& msg) {
+    // Control (0x740): byte0 etc_mode / byte1 launch / byte2 auto_shift / byte3 starter。
+    // byte0-2 は旧 DLC 3 フレームと互換なので len >= 3 で受け、starter は len >= 4 のときだけ読む。
+    if (msg.id == KART_CAN_CONTROL_FRAME_ID && msg.len >= 3) {
+        const auto c = unpackFrame(msg, kart_can_control_unpack);
+        etcMode = modeFromCan(c.etc_mode);
+        launchActive = (c.launch_active == 0x01);
+        autoShiftActive = (c.auto_shift == 0x01);
+        starter = (msg.len >= 4) && (c.starter == 0x01);
+        controlFrames++;
+        lastControlFrameMs = millis();
         return;
     }
-    // launch 途絶 → false
-    launchActive = false;
-    // mode 途絶 → NORMAL。MOTOR_OFF は安全ラッチ: CAN 断で勝手にモーターを復帰させない。
-    if (etcMode != CanEtcMode::MOTOR_OFF) {
-        etcMode = CanEtcMode::NORMAL;
+    // Shift (0x741): byte0 shift_up / byte1 shift_down (押下中 1)
+    if (msg.id == KART_CAN_SHIFT_FRAME_ID && msg.len >= KART_CAN_SHIFT_LENGTH) {
+        const auto sh = unpackFrame(msg, kart_can_shift_unpack);
+        shiftUp = (sh.shift_up == 0x01);
+        shiftDown = (sh.shift_down == 0x01);
+        shiftFrames++;
+        lastShiftFrameMs = millis();
     }
-    // auto-shift 途絶 → OFF(manual)。手動シフトが残る方が安全。
-    autoShiftActive = false;
-#else
-    (void)nowMs;  // CAN 制御入力 凍結中はフォールバック不要 (GPIO 直入力が常に現在値)。
-#endif
 }

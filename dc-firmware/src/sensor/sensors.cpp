@@ -176,29 +176,27 @@ double EtcTarget::getTarget() const {
     return minValue + y * (maxValue - minValue) / 100.0;  // TODO change
 }
 
-void EtcTarget::setModeCalibration() {
-    mode = Mode::Calibration;
-    minValue = tpsMinValue;
-    maxValue = tpsMaxValue;
-}
-
-void EtcTarget::setModeNormal() {
-    mode = Mode::Normal;
-    minValue = idlingValue;
-    maxValue = normalMaxValue;
-}
-
-void EtcTarget::setModeRestricted() {
-    mode = Mode::Restricted;
-    minValue = idlingValue;
-    maxValue = restrictedMaxValue;
-}
-
-void EtcTarget::setModeMotorOff() {
-    mode = Mode::MotorOff;
-    // min/max は意味を持たないが、getTarget() が呼ばれた場合に備えて idling 相当に
-    minValue = idlingValue;
-    maxValue = idlingValue;
+void EtcTarget::setMode(Mode m) {
+    mode = m;
+    switch (m) {
+        case Mode::Calibration:
+            minValue = tpsMinValue;
+            maxValue = tpsMaxValue;
+            break;
+        case Mode::Normal:
+            minValue = idlingValue;
+            maxValue = normalMaxValue;
+            break;
+        case Mode::Restricted:
+            minValue = idlingValue;
+            maxValue = restrictedMaxValue;
+            break;
+        case Mode::MotorOff:
+            // min/max は意味を持たないが、getTarget() が呼ばれた場合に備えて idling 相当に
+            minValue = idlingValue;
+            maxValue = idlingValue;
+            break;
+    }
 }
 
 void EtcTarget::setIdlingValue(double val) {

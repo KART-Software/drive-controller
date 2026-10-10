@@ -144,7 +144,7 @@ Idle ──start()──> Settling ──整定/timeout──> Holding ──┬
 
 | 条件 | 判定 |
 |---|---|
-| モードノブ ≠ MOTOR_OFF | MOTOR_OFF はアーミング③が ETC を止めるため実験が進行不能。それ以外の位置なら可 (Q11 決定: ノブによる実験許可は要求しない — console 接続時は走行時ではない) |
+| ETC モード ≠ MOTOR_OFF (2026-10-07: GPIO ノブは廃止、`ControlInput` の値。CAN 未受信の間は MOTOR_OFF なので console の上書きで指定する) | MOTOR_OFF はアーミング③が ETC を止めるため実験が進行不能。それ以外の位置なら可 (Q11 決定: ノブによる実験許可は要求しない — console 接続時は走行時ではない) |
 | エンジン停止 | engine パルス ≈ 0 Hz |
 | 車両静止 | 車輪速 4 輪 ≈ 0 Hz |
 | plausibility 正常 | `currentlyValid()` かつ ① 未ラッチ (`validLatched()`) |
@@ -158,7 +158,7 @@ Idle ──start()──> Settling ──整定/timeout──> Holding ──┬
 
 | ガード | 内容 |
 |---|---|
-| ノブ MOTOR_OFF | MOTOR_OFF 位置になったら中断 (アーミング③で ETC が止まり進行不能のため)。他位置への移動は不問 (Q11 決定) |
+| ETC モード MOTOR_OFF (`ControlInput`) | MOTOR_OFF 位置になったら中断 (アーミング③で ETC が止まり進行不能のため)。他位置への移動は不問 (Q11 決定) |
 | エンジン始動 | engine パルス > 0 で中断 |
 | plausibility | `currentlyValid()` false または ① ラッチで中断 |
 | SIG_IN | LOW になったら中断 (アーミング②で ETC が止まり進行不能) |

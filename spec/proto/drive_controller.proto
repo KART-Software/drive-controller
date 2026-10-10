@@ -202,12 +202,30 @@ message SysStats {
   uint32 loop_max_us_boot = 6;  // 起動以来の loop 1 周の最大
 }
 
+// 制御入力 (コックピットスイッチ) の受信状態。docs/control_input_spec.md
+message ControlStatus {
+  enum Source {
+    CONTROL_SOURCE_UNSPECIFIED     = 0;
+    CONTROL_SOURCE_WAITING_FOR_CAN = 1;  // 起動後 0x740 未受信 (ETC は MOTOR_OFF で待機)
+    CONTROL_SOURCE_CAN             = 2;  // CAN 0x740 / 0x741 (途絶時はフォールバック値)
+    CONTROL_SOURCE_OVERRIDE        = 3;  // console からの上書き (ベンチ用)
+  }
+  Source  source             = 1;
+  bool    control_link_alive = 2;  // 0x740 を 200 ms 以内に受信
+  bool    shift_link_alive   = 3;  // 0x741 を 100 ms 以内に受信
+  uint32  control_rx_age_ms  = 4;  // 最後に 0x740 を受信してからの経過 (未受信は 0)
+  EtcMode can_etc_mode       = 5;  // CAN 側の ETC モード (未受信は UNSPECIFIED)
+  bool    can_auto_shift     = 6;  // CAN 側のオートシフト
+  bool    auto_shift_on      = 7;  // 適用中のオートシフト (override 込み)
+}
+
 message State {
   uint32 timestamp = 1;
 
-  Sensor   sensor = 2;
-  EtcState etc    = 3;
-  SysStats sys    = 4;
+  Sensor        sensor  = 2;
+  EtcState      etc     = 3;
+  SysStats      sys     = 4;
+  ControlStatus control = 5;
 }
 
 message DebugMessage {
@@ -387,7 +405,16 @@ message StartEtcExperimentCmd {
   Type type = 1;
 }
 
-message StopEtcExperimentCmd {}  // 実行中の実験を中断 (manual 解除 → 通常制御へ復帰)
+message StopEtcExperimentCmd {}
+
+// 制御入力の上書き (ベンチ用, docs/control_input_spec.md §3.3)。RAM のみで再起動で解除。
+// 0x740 を受信している間は ok=false。上書き中に 0x740 を受信し始めたら自動で解除される。
+message SetControlOverrideCmd {
+  bool             enable     = 1;  // false = 上書きを解除
+  // 未指定の項目は、上書き中なら今の上書き値を保ち、そうでなければ CAN 側の値 (未受信なら MOTOR_OFF / OFF)
+  optional EtcMode etc_mode   = 2;
+  optional bool    auto_shift = 3;
+}  // 実行中の実験を中断 (manual 解除 → 通常制御へ復帰)
 
 message SetGpsGearCmd {
   sint32 gear = 1;  // which gear position to calibrate (0=N, 1-6)
@@ -430,6 +457,7 @@ message Command {
     FormatFsCmd                format_fs              = 33;
     StartEtcExperimentCmd      start_etc_experiment   = 34;
     StopEtcExperimentCmd       stop_etc_experiment    = 35;
+    SetControlOverrideCmd      set_control_override   = 36;
   }
 }
 

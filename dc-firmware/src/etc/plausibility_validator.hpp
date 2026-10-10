@@ -46,11 +46,12 @@ class PlausibilityValidator {
     // 即ラッチしないため)。停止中は判定もエラービットの記録も行わない。
     void suspendTargetCheck(bool suspend);
     bool targetCheckSuspended() const { return targetCheckSuspended_; }
+   private:
+    // チェック有効フラグ。書き込みは setCheckFlags() だけ (呼び出し元は Configurator: config の適用と
+    // set_plausibility_flags コマンド)。同定実験の一時停止は suspendTargetCheck() で、フラグには触れない
     bool appsCheckFlag = false, tpsCheckFlag = false, apps1CheckFlag = false, apps2CheckFlag = false,
          tps1CheckFlag = false, tps2CheckFlag = false, targetCheckFlag = false, bpsCheckFlag = false,
          bpsTpsCheckFlag = false;
-
-   private:
     ErrorHandler errorHandler = ErrorHandler();
     const Apps &apps1, &apps2;
     const Ittr& ittr;

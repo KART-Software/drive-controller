@@ -200,8 +200,8 @@ auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or
 `AutoShifter::update(autoOn)` に `autoOn = canAutoShiftActive` を渡す:
 
 - `autoOn == false`（CAN OFF）のとき manual として振る舞う。
-- **CAN 断時も manual**（§8 フォールバック。`can_data.checkTimeouts` が `autoShiftActive`
-  を false に戻す）。これがオートシフターの安全フォールバックの一次経路。
+- **CAN 断時も manual**（§8 フォールバック。`ControlInput` が途絶を判定し `autoShiftOn()`
+  を false にする）。これがオートシフターの安全フォールバックの一次経路。
 
 > **ETC プラウシビリティには依存しない**: オートシフターは UP/DOWN パルスを IST コント
 > ローラへ渡すだけでスロットルを動かさないため、ETC のプラウシビリティ違反で auto を

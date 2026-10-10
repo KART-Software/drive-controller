@@ -7,6 +7,7 @@
 #include "etc/error_handler.hpp"
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
+#include "control/control_input.hpp"
 #include "util/loop_stats.hpp"
 
 #define SERIAL_SPEED 115200
@@ -18,6 +19,10 @@
 // COBS overhead is at most ceil(N/254) plus the leading code byte.
 #define DC_MAX_FRAME (DC_MAX_PAYLOAD + (DC_MAX_PAYLOAD / 254) + 2)
 
+// ETC モードの proto ↔ ドメイン変換 (CAN ↔ ドメインは can_data.cpp)
+dc_EtcMode etcModeToProto(EtcTarget::Mode m);
+EtcTarget::Mode etcModeFromProto(dc_EtcMode m);  // 未指定・未知値は MotorOff (安全側)
+
 class SerialProtocol {
    public:
     static void initialize();
@@ -27,7 +32,8 @@ class SerialProtocol {
                                bool isValid,
                                const etc::ErrorHandler& errorHandler,
                                float duty,
-                               const LoopStats::Snapshot& sys);
+                               const LoopStats::Snapshot& sys,
+                               const ControlInput& control);
 
     // Debug log message.
     static void sendDebugf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));

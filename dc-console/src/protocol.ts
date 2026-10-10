@@ -5,6 +5,7 @@ import {
   DeviceToHostSchema,
   ConfigSchema,
   EtcMode,
+  ControlStatus_Source,
 } from "./proto/drive_controller_pb";
 import type {
   Command,
@@ -76,6 +77,22 @@ function toAppSensor(st: PbState): SensorData {
     manual: e?.manual ?? false,
     tgt_ittr: e?.ittr ?? false,
     duty: e?.duty ?? 0,
+    control: st.control
+      ? {
+          source:
+            st.control.source === ControlStatus_Source.CONTROL_SOURCE_CAN
+              ? "can"
+              : st.control.source === ControlStatus_Source.CONTROL_SOURCE_OVERRIDE
+                ? "override"
+                : "waiting",
+          controlLinkAlive: st.control.controlLinkAlive,
+          shiftLinkAlive: st.control.shiftLinkAlive,
+          controlRxAgeMs: st.control.controlRxAgeMs,
+          canEtcMode: modeToString(st.control.canEtcMode),
+          canAutoShift: st.control.canAutoShift,
+          autoShiftOn: st.control.autoShiftOn,
+        }
+      : undefined,
     sys: st.sys
       ? {
           loopMaxUs: st.sys.loopMaxUs,
@@ -423,6 +440,16 @@ function buildCommand(
       return create(CommandSchema, {
         id,
         body: { case: "startEtcExperiment", value: { type: params.type } },
+      });
+    case "set_control_override":
+      // 制御入力の上書き (ベンチ用)。params.enable=false で解除。etcMode (EtcMode) / autoShift は省略可。
+      // 0x740 を受信している間はファームが ok=false を返す。
+      return create(CommandSchema, {
+        id,
+        body: {
+          case: "setControlOverride",
+          value: { enable: params.enable, etcMode: params.etcMode, autoShift: params.autoShift },
+        },
       });
     case "stop_experiment":
       return create(CommandSchema, {

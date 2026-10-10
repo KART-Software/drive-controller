@@ -12,13 +12,11 @@ AutoShifter::AutoShifter(const PulseCounter& engine,
     : engine_(engine), wheelFL_(wheelFL), wheelFR_(wheelFR), gps_(gps), apps_(apps) {}
 
 void AutoShifter::begin() {
-    pinMode(AUTO_SHIFT_UP_IN_PIN, INPUT_PULLUP);
-    pinMode(AUTO_SHIFT_DOWN_IN_PIN, INPUT_PULLUP);
     pinMode(AUTO_SHIFT_UP_OUT_PIN, OUTPUT);
     pinMode(AUTO_SHIFT_DOWN_OUT_PIN, OUTPUT);
     writeOutputs(false, false);
-    prevUpIn_ = readUpIn();
-    prevDownIn_ = readDownIn();
+    prevUpIn_ = false;  // パドル入力は CAN (0x741)。未受信の間は押されていない扱い
+    prevDownIn_ = false;
     prevAutoOn_ = false;
     manualOverride_ = false;
     state_ = State::Idle;
@@ -39,14 +37,6 @@ void AutoShifter::setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType t
 }
 
 // ── ④ I/O ──────────────────────────────────────────────────────────────
-
-bool AutoShifter::readUpIn() const {
-    return digitalRead(AUTO_SHIFT_UP_IN_PIN) == AUTO_SHIFT_IN_ACTIVE;
-}
-
-bool AutoShifter::readDownIn() const {
-    return digitalRead(AUTO_SHIFT_DOWN_IN_PIN) == AUTO_SHIFT_IN_ACTIVE;
-}
 
 void AutoShifter::writeOutputs(bool up, bool down) {
     digitalWrite(AUTO_SHIFT_UP_OUT_PIN, up ? AUTO_SHIFT_OUT_ACTIVE : AUTO_SHIFT_OUT_INACTIVE);
@@ -105,7 +95,8 @@ void AutoShifter::startPulse(Dir dir, int8_t gear, unsigned long now) {
 
 // ── update: ③時間進行 → ④入力追跡 → ②調停 ─────────────────────────────
 
-void AutoShifter::update(bool autoOn) {
+void AutoShifter::update(const Inputs& in) {
+    const bool autoOn = in.autoOn;
     unsigned long now = millis();
 
     // ③ 出力状態機械の時間進行
@@ -133,8 +124,8 @@ void AutoShifter::update(bool autoOn) {
     bool manualWindow = stopped && gear <= 2;
 
     // ④ 入力エッジ追跡 (毎ティック更新)。Pulsing/Cooldown 中の押下は破棄される。
-    bool curUp = readUpIn();
-    bool curDown = readDownIn();
+    bool curUp = in.upPressed;
+    bool curDown = in.downPressed;
     bool upEdge = curUp && !prevUpIn_;
     bool downEdge = curDown && !prevDownIn_;
     prevUpIn_ = curUp;

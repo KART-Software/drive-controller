@@ -13,8 +13,8 @@ class CanBus {
     // Send all 60Hz TX frames built from data
     void send(const CanTxData& data);
 
-    // GPIO 制御入力 (ETCモード / auto-shift) を Control(0x740) フレームとして CAN 出力。
-    void sendControl(CanEtcMode mode, bool autoShift);
+    // このノードの状態 (0x60A DC_Status)
+    void send(const CanStatusData& status);
 
     // RX FIFO から 1 フレーム取り出す (空なら nullopt)
     std::optional<CAN_message_t> read();

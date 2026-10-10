@@ -19,6 +19,7 @@ export interface SensorData {
   tgt_ittr: boolean;
   duty: number; // モーター実印加 duty [%] (±100, ETC 停止中 0)
   sys?: SysStatsT; // loop 停止の計測 (直近 1 s 窓)
+  control?: ControlStatusT; // 制御入力の受信状態 (CAN 0x740 / 0x741 / override)
   v: boolean;
   err: number;
   sps?: number;
@@ -40,6 +41,17 @@ export interface SensorData {
   gx?: number;
   gy?: number;
   gz?: number;
+}
+
+// 制御入力の受信状態 (docs/control_input_spec.md §3.4)
+export interface ControlStatusT {
+  source: "waiting" | "can" | "override";
+  controlLinkAlive: boolean; // 0x740 を 200 ms 以内に受信
+  shiftLinkAlive: boolean; // 0x741 を 100 ms 以内に受信
+  controlRxAgeMs: number; // 最後に 0x740 を受信してからの経過 (未受信は 0)
+  canEtcMode: string; // CAN 側の ETC モード ("" = 未受信)
+  canAutoShift: boolean;
+  autoShiftOn: boolean; // 適用中 (override 込み)
 }
 
 export interface SysStatsT {

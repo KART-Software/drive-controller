@@ -20,18 +20,15 @@ void CanController::send() {
     data.accel[2] = imu ? imu->accel[2] : 0.0f;
     bus_.send(data);
 
-#if !defined(CONTROL_INPUT_VIA_CAN)
-    // GPIO 制御入力 (mode / auto-shift) を Control(0x740) として CAN 出力する。
-    // CONTROL_INPUT_VIA_CAN 定義時は逆に 0x740 を受信する側なので出力しない。
-    bus_.sendControl(selectToEtcMode(sensorHub_.modeSwitch().getStatus()),
-                     sensorHub_.autoShiftSwitch().isOn());
-#endif
+}
+
+void CanController::sendStatus(const CanStatusData& status) {
+    bus_.send(status);
 }
 
 void CanController::poll() {
     // rxData_ は前回値を保持し、受信フレームのみ mergeFrame() で上書きする
     while (auto msg = bus_.read())
         rxData_.mergeFrame(*msg);
-    // LAUNCH_CTRL / MODE_SELECT / AUTO_SHIFT フレーム途絶時に各々を安全側へフォールバック (CAN 断対策)
-    rxData_.checkTimeouts(millis());
+    // 途絶時のフォールバックは ControlInput が行う
 }

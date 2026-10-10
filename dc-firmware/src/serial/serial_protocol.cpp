@@ -12,18 +12,16 @@ namespace {
 uint8_t rxBuf[DC_MAX_FRAME];
 size_t rxLen = 0;
 
-dc_EtcMode targetModeToProto(const EtcTarget& t) {
-    switch (t.getMode()) {
-        case EtcTarget::Mode::Calibration:
-            return dc_EtcMode_ETC_MODE_CALIB;
-        case EtcTarget::Mode::Normal:
-            return dc_EtcMode_ETC_MODE_NORMAL;
-        case EtcTarget::Mode::Restricted:
-            return dc_EtcMode_ETC_MODE_RESTRICT;
-        case EtcTarget::Mode::MotorOff:
-            return dc_EtcMode_ETC_MODE_MOTOR_OFF;
+dc_ControlStatus_Source controlSourceToProto(ControlInput::Source src) {
+    switch (src) {
+        case ControlInput::Source::Can:
+            return dc_ControlStatus_Source_CONTROL_SOURCE_CAN;
+        case ControlInput::Source::Override:
+            return dc_ControlStatus_Source_CONTROL_SOURCE_OVERRIDE;
+        case ControlInput::Source::WaitingForCan:
+        default:
+            return dc_ControlStatus_Source_CONTROL_SOURCE_WAITING_FOR_CAN;
     }
-    return dc_EtcMode_ETC_MODE_UNSPECIFIED;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +148,34 @@ void sendResponseInternal(const dc_Response& resp) {
 
 }  // namespace
 
+dc_EtcMode etcModeToProto(EtcTarget::Mode m) {
+    switch (m) {
+        case EtcTarget::Mode::Calibration:
+            return dc_EtcMode_ETC_MODE_CALIB;
+        case EtcTarget::Mode::Normal:
+            return dc_EtcMode_ETC_MODE_NORMAL;
+        case EtcTarget::Mode::Restricted:
+            return dc_EtcMode_ETC_MODE_RESTRICT;
+        case EtcTarget::Mode::MotorOff:
+            return dc_EtcMode_ETC_MODE_MOTOR_OFF;
+    }
+    return dc_EtcMode_ETC_MODE_UNSPECIFIED;
+}
+
+EtcTarget::Mode etcModeFromProto(dc_EtcMode m) {
+    switch (m) {
+        case dc_EtcMode_ETC_MODE_CALIB:
+            return EtcTarget::Mode::Calibration;
+        case dc_EtcMode_ETC_MODE_NORMAL:
+            return EtcTarget::Mode::Normal;
+        case dc_EtcMode_ETC_MODE_RESTRICT:
+            return EtcTarget::Mode::Restricted;
+        case dc_EtcMode_ETC_MODE_MOTOR_OFF:
+        default:
+            return EtcTarget::Mode::MotorOff;  // 未指定・未知値は安全側
+    }
+}
+
 void SerialProtocol::initialize() {
     Serial.begin(SERIAL_SPEED);
     while (!Serial && millis() < 3000) {
@@ -161,7 +187,9 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
                                     bool isValid,
                                     const etc::ErrorHandler& errorHandler,
                                     float duty,
-                                    const LoopStats::Snapshot& sys) {
+                                    const LoopStats::Snapshot& sys,
+                                    const ControlInput& control) {
+    const std::optional<EtcTarget::Mode> canMode = control.canEtcMode();
     static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
     const Imu* imu = hub.imu();
     const float* accel = imu ? imu->accel : kZero3;
@@ -210,7 +238,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
             },
             .has_etc = true,
             .etc = {
-                .mode = targetModeToProto(hub.target()),
+                .mode = etcModeToProto(hub.target().getMode()),
                 .manual = hub.target().isManual(),
                 .valid = isValid,
                 .errors = errorHandler.bits(),
@@ -225,6 +253,16 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
                 .safety_max_us = sys.safetyMaxUs,
                 .log_drops = sys.logDrops,
                 .loop_max_us_boot = sys.loopMaxUsBoot,
+            },
+            .has_control = true,
+            .control = {
+                .source = controlSourceToProto(control.source()),
+                .control_link_alive = control.controlLinkAlive(),
+                .shift_link_alive = control.shiftLinkAlive(),
+                .control_rx_age_ms = control.controlRxAgeMs(),
+                .can_etc_mode = canMode ? etcModeToProto(*canMode) : dc_EtcMode_ETC_MODE_UNSPECIFIED,
+                .can_auto_shift = control.canAutoShift(),
+                .auto_shift_on = control.autoShiftOn(),
             },
         }},
     };
