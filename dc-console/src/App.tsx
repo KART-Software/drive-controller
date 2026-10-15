@@ -11,6 +11,7 @@ import { sensorStore } from "./sensor-store";
 import { drivetrainStore } from "./drivetrain-store";
 
 const MAX_LOG_ENTRIES = 100;
+const REORDER_WINDOW_US = 1_000_000;
 const isMock = new URLSearchParams(window.location.search).has("mock");
 
 type Route = "etc" | "drivetrain";
@@ -56,10 +57,23 @@ export function App() {
     setRoute(r);
   }
 
-  const addLog = useCallback((msg: string, ts?: number) => {
-    const tsStr = ts != null ? (ts / 1000).toFixed(1) + "s" : new Date().toLocaleTimeString();
+  // deviceUs = デバイスの debug メッセージの時刻 (DebugLogger::log が呼ばれた時刻、起動からの µs)。
+  // ISR からのメッセージは後からまとめて届くので、届いた順と呼ばれた順が前後しうる。直前のデバイスの
+  // メッセージより古ければ、時刻の順になる位置へ差し込む。console 自身のメッセージ (deviceUs なし) は越えない。
+  // REORDER_WINDOW_US より離れたものとは入れ替えない (デバイスの再起動で時刻が 0 に戻った場合など)
+  const addLog = useCallback((msg: string, deviceUs?: number) => {
+    const ts = deviceUs != null ? (deviceUs / 1e6).toFixed(3) + "s" : new Date().toLocaleTimeString();
+    const entry: LogEntry = { ts, msg, deviceUs };
     setLogs((prev) => {
-      const next = [...prev, { ts: tsStr, msg }];
+      let i = prev.length;
+      if (deviceUs != null) {
+        while (i > 0) {
+          const p = prev[i - 1].deviceUs;
+          if (p == null || p <= deviceUs || p - deviceUs > REORDER_WINDOW_US) break;
+          i--;
+        }
+      }
+      const next = [...prev.slice(0, i), entry, ...prev.slice(i)];
       return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
     });
   }, []);
@@ -110,7 +124,7 @@ export function App() {
       sensorStore.push(data);
       drivetrainStore.push(data);
     });
-    protocol.setOnDebugLog((msg, ts) => addLog(msg, ts));
+    protocol.setOnDebugLog((msg, deviceUs) => addLog(msg, deviceUs));
     if (import.meta.env.DEV) {
       protocol.setOnSerialLog((dir, line) => {
         console.log(`[Serial ${dir.toUpperCase()}]`, line);

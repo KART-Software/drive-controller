@@ -4,7 +4,7 @@
 #include <TimeLib.h>
 #include <stdio.h>  // snprintf
 
-#include "serial/serial_protocol.hpp"
+#include "debug_logger.hpp"
 
 // 単一インスタンス前提でファイルハンドルを file-static に (ヘッダへ SD.h を波及させない)。
 static File sdFile;
@@ -28,18 +28,18 @@ void SdBinaryWriter::makeFilename(char* out, size_t n) {
 bool SdBinaryWriter::begin() {
     active_ = false;
     if (!SD.begin(BUILTIN_SDCARD)) {
-        SerialProtocol::sendDebugf("SD: no card, logging disabled");
+        DebugLogger::log("SD: no card, logging disabled");
         return false;
     }
     char name[32];  // "dc_log_YYYYMMDD_HHMMSS.bin" + NUL
     makeFilename(name, sizeof(name));
     sdFile = SD.open(name, FILE_WRITE);
     if (!sdFile) {
-        SerialProtocol::sendDebugf("SD: open failed (%s)", name);
+        DebugLogger::log("SD: open failed (%s)", name);
         return false;
     }
     active_ = true;
-    SerialProtocol::sendDebugf("SD log -> %s", name);
+    DebugLogger::log("SD log -> %s", name);
     return true;
 }
 

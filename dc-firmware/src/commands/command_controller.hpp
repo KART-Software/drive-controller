@@ -5,6 +5,7 @@
 #include "control/control_input.hpp"
 #include "etc/experiment_runner.hpp"
 #include "etc/motor_controller.hpp"
+#include "interfaces/util/clock.hpp"
 #include "sensor/sensors.hpp"
 
 struct CommandContainer {
@@ -13,6 +14,7 @@ struct CommandContainer {
     EtcTarget& target;
     etc::ExperimentRunner& experimentRunner;
     ControlInput& controlInput;
+    const Clock& clock;  // 時刻で判定するコマンド (上書きの受け付け) が読む
 };
 
 class CommandController {
@@ -21,7 +23,8 @@ class CommandController {
                       etc::MotorController& motorController,
                       EtcTarget& target,
                       etc::ExperimentRunner& experimentRunner,
-                      ControlInput& controlInput);
+                      ControlInput& controlInput,
+                      const Clock& clock);
     void registerCommands(CommandRouter& router);
 
    private:

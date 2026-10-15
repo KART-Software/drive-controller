@@ -10,10 +10,13 @@
 
 class SensorHub {
    public:
+    // clock: ADC の SPI 待ちとサンプリング頻度の計測に渡す
+    explicit SensorHub(const Clock& clock) : adc_(clock) {}
+
     void begin();
     void read();         // 非DMA: adc(ブロッキング) + sensors + imu (loop から)
-    void updatePulse(uint32_t nowUs);  // tickISR (1 ms): 車輪速 x4 + エンジン / クラッチ後回転
-    void readShutdownSig();            // tickISR (1 ms): SHUTDOWN 回路出力をデバウンス更新
+    void updatePulse(uint32_t nowMs, uint32_t nowUs);  // tickISR (1 ms): 車輪速 x4 + エンジン / クラッチ後回転
+    void readShutdownSig(uint32_t nowMs);              // tickISR (1 ms): SHUTDOWN 回路出力をデバウンス更新
 #ifdef ADC_DMA
     void sampleAdcDmaIsr();  // 8kHz ISR: 前回 DMA 結果を averages に反映し次を kick (非ブロッキング)
     void readImu();          // loop: IMU のみ (DMA 経路では adc と分離)

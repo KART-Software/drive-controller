@@ -3,10 +3,10 @@
 void WheelSpeedSensor::begin() {
     enabled_ = fm_.begin(pin_);  // FlexPWM 入力キャプチャを設定 (立ち上がり周期)
     frequencyHz_ = 0.0f;
-    lastEdgeMs_ = millis();
+    lastEdgeMs_ = 0;
 }
 
-void WheelSpeedSensor::update() {
+void WheelSpeedSensor::update(uint32_t nowMs) {
     if (!enabled_) {
         frequencyHz_ = 0.0f;
         return;
@@ -17,7 +17,7 @@ void WheelSpeedSensor::update() {
         sum += fm_.read();  // 1 周期あたりのタイマカウント
         n++;
     }
-    uint32_t now = millis();
+    const uint32_t now = nowMs;
     if (n > 0) {
         // 周期カウントを平均してから周波数へ変換 (平滑化)
         frequencyHz_ = FreqMeasureMulti::countToFrequency(sum / n);

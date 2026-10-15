@@ -1,6 +1,6 @@
 #include "auto_shifter.hpp"
 
-#include "util/isr_debug.hpp"
+#include "util/log/debug_logger.hpp"
 
 namespace shift {
 
@@ -84,33 +84,33 @@ uint32_t AutoShifter::pulseWidthFor(int8_t gear, Dir dir) const {
     return toNeutral ? normalNeutralPulseMs_ : normalDrivePulseMs_;
 }
 
-void AutoShifter::startPulse(Dir dir, int8_t gear, uint32_t now) {
+void AutoShifter::startPulse(Dir dir, int8_t gear, uint32_t nowUs) {
     activePulseMs_ = pulseWidthFor(gear, dir);
     writeOutputs(dir == Dir::Up, dir == Dir::Down);
     state_ = State::Pulsing;
-    pulseStartMs_ = now;
-    isrDebugf("autoshift: %s gear=%d w=%lums", (dir == Dir::Up) ? "UP" : "DOWN", (int)gear,
+    pulseStartUs_ = nowUs;
+    DebugLogger::log("autoshift: %s gear=%d w=%lums", (dir == Dir::Up) ? "UP" : "DOWN", (int)gear,
               (unsigned long)activePulseMs_);
 }
 
 // ── ④ 入力 (ドライバーのパドル) ─────────────────────────────────────────────
 
-void AutoShifter::onPaddles(bool upPressed, bool downPressed, uint32_t nowMs) {
-    trackPaddles(upPressed, downPressed, nowMs);
+void AutoShifter::onPaddles(bool upPressed, bool downPressed, uint32_t nowUs) {
+    trackPaddles(upPressed, downPressed, nowUs);
 }
 
-void AutoShifter::trackPaddles(bool up, bool down, uint32_t now) {
+void AutoShifter::trackPaddles(bool up, bool down, uint32_t nowUs) {
     const bool upEdge = up && !prevUpIn_;
     const bool downEdge = down && !prevDownIn_;
     prevUpIn_ = up;
     prevDownIn_ = down;
     if (upEdge || downEdge)
-        onDriverEdge(upEdge, downEdge, now);
+        onDriverEdge(upEdge, downEdge, nowUs);
 }
 
 // ② 調停 (ドライバー操作)。パルス中・最短間隔内の押下は捨てる (ためて後で出すとドライバーの意図と
 // 違うタイミングでシフトするため)
-void AutoShifter::onDriverEdge(bool upEdge, bool downEdge, uint32_t now) {
+void AutoShifter::onDriverEdge(bool upEdge, bool downEdge, uint32_t nowUs) {
     if (state_ != State::Idle || suspended_)
         return;
     // 走行状況 (副作用なし)。manualWindow = 停車中の低速ギア帯 (不明 -1 / N / 1 / 2):
@@ -123,25 +123,29 @@ void AutoShifter::onDriverEdge(bool upEdge, bool downEdge, uint32_t now) {
         // auto 実行中 (走行中 or gear>2) にドライバーが手動シフト → その場で手動へラッチし、
         // このエッジでシフトを実行。以降 CAN が 手動→auto に遷移するまで手動として振る舞う。
         manualOverride_ = true;
-        isrDebugf("autoshift: manual override (driver shifted during auto)");
+        DebugLogger::log("autoshift: manual override (driver shifted during auto)");
     }
     // ドライバーのエッジ (UP 優先)。本機は判断せず整形のみ。
-    startPulse(upEdge ? Dir::Up : Dir::Down, gear, now);
+    startPulse(upEdge ? Dir::Up : Dir::Down, gear, nowUs);
 }
 
 // ── tick: ③時間進行 → ④入力追跡 → ①自動判断 ─────────────────────────────────
 
-void AutoShifter::tick(const Inputs& in, uint32_t now) {
-    // ③ 出力状態機械の時間進行。最短間隔はパルスの開始から数える
+void AutoShifter::tick(const Inputs& in, uint32_t nowUs) {
+    // ③ 出力状態機械の時間進行。最短間隔はパルスの開始から数える。
+    // 開始時刻は CAN 受信割り込みがその場で刻むことがあり、nowUs (tick の先頭で読んだ時刻) より新しいこともありうる
+    // (今は tick と同じ優先度なので起きないが、優先度に頼らない)。差は符号付きで見て、新しければ経過 0 とする。
+    // この比較は Pulsing / Cooldown の間だけ毎 ms 行うので、差が 2^31 µs (35.8 分) に届くことはない
+    const int32_t sinceStartUs = (int32_t)(nowUs - pulseStartUs_);
     switch (state_) {
         case State::Pulsing:
-            if (now - pulseStartMs_ >= activePulseMs_) {
+            if (sinceStartUs >= (int32_t)(activePulseMs_ * 1000)) {
                 writeOutputs(false, false);
                 state_ = State::Cooldown;
             }
             break;
         case State::Cooldown:
-            if (now - pulseStartMs_ >= minIntervalMs_)
+            if (sinceStartUs >= (int32_t)(minIntervalMs_ * 1000))
                 state_ = State::Idle;
             break;
         case State::Idle:
@@ -157,16 +161,16 @@ void AutoShifter::tick(const Inputs& in, uint32_t now) {
     // CAN が 手動→auto に切り替わったら手動オーバーライドを解除し auto に復帰。
     if (autoRising && manualOverride_) {
         manualOverride_ = false;
-        isrDebugf("autoshift: manual override cleared (CAN manual->auto)");
+        DebugLogger::log("autoshift: manual override cleared (CAN manual->auto)");
     }
     if (modeChanged) {
-        isrDebugf("autoshift: CAN=%s", autoOn ? "auto" : "manual");
+        DebugLogger::log("autoshift: CAN=%s", autoOn ? "auto" : "manual");
         // 切替直後の「押しっぱ」誤発火を防ぐため、今の押下状態をエッジなしで取り込む
         prevUpIn_ = in.upPressed;
         prevDownIn_ = in.downPressed;
     } else {
         // 押下は通常 onPaddles で処理済み。ここで追うのは 0x741 の途絶で押下が false に戻る場合
-        trackPaddles(in.upPressed, in.downPressed, now);
+        trackPaddles(in.upPressed, in.downPressed, nowUs);
     }
 
     // ① 自動判断 (auto で、手動に落ちておらず、停車低速帯でもないとき)
@@ -177,7 +181,7 @@ void AutoShifter::tick(const Inputs& in, uint32_t now) {
         return;
     const Dir req = evaluate();
     if (req != Dir::None)
-        startPulse(req, gear, now);
+        startPulse(req, gear, nowUs);
 }
 
 }  // namespace shift

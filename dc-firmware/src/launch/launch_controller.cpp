@@ -46,19 +46,19 @@ void LaunchController::begin() {
     bitePoint_.begin();
 }
 
-void LaunchController::update(bool launchRequested) {
+void LaunchController::update(bool launchRequested, uint32_t nowMs) {
     switch (state_) {
         case State::Idle:
             handleIdle(launchRequested);
             break;
         case State::Ready:
-            handleReady(launchRequested);
+            handleReady(launchRequested, nowMs);
             break;
         case State::Approach:
-            handleApproach(launchRequested);
+            handleApproach(launchRequested, nowMs);
             break;
         case State::EngageControl:
-            handleEngageControl(launchRequested);
+            handleEngageControl(launchRequested, nowMs);
             break;
         case State::FullEngage:
             handleFullEngage(launchRequested);
@@ -119,7 +119,7 @@ void LaunchController::handleIdle(bool launchRequested) {
     }
 }
 
-void LaunchController::handleReady(bool launchRequested) {
+void LaunchController::handleReady(bool launchRequested, uint32_t nowMs) {
     if (!launchRequested) {
         transitionTo(State::Idle);
         return;
@@ -129,21 +129,20 @@ void LaunchController::handleReady(bool launchRequested) {
     bool clutchDepressed = clutch_.convertedValue() < clutchDepressThreshold_;
     if (engineHighEnough && clutchDepressed) {
         approachPos_ = static_cast<float>(clutch_.convertedValue());
-        lastUpdateMs_ = millis();
+        lastUpdateMs_ = nowMs;
         bitePoint_.reset();
         transitionTo(State::Approach);
     }
 }
 
-void LaunchController::handleApproach(bool launchRequested) {
+void LaunchController::handleApproach(bool launchRequested, uint32_t nowMs) {
     if (!launchRequested) {
         transitionTo(State::Idle);
         return;
     }
 
-    unsigned long now = millis();
-    float dtS = static_cast<float>(now - lastUpdateMs_) * 0.001f;
-    lastUpdateMs_ = now;
+    float dtS = static_cast<float>(nowMs - lastUpdateMs_) * 0.001f;
+    lastUpdateMs_ = nowMs;
 
     float marginTarget = bitePoint_.bitePoint() - bitePointMargin_;
     if (marginTarget < 0.0f)
@@ -165,20 +164,19 @@ void LaunchController::handleApproach(bool launchRequested) {
         engageControlElapsed_ = 0.0f;
         engageControlStartEng_ = engagement();
         engagementPid_.reset();
-        lastUpdateMs_ = millis();
+        lastUpdateMs_ = nowMs;
         transitionTo(State::EngageControl);
     }
 }
 
-void LaunchController::handleEngageControl(bool launchRequested) {
+void LaunchController::handleEngageControl(bool launchRequested, uint32_t nowMs) {
     if (!launchRequested) {
         transitionTo(State::Idle);
         return;
     }
 
-    unsigned long now = millis();
-    float dtS = static_cast<float>(now - lastUpdateMs_) * 0.001f;
-    lastUpdateMs_ = now;
+    float dtS = static_cast<float>(nowMs - lastUpdateMs_) * 0.001f;
+    lastUpdateMs_ = nowMs;
     engageControlElapsed_ += dtS;
 
     float targetEng = engageControlStartEng_ + engagementRampRate_ * engageControlElapsed_;
@@ -189,7 +187,7 @@ void LaunchController::handleEngageControl(bool launchRequested) {
 
     // PID 規約: error = actual - target (現在値 - 目標値)
     // actual < target → error 負 → output 正 → クラッチ位置を上げ engagement を増やす
-    double output = engagementPid_.compute(targetEng, actual);
+    double output = engagementPid_.compute(targetEng, actual, nowMs * 1000u);
 
     float posCmd = bitePoint_.bitePoint() + static_cast<float>(output);
     if (posCmd < 0.0f)

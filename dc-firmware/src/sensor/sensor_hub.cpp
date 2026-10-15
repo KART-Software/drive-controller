@@ -44,15 +44,15 @@ void SensorHub::readImu() {
 }
 #endif
 
-void SensorHub::updatePulse(uint32_t nowUs) {
-    pulseWheelFL_.update();
-    pulseWheelFR_.update();
-    pulseWheelRL_.update();
-    pulseWheelRR_.update();
+void SensorHub::updatePulse(uint32_t nowMs, uint32_t nowUs) {
+    pulseWheelFL_.update(nowMs);
+    pulseWheelFR_.update(nowMs);
+    pulseWheelRL_.update(nowMs);
+    pulseWheelRR_.update(nowMs);
     pulseEngine_.update(nowUs);
     pulseClutchRpm_.update(nowUs);
 }
 
-void SensorHub::readShutdownSig() {
-    shutdownSig_.read();
+void SensorHub::readShutdownSig(uint32_t nowMs) {
+    shutdownSig_.read(nowMs);
 }

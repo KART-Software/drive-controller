@@ -16,7 +16,7 @@ class WheelSpeedSensor {
     explicit WheelSpeedSensor(uint8_t pin) : pin_(pin) {}
 
     void begin();
-    void update();  // tickISR から 1 ms ごと: この間に来た周期の平均→Hz (来なければ前の値)、無入力が続けば 0 に減衰
+    void update(uint32_t nowMs);  // tickISR から 1 ms ごと (nowMs は sysClock の ms): この間に来た周期の平均→Hz (来なければ前の値)、無入力が続けば 0 に減衰
 
     float getFrequencyHz() const { return frequencyHz_; }
     float getRpm(uint8_t pulsesPerRev) const {

@@ -2,8 +2,10 @@
 
 #include <Arduino.h>
 
+#include "util/stop_watch.hpp"
+
 // loop() / SD / tickISR の所要時間を 1 s 窓で集計する (docs/loop_nonblocking_spec.md §5)。
-//   tick(micros())  : loop() 先頭で毎回。前回からの経過 = 1 周の所要として max/mean を更新
+//   tick()          : loop() 先頭で毎回。前回からの経過 = 1 周の所要として max/mean を更新
 //   noteSdUs()      : SD write/flush 1 回の所要 (SensorLogger が呼び出しごとに直接報告)
 //   noteSafetyUs()  : tickISR 1 回の所要 (安全層・モーター制御などを含む。ISR から呼ぶので volatile)
 //   rollover()      : 1 s ごとに loop 先頭 (tick の直後) から。窓を確定して直前の窓として保持し初期化。
@@ -20,9 +22,12 @@ class LoopStats {
         uint32_t loopMaxUsBoot = 0;  // 起動以来の loop 1 周の最大 (窓でリセットしない)
     };
 
-    void tick(uint32_t nowUs) {
+    // clock: loop 1 周の所要を測る
+    explicit LoopStats(const Clock& clock) : loopWatch_(clock) {}
+
+    void tick() {
+        const uint32_t dt = loopWatch_.lapUs();
         if (havePrev_) {
-            uint32_t dt = nowUs - prevUs_;
             if (dt > curLoopMax_)
                 curLoopMax_ = dt;
             if (dt > bootLoopMax_)
@@ -30,7 +35,6 @@ class LoopStats {
             curLoopSum_ += dt;
             curLoopN_++;
         }
-        prevUs_ = nowUs;
         havePrev_ = true;
     }
     void noteSdUs(uint32_t us) {
@@ -81,7 +85,7 @@ class LoopStats {
 
    private:
     Snapshot last_;
-    uint32_t prevUs_ = 0;
+    StopWatch loopWatch_;
     bool havePrev_ = false;
     uint32_t curLoopMax_ = 0;
     uint64_t curLoopSum_ = 0;

@@ -16,9 +16,9 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         f |= LOG_FLAG_SHUTDOWN_SIG;
     if (plausibility.currentlyValid())
         f |= LOG_FLAG_VALID;
-    if (control.autoShiftOn())  // 適用中のオートシフト (CAN 0x740 または console override)
+    if (control.autoShiftOn(t_ms))  // 適用中のオートシフト (CAN 0x740 または console override)
         f |= LOG_FLAG_AUTOSHIFT;
-    if (control.launchOn())  // launch は凍結 (消費側なし)
+    if (control.launchOn(t_ms))  // launch は凍結 (消費側なし)
         f |= LOG_FLAG_LAUNCH;
 
     const LogRecord rec = {

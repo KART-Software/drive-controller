@@ -11,12 +11,11 @@ PlausibilityValidator::PlausibilityValidator(const Apps& apps1,
                                              const Bps& bps)
     : apps1(apps1), apps2(apps2), ittr(ittr), tps1(tps1), tps2(tps2), target(target), bps(bps) {}
 
-void PlausibilityValidator::initialize() {
-    initParameters();
+void PlausibilityValidator::initialize(uint32_t now) {
+    initParameters(now);
 }
 
-void PlausibilityValidator::initParameters() {
-    unsigned long now = millis();
+void PlausibilityValidator::initParameters(uint32_t now) {
     lastAppsPlausibleTime = now;
     lastTpsPlausibleTime = now;
     lastTps1CircuitValidTime = now;
@@ -29,25 +28,25 @@ void PlausibilityValidator::initParameters() {
     isValidAllTime = true;
 }
 
-bool PlausibilityValidator::isCurrentlyValid() {
-    if (millis() < PLAUSIBLE_DURATION) {
+bool PlausibilityValidator::isCurrentlyValid(uint32_t now) {
+    if (now < PLAUSIBLE_DURATION) {
         isValidAllTime = true;
         lastCurrentlyValid_ = true;
         return true;
     } else {
         bool isValid = true;
-        isValid &= isAppsPlausible() || !appsCheckFlag;
-        isValid &= isTpsPlausible() || !tpsCheckFlag;
-        isValid &= isApps1CircuitValid() || !apps1CheckFlag;
-        isValid &= isApps2CircuitValid() || !apps2CheckFlag;
-        isValid &= isTps1CircuitValid() || !tps1CheckFlag;
-        isValid &= isTps2CircuitValid() || !tps2CheckFlag;
+        isValid &= isAppsPlausible(now) || !appsCheckFlag;
+        isValid &= isTpsPlausible(now) || !tpsCheckFlag;
+        isValid &= isApps1CircuitValid(now) || !apps1CheckFlag;
+        isValid &= isApps2CircuitValid(now) || !apps2CheckFlag;
+        isValid &= isTps1CircuitValid(now) || !tps1CheckFlag;
+        isValid &= isTps2CircuitValid(now) || !tps2CheckFlag;
         // 一時停止中 (同定実験) は判定自体を呼ばない: 左辺評価で ERR_APPS_TPS_TARGET_FAILURE が立ち、
         // 二度と消えない偽エラーになるため
         if (!targetCheckSuspended_)
-            isValid &= isAppsTpsTargetValid() || !targetCheckFlag;
-        isValid &= isBpsCircuitValid() || !bpsCheckFlag;
-        isValid &= isBpsTpsPlausible() || !bpsTpsCheckFlag;
+            isValid &= isAppsTpsTargetValid(now) || !targetCheckFlag;
+        isValid &= isBpsCircuitValid(now) || !bpsCheckFlag;
+        isValid &= isBpsTpsPlausible(now) || !bpsTpsCheckFlag;
 
         isValidAllTime &= isValid;
         lastCurrentlyValid_ = isValid;
@@ -55,19 +54,18 @@ bool PlausibilityValidator::isCurrentlyValid() {
     }
 }
 
-void PlausibilityValidator::suspendTargetCheck(bool suspend) {
+void PlausibilityValidator::suspendTargetCheck(bool suspend, uint32_t now) {
     if (!suspend && targetCheckSuspended_)
-        lastAppsTpsTargetValidTime = millis();  // 再開: 停止中の乖離を持ち越さない
+        lastAppsTpsTargetValidTime = now;  // 再開: 停止中の乖離を持ち越さない
     targetCheckSuspended_ = suspend;
 }
 
-bool PlausibilityValidator::isValid() {
-    isValidAllTime &= isCurrentlyValid();
+bool PlausibilityValidator::isValid(uint32_t now) {
+    isValidAllTime &= isCurrentlyValid(now);
     return isValidAllTime;
 }
 
-bool PlausibilityValidator::isAppsPlausible() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isAppsPlausible(uint32_t now) {
     if (abs(apps1.convertedValue() - apps2.convertedValue()) < SENSOR_SAME_POSITION_THRESHOLD) {
         lastAppsPlausibleTime = now;
         return true;
@@ -79,8 +77,7 @@ bool PlausibilityValidator::isAppsPlausible() {
     return true;
 }
 
-bool PlausibilityValidator::isTpsPlausible() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isTpsPlausible(uint32_t now) {
     if (abs(tps1.convertedValue() - tps2.convertedValue()) < SENSOR_SAME_POSITION_THRESHOLD) {
         lastTpsPlausibleTime = now;
         return true;
@@ -92,8 +89,7 @@ bool PlausibilityValidator::isTpsPlausible() {
     return true;
 }
 
-bool PlausibilityValidator::isApps1CircuitValid() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isApps1CircuitValid(uint32_t now) {
     if (apps1.isInRange()) {
         lastApps1CircuitValidTime = now;
         return true;
@@ -105,8 +101,7 @@ bool PlausibilityValidator::isApps1CircuitValid() {
     return true;
 }
 
-bool PlausibilityValidator::isApps2CircuitValid() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isApps2CircuitValid(uint32_t now) {
     if (apps2.isInRange()) {
         lastApps2CircuitValidTime = now;
         return true;
@@ -118,8 +113,7 @@ bool PlausibilityValidator::isApps2CircuitValid() {
     return true;
 }
 
-bool PlausibilityValidator::isTps1CircuitValid() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isTps1CircuitValid(uint32_t now) {
     if (tps1.isInRange()) {
         lastTps1CircuitValidTime = now;
         return true;
@@ -131,8 +125,7 @@ bool PlausibilityValidator::isTps1CircuitValid() {
     return true;
 }
 
-bool PlausibilityValidator::isTps2CircuitValid() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isTps2CircuitValid(uint32_t now) {
     if (tps2.isInRange()) {
         lastTps2CircuitValidTime = now;
         return true;
@@ -144,8 +137,7 @@ bool PlausibilityValidator::isTps2CircuitValid() {
     return true;
 }
 
-bool PlausibilityValidator::isAppsTpsTargetValid() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isAppsTpsTargetValid(uint32_t now) {
     double targetTp = target.getTarget();
     double tpsValue = tps1.convertedValue();
     if (abs(targetTp - tpsValue) < SENSOR_SAME_POSITION_THRESHOLD) {
@@ -159,8 +151,7 @@ bool PlausibilityValidator::isAppsTpsTargetValid() {
     return true;
 }
 
-bool PlausibilityValidator::isBpsCircuitValid() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isBpsCircuitValid(uint32_t now) {
     if (bps.isInRange()) {
         lastBpsCircuitValidTime = now;
         return true;
@@ -172,8 +163,7 @@ bool PlausibilityValidator::isBpsCircuitValid() {
     return true;
 }
 
-bool PlausibilityValidator::isBpsTpsPlausible() {
-    unsigned long now = millis();
+bool PlausibilityValidator::isBpsTpsPlausible(uint32_t now) {
     if (!bps.isHighPressure() || !tps1.isLargeOpen()) {
         lastBpsTpsPlausibleTime = now;
         return true;

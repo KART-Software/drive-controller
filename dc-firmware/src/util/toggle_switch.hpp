@@ -19,7 +19,7 @@ public:
     //   → ToggleSwitch(pin, HIGH, InputMode::External)。
     ToggleSwitch(uint8_t pin, uint8_t onState, InputMode inputMode);
     void initialize();
-    void read();
+    void read(uint32_t nowMs);  // nowMs は sysClock の ms
     bool isOn() const;
     bool switched() const;
     bool switchedToOff() const;
@@ -51,7 +51,7 @@ public:
     };
     SelectSwitch3Pin(uint8_t pin1, uint8_t pin2, uint8_t pin3);
     void initialize();
-    void read();
+    void read(uint32_t nowMs);
     bool changed() const;      // 読み取り専用 (const 参照から呼べる)
     Status getStatus() const;
 

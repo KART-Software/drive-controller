@@ -27,12 +27,12 @@ struct __attribute__((packed)) LogHeader {
     uint16_t record_size;  // sizeof(LogRecord)
     uint32_t rtc_epoch;    // ログ開始時の Unix 時刻 (0=RTC未設定)
     uint32_t log_hz;       // SENSOR_LOG_HZ
-    uint32_t boot_ms;      // 開始時 millis() (t_ms の基準)
+    uint32_t boot_ms;      // 開始時の sysClock.nowMs() (t_ms の基準)
 };
 
 // 148 バイト固定 (4 バイト整列)。u32/float は全て 4 整列オフセットに並べてある。
 struct __attribute__((packed)) LogRecord {
-    uint32_t t_ms;            // millis() (boot 基準)  ※ caller
+    uint32_t t_ms;            // sysClock.nowMs() (boot 基準)  ※ caller
     uint16_t adc[8];          // ADC 生 ch0..7  (hub)
     float apps1, apps2, ittr; // 変換済みセンサ値 (hub)
     float tps1, tps2, bps;    //   〃

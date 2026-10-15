@@ -1,5 +1,6 @@
 #include "command_controller.hpp"
 #include "serial/serial_protocol.hpp"
+#include "util/log/debug_logger.hpp"
 
 #include <TimeLib.h>
 
@@ -278,7 +279,7 @@ void setControlOverride(void* ctx, const dc_Command& cmd) {
         .hasAutoShift = d.has_auto_shift,
         .autoShift = d.auto_shift,
     };
-    SerialProtocol::sendResponse(cmd.id, c->controlInput.setOverride(o));
+    SerialProtocol::sendResponse(cmd.id, c->controlInput.setOverride(o, c->clock.nowMs()));
 }
 
 // ベンチ専用: loop を止める (tick / CAN 受信は割り込みなので止まらないことを確かめる)。上限 2 s
@@ -288,8 +289,7 @@ void debugStall(void* ctx, const dc_Command& cmd) {
     const uint32_t ms = min(cmd.body.debug_stall.ms, (uint32_t)2000);
     const uint32_t ticks0 = tickCount;
     delay(ms);
-    SerialProtocol::sendDebugf("stall %lu ms: tick ran %lu times", (unsigned long)ms,
-                               (unsigned long)(tickCount - ticks0));
+    DebugLogger::log("stall %lu ms: tick ran %lu times", (unsigned long)ms, (unsigned long)(tickCount - ticks0));
     SerialProtocol::sendResponse(cmd.id, true);
 #else
     SerialProtocol::sendResponse(cmd.id, false);
@@ -302,8 +302,9 @@ CommandController::CommandController(Configurator& configurator,
                                      etc::MotorController& motorController,
                                      EtcTarget& target,
                                      etc::ExperimentRunner& experimentRunner,
-                                     ControlInput& controlInput)
-    : container{configurator, motorController, target, experimentRunner, controlInput} {}
+                                     ControlInput& controlInput,
+                                     const Clock& clock)
+    : container{configurator, motorController, target, experimentRunner, controlInput, clock} {}
 
 void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_etc_motor_off_tag, etcMotorOff, &container);

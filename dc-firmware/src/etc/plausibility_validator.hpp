@@ -21,9 +21,11 @@ class PlausibilityValidator {
                           const Tps& tps2,
                           const EtcTarget& target,
                           const Bps& bps);
-    void initialize();
-    bool isCurrentlyValid();
-    bool isValid();
+    // now は sysClock の ms (tickISR から渡す)。isValid / isCurrentlyValid は評価してラッチを更新するので
+    // tickISR からのみ呼ぶ。loop は副作用なしの validLatched() / currentlyValid() を読む
+    void initialize(uint32_t now);
+    bool isCurrentlyValid(uint32_t now);
+    bool isValid(uint32_t now);
     void setCheckFlags(bool apps,
                        bool tps,
                        bool apps1,
@@ -44,7 +46,7 @@ class PlausibilityValidator {
     // 実験中に set_config / revert / set_plausibility_flags が来ても停止は維持され、終了時に古い値で
     // フラグを上書きすることもない。再開時は「最後に正常だった時刻」を今にリセットする (停止中の乖離で
     // 即ラッチしないため)。停止中は判定もエラービットの記録も行わない。
-    void suspendTargetCheck(bool suspend);
+    void suspendTargetCheck(bool suspend, uint32_t now);
     bool targetCheckSuspended() const { return targetCheckSuspended_; }
    private:
     // チェック有効フラグ。書き込みは setCheckFlags() だけ (呼び出し元は Configurator: config の適用と
@@ -65,16 +67,17 @@ class PlausibilityValidator {
         lastApps1CircuitValidTime, lastApps2CircuitValidTime, lastAppsTpsTargetValidTime, lastBpsCircuitValidTime,
         lastBpsTpsPlausibleTime;
 
-    void initParameters();
-    bool isAppsPlausible();
-    bool isTpsPlausible();
-    bool isApps1CircuitValid();
-    bool isApps2CircuitValid();
-    bool isTps1CircuitValid();
-    bool isTps2CircuitValid();
-    bool isAppsTpsTargetValid();
-    bool isBpsCircuitValid();
-    bool isBpsTpsPlausible();
+    void initParameters(uint32_t now);
+    // 各チェック。now = 評価中の時刻 (isCurrentlyValid の引数)
+    bool isAppsPlausible(uint32_t now);
+    bool isTpsPlausible(uint32_t now);
+    bool isApps1CircuitValid(uint32_t now);
+    bool isApps2CircuitValid(uint32_t now);
+    bool isTps1CircuitValid(uint32_t now);
+    bool isTps2CircuitValid(uint32_t now);
+    bool isAppsTpsTargetValid(uint32_t now);
+    bool isBpsCircuitValid(uint32_t now);
+    bool isBpsTpsPlausible(uint32_t now);
 };
 
 }  // namespace etc

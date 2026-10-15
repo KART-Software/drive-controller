@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "control/control_input.hpp"
+#include "interfaces/util/clock.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
@@ -32,7 +33,8 @@ class ExperimentRunner {
                      EtcTarget& target,
                      const MotorController& motor,
                      PlausibilityValidator& validator,
-                     const SensorLogger& logger);
+                     const SensorLogger& logger,
+                     const Clock& clock);  // clock: loop から要求の処理を待つときのタイムアウト
 
     // loop (コマンド) から。状態を書き換えるのは tick だけにするため、要求を置いて tick の処理を待つ
     // (1〜2 ms)。start は前提条件 (§5) を満たさなければ false
@@ -53,7 +55,7 @@ class ExperimentRunner {
 
    private:
     bool start(Type type, unsigned long now);
-    void stop();  // 完走/中断共通の後始末 (manual 解除・チェックフラグ復元)
+    void stop(unsigned long now);  // 完走/中断共通の後始末 (manual 解除・チェックフラグ復元)
     // loop → tick の要求。loop が req_ を立てて待ち、tick が処理して None に戻す
     enum class Request : uint8_t { None, Start, Stop };
     volatile Request req_ = Request::None;
@@ -75,6 +77,7 @@ class ExperimentRunner {
     const MotorController& motor_;
     PlausibilityValidator& validator_;
     const SensorLogger& logger_;
+    const Clock& clock_;
 
     volatile Type type_ = Type::None;
     volatile Phase phase_ = Phase::Idle;

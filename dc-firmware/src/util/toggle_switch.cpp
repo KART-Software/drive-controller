@@ -29,12 +29,12 @@ void ToggleSwitch::initialize()
     _switched = false;
 }
 
-void ToggleSwitch::read()
+void ToggleSwitch::read(uint32_t nowMs)
 {
     lastState = state;
     state = digitalRead(pin);
     lastTime = time;
-    time = millis();
+    time = nowMs;
     if (state != lastState)
     {
         lastChange = time;
@@ -81,11 +81,11 @@ void SelectSwitch3Pin::initialize()
     toggleSwitch3.initialize();
 }
 
-void SelectSwitch3Pin::read()
+void SelectSwitch3Pin::read(uint32_t nowMs)
 {
-    toggleSwitch1.read();
-    toggleSwitch2.read();
-    toggleSwitch3.read();
+    toggleSwitch1.read(nowMs);
+    toggleSwitch2.read(nowMs);
+    toggleSwitch3.read(nowMs);
 }
 
 bool SelectSwitch3Pin::changed() const

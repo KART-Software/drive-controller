@@ -229,8 +229,10 @@ message State {
 }
 
 message DebugMessage {
-  uint32 timestamp = 1;
-  string msg       = 2;
+  // DebugLogger::log が呼ばれた時刻 (起動からの µs)。ISR からのメッセージは loop が後でまとめて送るので、
+  // 届く順と呼ばれた順が前後しうる。読む側がこの時刻で並べ替える
+  uint64 timestamp_us = 1;
+  string msg          = 2;
 }
 
 // Per-command response payloads. Each command picks the payload it cares

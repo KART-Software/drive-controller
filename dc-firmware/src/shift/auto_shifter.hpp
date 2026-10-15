@@ -49,9 +49,11 @@ class AutoShifter {
         bool upPressed;    // シフトアップパドル押下中
         bool downPressed;  // シフトダウンパドル押下中
     };
-    void tick(const Inputs& in, uint32_t nowMs);
+    // 時刻は µs (sysClock)。tick は tick の時刻、onPaddles は受信した瞬間の時刻 (sysClock.nowUs()) を渡す。
+    // パルスの開始時刻が出力を立てた時刻と一致するので、幅は指定値〜指定値 + 1 ms (終端の判定が tick ごとのため)
+    void tick(const Inputs& in, uint32_t nowUs);
     // canRxISR から 0x741 受信のたび。押下状態を渡す (チャタリング除去は送信側の責務)
-    void onPaddles(bool upPressed, bool downPressed, uint32_t nowMs);
+    void onPaddles(bool upPressed, bool downPressed, uint32_t nowUs);
     // true の間は新しいパルスを出さない (要求は捨てる)。flash 書き込み中に割り込みが止まると
     // パルスが伸びるため、書き込み待ちの間 tickISR が立てる (docs/loop_nonblocking_spec.md §6.8)
     void setSuspended(bool suspended) { suspended_ = suspended; }
@@ -86,7 +88,7 @@ class AutoShifter {
 
     // -- 出力状態機械 --
     volatile State state_ = State::Idle;
-    uint32_t pulseStartMs_ = 0;
+    uint32_t pulseStartUs_ = 0;
     uint32_t activePulseMs_ = 0;
     bool prevUpIn_ = false;
     bool prevDownIn_ = false;
@@ -103,9 +105,9 @@ class AutoShifter {
     bool moving() const;
     Dir evaluate() const;  // ① 判断ロジック (純粋判断, 副作用なし)
     uint32_t pulseWidthFor(int8_t gear, Dir dir) const;
-    void startPulse(Dir dir, int8_t gear, uint32_t now);
-    void trackPaddles(bool up, bool down, uint32_t now);  // エッジ検出 → onDriverEdge
-    void onDriverEdge(bool upEdge, bool downEdge, uint32_t now);
+    void startPulse(Dir dir, int8_t gear, uint32_t nowUs);
+    void trackPaddles(bool up, bool down, uint32_t nowUs);  // エッジ検出 → onDriverEdge
+    void onDriverEdge(bool upEdge, bool downEdge, uint32_t nowUs);
 };
 
 }  // namespace shift

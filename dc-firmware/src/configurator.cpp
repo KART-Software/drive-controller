@@ -1,6 +1,6 @@
 #include "configurator.hpp"
 #include "default_config.hpp"
-#include "serial/serial_protocol.hpp"
+#include "util/log/debug_logger.hpp"
 
 Configurator::Configurator(Flash& flash,
                            SensorHub& hub,
@@ -253,7 +253,7 @@ bool Configurator::save() {
     // 書き込みの間 (約 150 ms) は ETC を止める (Flash が tick と受け渡す、§6.8)。失敗したら未保存のまま残す
     if (!flash.writeProto(CONFIG_FILE_NAME, dc_Config_fields, &config))
         return false;
-    SerialProtocol::sendDebugf("save: normalMax=%g restrictedMax=%g",
+    DebugLogger::log("save: normalMax=%g restrictedMax=%g",
                                (double)config.sensor_calib.target_tp_normal_max,
                                (double)config.sensor_calib.target_tp_restricted_max);
     configChanged = false;

@@ -1,7 +1,8 @@
 #include "experiment_runner.hpp"
 
 #include "constants.hpp"
-#include "util/isr_debug.hpp"
+#include "util/stop_watch.hpp"
+#include "util/log/debug_logger.hpp"
 
 namespace etc {
 
@@ -44,8 +45,15 @@ ExperimentRunner::ExperimentRunner(const SensorHub& hub,
                                    EtcTarget& target,
                                    const MotorController& motor,
                                    PlausibilityValidator& validator,
-                                   const SensorLogger& logger)
-    : hub_(hub), control_(control), target_(target), motor_(motor), validator_(validator), logger_(logger) {}
+                                   const SensorLogger& logger,
+                                   const Clock& clock)
+    : hub_(hub),
+      control_(control),
+      target_(target),
+      motor_(motor),
+      validator_(validator),
+      logger_(logger),
+      clock_(clock) {}
 
 uint16_t ExperimentRunner::totalSteps() const {
     switch (type_) {
@@ -98,9 +106,9 @@ bool ExperimentRunner::preconditionsOk() const {
 bool ExperimentRunner::waitRequest(Request r) {
     reqResult_ = false;
     req_ = r;
-    const uint32_t t0 = millis();
+    const StopWatch watch(clock_);  // tick が止まっていても進む時計で測る
     while (req_ != Request::None) {
-        if (millis() - t0 >= 50) {  // tick が止まっている (flash 書き込み中など)
+        if (watch.elapsedUs() >= 50000) {  // tick が止まっている (flash 書き込み中など)
             req_ = Request::None;
             return false;
         }
@@ -122,7 +130,7 @@ bool ExperimentRunner::start(Type type, unsigned long now) {
         return false;
     // target-vs-TPS チェックはコースト/大ステップで必ず乖離するため一時無効化。
     // 回路チェック (断線検出) は有効のまま。stop() で復元する。
-    validator_.suspendTargetCheck(true);
+    validator_.suspendTargetCheck(true, now);
     if (!target_.isManual())
         target_.setManual();
     type_ = type;
@@ -132,23 +140,23 @@ bool ExperimentRunner::start(Type type, unsigned long now) {
     stallSinceMs_ = 0;
     target_.setManualTarget(currentTargetTp());
     enterPhase(Phase::Settling, now);
-    isrDebugf("EXP start type=%u steps=%u", (unsigned)type_, totalSteps());
+    DebugLogger::log("EXP start type=%u steps=%u", (unsigned)type_, totalSteps());
     return true;
 }
 
-void ExperimentRunner::stop() {
+void ExperimentRunner::stop(unsigned long now) {
     if (!active()) {
         // 非実行中でも EXP stop を返す: 実験中に再起動 / USB 断があると console は EXP stop を受け取れず
         // 「実行中」表示が張り付く。停止ボタンでそれを解除できるようにする
-        isrDebugf("EXP stop (not running)");
+        DebugLogger::log("EXP stop (not running)");
         return;
     }
     if (target_.isManual())
         target_.setManual();  // manual 解除 → 通常のモード別ターゲットへ復帰
-    validator_.suspendTargetCheck(false);
+    validator_.suspendTargetCheck(false, now);
     type_ = Type::None;
     phase_ = Phase::Idle;
-    isrDebugf("EXP stop");
+    DebugLogger::log("EXP stop");
 }
 
 void ExperimentRunner::resetStationaryWindow(unsigned long now) {
@@ -198,47 +206,47 @@ void ExperimentRunner::advance(unsigned long now) {
     index_++;
     stepPost_ = false;
     if (index_ >= totalSteps()) {
-        isrDebugf("EXP done type=%u timeouts=%u", (unsigned)type_, timeoutCount_);
-        stop();
+        DebugLogger::log("EXP done type=%u timeouts=%u", (unsigned)type_, timeoutCount_);
+        stop(now);
         return;
     }
     if ((index_ % 10) == 0)
-        isrDebugf("EXP progress %u/%u", index_, totalSteps());
+        DebugLogger::log("EXP progress %u/%u", index_, totalSteps());
     target_.setManualTarget(currentTargetTp());
     enterPhase(Phase::Settling, now);
 }
 
 bool ExperimentRunner::guardsOk(unsigned long now) {
     if (control_.etcMode() == EtcTarget::Mode::MotorOff) {
-        isrDebugf("EXP abort: MOTOR_OFF knob");
+        DebugLogger::log("EXP abort: MOTOR_OFF knob");
         return false;
     }
     if (hub_.pulseEngine().getFrequencyHz() > 0.5f) {
-        isrDebugf("EXP abort: engine running");
+        DebugLogger::log("EXP abort: engine running");
         return false;
     }
     if (!validator_.currentlyValid() || !validator_.validLatched()) {
-        isrDebugf("EXP abort: plausibility");
+        DebugLogger::log("EXP abort: plausibility");
         return false;
     }
     if (!hub_.shutdownSig().isOn()) {
-        isrDebugf("EXP abort: SIG_IN low");
+        DebugLogger::log("EXP abort: SIG_IN low");
         return false;
     }
     // コースト区間はモーターを意図的に止めている。それ以外で OFF なら ETC が止まっている
     if (phase_ != Phase::Coasting && !motor_.isOn()) {
-        isrDebugf("EXP abort: ETC not armed");
+        DebugLogger::log("EXP abort: ETC not armed");
         return false;
     }
     double tp = hub_.tps1().convertedValue();
     if (tp > EXPERIMENT_TP_GUARD_HIGH) {
-        isrDebugf("EXP abort: tps high %d (x0.1%%)", (int)(tp * 10));
+        DebugLogger::log("EXP abort: tps high %d (x0.1%%)", (int)(tp * 10));
         return false;
     }
     // 低側ガード: リリース試験はコースト~再アームでバネ休止位置 (-15% 付近) を
     // 通るのが正常挙動なので適用しない (モーターは切れており押し付けは起きない)。
     if (type_ != Type::Release && tp < EXPERIMENT_TP_GUARD_LOW) {
-        isrDebugf("EXP abort: tps low %d (x0.1%%)", (int)(tp * 10));
+        DebugLogger::log("EXP abort: tps low %d (x0.1%%)", (int)(tp * 10));
         return false;
     }
     // ストール: PID がほぼ飽和 + 目標乖離 + 不動の継続 (固着/想定外の押し付け)。
@@ -252,7 +260,7 @@ bool ExperimentRunner::guardsOk(unsigned long now) {
             stallRefTp_ = (float)tp;
         } else if (now - stallSinceMs_ >= EXPERIMENT_STALL_MS) {
             if (fabsf((float)tp - stallRefTp_) < 0.5f) {
-                isrDebugf("EXP abort: stall u=%d tp=%d (x0.1%%)", (int)u, (int)(tp * 10));
+                DebugLogger::log("EXP abort: stall u=%d tp=%d (x0.1%%)", (int)u, (int)(tp * 10));
                 return false;
             }
             stallSinceMs_ = now;  // 動いてはいる → 監視窓を更新して継続
@@ -271,7 +279,7 @@ void ExperimentRunner::tick(unsigned long now) {
             req_ = Request::None;
             break;
         case Request::Stop:
-            stop();
+            stop(now);
             reqResult_ = true;
             req_ = Request::None;
             break;
@@ -281,7 +289,7 @@ void ExperimentRunner::tick(unsigned long now) {
     if (!active())
         return;
     if (!guardsOk(now)) {
-        stop();
+        stop(now);
         return;
     }
     switch (phase_) {

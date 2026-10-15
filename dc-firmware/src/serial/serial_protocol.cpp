@@ -176,19 +176,13 @@ EtcTarget::Mode etcModeFromProto(dc_EtcMode m) {
     }
 }
 
-void SerialProtocol::initialize() {
-    Serial.begin(SERIAL_SPEED);
-    while (!Serial && millis() < 3000) {
-        // USB Serial 接続待ち（最大3秒）
-    }
-}
-
 void SerialProtocol::sendSensorData(const SensorHub& hub,
                                     bool isValid,
                                     const etc::ErrorHandler& errorHandler,
                                     float duty,
                                     const LoopStats::Snapshot& sys,
-                                    const ControlInput& control) {
+                                    const ControlInput& control,
+                                    uint32_t nowMs) {
     const std::optional<EtcTarget::Mode> canMode = control.canEtcMode();
     static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
     const Imu* imu = hub.imu();
@@ -197,7 +191,7 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
     const dc_DeviceToHost env = {
         .which_payload = dc_DeviceToHost_sensor_tag,
         .payload = {.sensor = {
-            .timestamp = millis(),
+            .timestamp = nowMs,
             .has_sensor = true,
             .sensor = {
                 .sps = hub.adc().sps(),
@@ -257,30 +251,23 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
             .has_control = true,
             .control = {
                 .source = controlSourceToProto(control.source()),
-                .control_link_alive = control.controlLinkAlive(),
-                .shift_link_alive = control.shiftLinkAlive(),
-                .control_rx_age_ms = control.controlRxAgeMs(),
+                .control_link_alive = control.controlLinkAlive(nowMs),
+                .shift_link_alive = control.shiftLinkAlive(nowMs),
+                .control_rx_age_ms = control.controlRxAgeMs(nowMs),
                 .can_etc_mode = canMode ? etcModeToProto(*canMode) : dc_EtcMode_ETC_MODE_UNSPECIFIED,
-                .can_auto_shift = control.canAutoShift(),
-                .auto_shift_on = control.autoShiftOn(),
+                .can_auto_shift = control.canAutoShift(nowMs),
+                .auto_shift_on = control.autoShiftOn(nowMs),
             },
         }},
     };
     sendDeviceMessage(env, TxClass::Bulk);
 }
 
-void SerialProtocol::sendDebugv(const char* fmt, va_list args) {
-    dc_DeviceToHost env = {.which_payload = dc_DeviceToHost_debug_tag, .payload = {.debug = {.timestamp = millis()}}};
+void SerialProtocol::sendDebugv(uint64_t timestampUs, const char* fmt, va_list args) {
+    dc_DeviceToHost env = {.which_payload = dc_DeviceToHost_debug_tag, .payload = {.debug = {.timestamp_us = timestampUs}}};
     vsnprintf(env.payload.debug.msg, sizeof(env.payload.debug.msg), fmt, args);  // 文字列は書式化で埋める
 
     sendDeviceMessage(env, TxClass::Important);
-}
-
-void SerialProtocol::sendDebugf(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    sendDebugv(fmt, args);
-    va_end(args);
 }
 
 void SerialProtocol::sendResponse(uint32_t id, bool ok) {

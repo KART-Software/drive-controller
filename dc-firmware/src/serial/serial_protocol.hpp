@@ -10,7 +10,6 @@
 #include "control/control_input.hpp"
 #include "util/loop_stats.hpp"
 
-#define SERIAL_SPEED 115200
 #define SENSOR_SEND_INTERVAL 20  // ms (50Hz)
 
 // Maximum encoded payload size (proto bytes + 2 byte CRC). Keep this large
@@ -23,21 +22,23 @@
 dc_EtcMode etcModeToProto(EtcTarget::Mode m);
 EtcTarget::Mode etcModeFromProto(dc_EtcMode m);  // 未指定・未知値は MotorOff (安全側)
 
+// USB シリアルは Teensy コアが起動時 (startup の usb_init) に用意するので初期化は要らない。
+// Serial.begin() は呼ばないこと: Teensy 4 の begin() はホストがポートを開くまで最大 2 s (USB 未接続でも 0.75 s)
+// 待つ (cores/teensy4/usb_serial.h)。送信は空きを見て捨てるので、つながっていなくても固まらない。
+// 起動時の debug は SerialDebugWriter がつながるまでためる。
 class SerialProtocol {
    public:
-    static void initialize();
-
     // Sensor data (50 Hz).
     static void sendSensorData(const SensorHub& hub,
                                bool isValid,
                                const etc::ErrorHandler& errorHandler,
                                float duty,
                                const LoopStats::Snapshot& sys,
-                               const ControlInput& control);
+                               const ControlInput& control,
+                               uint32_t nowMs);  // telemetry の timestamp (loop の時刻)
 
-    // Debug log message.
-    static void sendDebugf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
-    static void sendDebugv(const char* fmt, va_list args);
+    // Debug log message. 直接呼ばず DebugLogger::log を使う (SerialDebugWriter がこれを呼ぶ)
+    static void sendDebugv(uint64_t timestampUs, const char* fmt, va_list args);
 
     // Response without payload data.
     static void sendResponse(uint32_t id, bool ok);

@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "util/stop_watch.hpp"
+
 // flash (LittleFS) 書き込みの前後で ETC を止めて再開するための受け渡し (docs/loop_nonblocking_spec.md §6.8)。
 // flash への書き込み中は割り込みが約 150 ms 禁止され、tick (モーター制御を含む) が止まる。
 //   loop (Flash)  : acquire() → 書き込み → release()
@@ -9,6 +11,9 @@
 // tick が動き出す前 (setup 中) は待たずに書く。
 class FlashWriteGate {
    public:
+    // clock: 許可待ちのタイムアウトを測る (tick が止まっていても進む)
+    explicit FlashWriteGate(const Clock& clock) : clock_(clock) {}
+
     // tick が動き出したら呼ぶ (以後の書き込みは tick の許可を待つ)
     void enable() { enabled_ = true; }
 
@@ -18,9 +23,9 @@ class FlashWriteGate {
             return true;
         granted_ = false;
         requested_ = true;
-        const uint32_t t0 = millis();
+        const StopWatch watch(clock_);  // tick が止まっていても進む時計で測る
         while (!granted_) {
-            if (millis() - t0 >= timeoutMs) {
+            if (watch.elapsedUs() >= timeoutMs * 1000) {
                 requested_ = false;
                 return false;
             }
@@ -37,6 +42,7 @@ class FlashWriteGate {
     void grant() { granted_ = true; }
 
    private:
+    const Clock& clock_;
     volatile bool enabled_ = false;
     volatile bool requested_ = false;
     volatile bool granted_ = false;

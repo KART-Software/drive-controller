@@ -2,8 +2,10 @@
 
 #include <Arduino.h>
 
+#include "util/stop_watch.hpp"
+
 /**
- * Measures the call frequency by sampling `micros()` on each `tick()`.
+ * Measures the call frequency by timing the interval between `tick()` calls (StopWatch).
  * The interval is smoothed with an exponential moving average (EMA):
  *   interval = (interval * (2^SHIFT - 1) + delta) >> SHIFT
  * SHIFT = 3 -> time constant ~8 samples.
@@ -11,22 +13,23 @@
 class FrequencyMeter
 {
 public:
+    explicit FrequencyMeter(const Clock& clock) : watch_(clock) {}
+
     void tick()
     {
-        uint32_t now = micros();
-        if (lastUs_)
+        const uint32_t delta = watch_.lapUs();  // µs
+        if (started_)
         {
-            uint32_t delta = now - lastUs_;
             constexpr uint32_t mask = (1u << SHIFT) - 1u;
             intervalUs_ = intervalUs_ ? (intervalUs_ * mask + delta) >> SHIFT : delta;
         }
-        lastUs_ = now;
+        started_ = true;
     }
 
     void reset()
     {
         intervalUs_ = 0;
-        lastUs_ = 0;
+        started_ = false;
     }
 
     uint32_t intervalUs() const { return intervalUs_; }
@@ -35,6 +38,7 @@ public:
 private:
     static constexpr uint8_t SHIFT = 3;
     uint32_t intervalUs_ = 0;
-    uint32_t lastUs_ = 0;
+    StopWatch watch_;
+    bool started_ = false;
 };
 
