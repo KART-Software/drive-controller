@@ -60,10 +60,12 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `safety_max_us` (約 10 µs)。
 2. **`canRxISR`** — FlexCAN3 の受信 (FIFO) 割り込み, 優先度 **64**。`CanRxData` に取り込み、0x741 のシフト入力はその場で `autoShifter.onPaddles()` に渡す。tick と同じ優先度なので互いに割り込まず、シフター・`CanRxData`・`ControlInput` はこの 2 つの間で排他不要。FlexCAN の `events()` は呼ばない (呼ぶとコールバックがキュー経由になる)。
-3. **センサーサンプリング ISR** — `IntervalTimer` (PIT を単独使用), 周期 62.5 µs, 優先度 **208** (USB より下)。既定 (`-DADC_DMA`) では ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleAdcDmaIsr()`)。`-DADC_DMA` を外すとブロッキング読み (`sensor_hub.read()`) を `loop()` で行うフォールバックになる。
+3. **センサーサンプリング ISR** — `IntervalTimer` (PIT のチャネル 2。0 / 1 は時刻の Lifetime Timer), 周期 62.5 µs, 優先度 **208** (USB より下)。既定 (`-DADC_DMA`) では ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleAdcDmaIsr()`)。`-DADC_DMA` を外すとブロッキング読み (`sensor_hub.read()`) を `loop()` で行うフォールバックになる。
 4. **`loop()`** — 非 ISR: IMU 読み (Phase 2b で DMA 化予定)、telemetry (50 Hz)、コマンドディスパッチ、SD ロギング (1kHz, カード挿入時)、ISR が積んだ debug の送信、launch FSM tick (凍結時はビルドから除外)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。50 Hz telemetry は TX バッファ 1 本分 (2 KB) を残して先に捨てるので、コマンド応答と debug は最後まで届く。
 
-**ISR (tick / CAN 受信) から `Serial` / `sendDebugf` / `DebugLogger` / SD / flash / `malloc` / `delay` を呼ばないこと。** debug は `isrDebugf()` (`util/isr_debug.hpp`) に積み、loop が送る。書式は整数と文字列だけ (newlib の浮動小数点書式は malloc する)。loop から tick の状態を変えるときは、要求を置いて tick に処理させる (例: `ExperimentRunner::requestStart()`) か、短い `noInterrupts()` 区間で書く (例: `ControlInput::setOverride()`)。
+**時刻は `Clock` で、`millis()` / `micros()` は使わない。** `Clock` はインターフェース (`interfaces/util/clock.hpp`)、実装は `SystemClock` (`util/system_clock.hpp`)。時刻源は PIT の Lifetime Timer (64 bit、24 MHz。ソフトリセットでも 0 に戻る。DWT はソフトリセットで戻らないので使わない)。`SystemClock` は状態を持たず、コンストラクタで PIT を動かす (その時点が時刻の 0。static 初期化なので `IntervalTimer` より前)。`Clock` は読んだ瞬間の時刻 (`nowUs64()` / `nowUs()` / `nowMs()`) だけを返す。tick は先頭で 1 回読んで部品に配る。実体 `sysClock` は `main.cpp` だけが持ち (extern しない)、部品へは時刻を引数で渡すか `Clock` の参照を渡す (`DebugLogger::initialize()`、`StopWatch` を使う部品のコンストラクタ)。区間の計測やタイムアウトは `StopWatch` (`util/stop_watch.hpp`)。時刻はクラスのメンバーにしまわず、使う関数まで引数で渡す (`nowMs_` を持つと、別の文脈が刻んだ時刻のほうが新しくなって差が負になる)。別の文脈 (CAN 受信割り込みなど) が刻んだ時刻との差は符号付きで扱い、新しいものは経過 0 とみなす。`src/interfaces/` はインターフェースを置く場所で、中は `src/` と同じ構成にする。
+
+**ISR (tick / CAN 受信) から `Serial` / SD / flash / `malloc` / `delay` を呼ばないこと。** debug はどこからでも `DebugLogger::log()`。`DebugLogger` は時刻を付けて出力先 (`LogWriter`、`interfaces/util/log/`) に配るだけで、その場で出せるかは出力先が判断する。USB へ送る `SerialDebugWriter` は ISR の中や割り込み禁止中、USB がつながっていない間 (起動時に接続は待たない) はキューに積み、loop の `DebugLogger::service()` (→ 各 writer の `service()`) が送る。ISR から呼ぶときの書式は整数と文字列だけ (newlib の浮動小数点書式は malloc する)。loop から tick の状態を変えるときは、要求を置いて tick に処理させる (例: `ExperimentRunner::requestStart()`) か、短い `noInterrupts()` 区間で書く (例: `ControlInput::setOverride()`)。
 
 **flash (LittleFS) への書き込み中は割り込みが約 150 ms 止まる。** `Flash` が `FlashWriteGate` で tick に知らせ、tick は ETC を止めてから (シフトのパルス中は待つ) 書き込みを許可し、終われば再開する (§6.8)。書き込みは必ず `Flash` 経由で行うこと。
 
@@ -95,7 +97,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 `shift::AutoShifter` (`dc-firmware/src/shift/`) — クイックシフター/シーケンシャル
 ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/auto_shifter_spec.md` が一次ソース。
 
-- ON/OFF とシフトパドルは `ControlInput` から `tick({.autoOn, .upPressed, .downPressed}, now)` で渡される (入手元は CAN 0x740 byte2 / 0x741、または console の上書き)。0x741 は受信割り込みから `onPaddles()` で**即時**に渡され、その場でパルスを始める (チャタリング除去は送信側の責務)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。パドルは押下状態で渡され、立ち上がり検出は `AutoShifter` が行う。
+- ON/OFF とシフトパドルは `ControlInput` から `tick({.autoOn, .upPressed, .downPressed}, nowUs)` で渡される (入手元は CAN 0x740 byte2 / 0x741、または console の上書き)。0x741 は受信割り込みから `onPaddles()` で**即時**に渡され、その場でパルスを始める (開始時刻は受信した瞬間の `sysClock.nowUs()`、チャタリング除去は送信側の責務)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。パドルは押下状態で渡され、立ち上がり検出は `AutoShifter` が行う。
 - 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。パルスの開始から次の開始までは最短 0.5 s (`SHIFT_MIN_INTERVAL_MS`、config `cooldown_ms` が長ければそちら)。その間の要求は捨てる。
 - パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
 - ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
@@ -123,7 +125,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 `SensorLogger` (`dc-firmware/src/util/log/`) が Teensy 4.1 内蔵 SD (SDIO, `BUILTIN_SDCARD`) へセンサーデータを **1kHz・固定長バイナリ**で記録する。**Config の flash (LittleFS) とは別系統**。
 
-- 構造はテキスト用ロガーのバイナリ版で対になっている: `BinaryWriter` (interface) ↔ `LogWriter`、`SdBinaryWriter` (SD I/O) ↔ `SerialDebugWriter`、`SensorLogger` (facade) ↔ `DebugLogger`。フォーマット (`LogHeader` / `LogRecord`, v4 = 148B/レコード) は `util/log/log_record.hpp`。
+- 構造はテキスト用ロガーのバイナリ版で対になっている: `BinaryWriter` (interface) ↔ `LogWriter` (interface、`interfaces/util/log/`)、`SdBinaryWriter` (SD I/O) ↔ `SerialDebugWriter`、`SensorLogger` (facade) ↔ `DebugLogger`。フォーマット (`LogHeader` / `LogRecord`, v4 = 148B/レコード) は `util/log/log_record.hpp`。
 - **カード挿入時のみ有効**・**電源投入毎に新ファイル**: `dc_log_YYYYMMDD_HHMMSS.bin` (RTC 設定時) / `dc_log_NNNN.bin` (未設定時)。RTC は `setSyncProvider(Teensy3Clock.get)` で起動時反映、`set_rtc` で更新。
 - レコード生成は**純粋関数** `buildLogRecord()` (`src/log_record_builder.{hpp,cpp}`) に集約 — 全入力を const 参照で受け、`SensorHub` 等の public const getter から読むだけで副作用なし。`SensorHub` はログ形式に依存しない。plausibility の valid/errors は `PlausibilityValidator::currentlyValid()` / `errorBits()` (副作用なし const) で読む。
 - 収集・書き込みは `loop()` (1kHz tick + 毎ループ `service()` で定期 flush)。SD 書き込みストール中は loop が止まりその間サンプルが空く (レアな小ギャップ)。ISR (tick/CAN 受信/sampling) は影響を受けない。停止時間は `LoopStats` で計測し telemetry (`SysStats`) と LogRecord v4 に載る。完全ギャップレス化 (リングバッファ + ISR 採取) は `docs/loop_nonblocking_spec.md` §7 (Phase 3)。
@@ -152,7 +154,7 @@ ETC 停止 = `setMotorOff()` (PWM=0 + モーター電源リレー OFF)、再開 
 
 - C++ namespace はサブシステム単位: `etc::` (スロットル), `launch::` (Launch Control), `shift::` (オートシフター)。センサーと共通ユーティリティはグローバル。
 - コメントは日本語の箇所が多い。新規コードは英語でも可だが、修正時は周囲のファイルに合わせる。
-- 実行時テレメトリを `Serial` に直接出力しない。`SerialProtocol::sendDebugf` 経由で出す (COBS フレーミングを通る)。素の `Serial.printf` はワイヤフォーマットをフレーム途中で破壊する。
+- debug メッセージは `DebugLogger::log` で出す (ISR からも同じ。出力先は登録した `LogWriter`。今は `SerialDebugWriter` が COBS フレームで送る)。`Serial` に直接出力しないこと (素の `Serial.printf` はワイヤフォーマットをフレーム途中で破壊する)。
 - `dc-firmware/test/` ディレクトリは存在するが現在空。テストランナーは未セットアップ。
 
 ## 未対応項目

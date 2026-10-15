@@ -208,7 +208,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 | 12 | 自身の所要時間を計測 (`LoopStats` の ISR 枠) | 毎回 | — |
 
 - 時刻: ISR 内の周期判定は tick 回数 (1 ms 単位の `uint32_t` カウンタ) で行い、`millis()` の読み直しはしない。
-  ログの時刻は DWT サイクルカウンタから作る (§7.2)。
+  ログの時刻は PIT の Lifetime Timer から作る (§7.2)。
 - 1〜5 は数 µs なので、モーター制御の開始時刻のずれも数 µs (1 ms 周期の PID には影響しない)。
 - 所要時間の目標 **< 50 µs** (安全層 + モーター + 送信 + 採取。2.3 の実測から 10〜20 µs 程度の見込み)。B の計測で監視する。
 - 同定実験の開始 / 停止は loop (コマンド) からの**要求フラグ**にし、tick が取り込んで状態を変える
@@ -220,7 +220,9 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
   呼ばない場合、ライブラリは受信割り込みの中でそのままコールバックを呼ぶ (`FlexCAN_T4.tpp` の `struct2queueRx` で確認済み)。
   `begin()` の後で NVIC 優先度を 64 に設定する (ライブラリは設定せず、Teensy 既定の 128 のまま)。
 - 0x740 (Control): `CanRxData` に取り込むだけ。モードの反映は次の tick (1 ms 以内)。
-- 0x741 (Shift): 取り込み、UP / DOWN の押下エッジを**その場で** `autoShifter.onDriverInput()` に渡し、パルスを開始する。
+- 0x741 (Shift): 取り込み、UP / DOWN の押下状態を**その場で** `autoShifter.onPaddles()` に渡し、立ち上がりならパルスを開始する。
+  パルスの開始時刻は受信した瞬間の時刻 (`sysClock.nowUs()`) にする。直前の tick の時刻を使うと、終端の判定が
+  最大 1 ms 早まり、パルスが短くなる (IST の 15 ms が 14 ms に)。終端は tick で判定するので、幅は指定値〜指定値 + 1 ms。
   チャタリング除去は送信側 (data-logger) の責務なので、受信側ではしない。
   送信側は 10 ms 周期で押下状態を送り、状態が変わった瞬間にも即時に 1 フレーム追加で送る (kart-can can-spec.md §4.1)。
   受信側は周期フレームか追加フレームかを区別せず、0→1 の立ち上がりだけを要求とみなす (直後の周期フレームで二重にシフトしない)。
@@ -242,11 +244,14 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 
 ### 6.5 ISR 内の禁止事項と、loop への伝達
 
-- ISR (`tickISR` / `canRxISR` / サンプリング) から `Serial` / `sendDebugf` / SD / flash / `malloc` / `delay` を呼ばない。
+- ISR (`tickISR` / `canRxISR` / サンプリング) から `Serial` / SD / flash / `malloc` / `delay` を呼ばない。
   いずれも中で割り込みや完了を待つので、上の優先度から呼ぶと固まる。
-- 伝えたいことは**イベントキュー** (固定長リング、ISR が積み loop が取り出す) に積み、loop が `sendDebugf` する。
-  対象: シフター (`ShiftEvent { kind, gear, widthMs }`)、同定実験 (開始 / 中断理由 / 終了)、`ControlInput` (上書きの自動解除)。
-  今は `sendDebugf` / `DebugLogger::log` を直接呼んでいる (同定実験 13 か所、シフター 4 か所、`ControlInput` 1 か所)。
+- debug は `DebugLogger::log()` で出す (どの文脈からでもよい)。`DebugLogger` は時刻を付けて出力先 (`LogWriter`) に配るだけで、
+  その場で出せるかは出力先が判断する。USB へ送る `SerialDebugWriter` は、ISR の中や割り込み禁止中に呼ばれたら
+  (IPSR / PRIMASK で判定)、または USB がつながっていない間 (`!Serial`) は固定長のキューに積み、loop の `DebugLogger::service()` (→ 各 writer の `service()`) が送る。
+  それ以外はその場で送る。ISR から呼ぶときの書式は整数と文字列だけ。
+  各メッセージには `log()` が呼ばれた時刻 (µs、`DebugMessage.timestamp_us`) を付ける。キュー経由のものは後から出るので、
+  届く順は呼ばれた順と前後しうる。並べ替えは読む側 (console) が時刻で行う。対象: シフター、同定実験 (開始 / 中断理由 / 終了)、`ControlInput` (上書きの自動解除)。
 
 ### 6.6 共有状態 (書き手 → 読み手)
 
@@ -314,7 +319,7 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 - 安全層・CAN 送受信・ログ採取も止まる。0x60A は約 150 ms 途切れる。CAN 受信のハードウェア FIFO は 6 フレームなので、
   あふれた分は失われる (0x741 は状態を 10 ms ごとに送り直すので、150 ms より長い押下は書き込み後に拾える)。
 - `millis()` / `micros()` は SysTick 割り込みで進むので、止まっていた間の時間 (約 149 ms) を失い、以後ずっと遅れたままになる。
-  そのためログの時刻は `micros()` ではなく DWT サイクルカウンタから作り、止まっていた時間が穴として現れるようにする (§7.2)。
+  そのためログの時刻は `micros()` ではなく PIT の Lifetime Timer から作り、止まっていた時間が穴として現れるようにする (§7.2)。
 
 ## 7. D: ギャップレスログ (Phase 3)
 
@@ -326,11 +331,23 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 ### 7.2 レコードと時刻 (v5)
 
 - `t_ms` (`millis()`) を **`t_us`** (µs、`uint32_t`) に置き換える。レコードは 148 B のまま。
-- 時刻源は **DWT サイクルカウンタ** (`ARM_DWT_CYCCNT`。Cortex-M7 内蔵、Teensy コアが起動時に有効化済み、600 MHz で 7.16 s で一周)。
-  `micros()` は SysTick 割り込みでミリ秒を足すので、flash 保存のように割り込みが長く止まるとその時間を失う (§6.8)。
-  - `tickISR` が毎回カウンタを読み、前回より小さければ上位に 2^32 を足して 64 bit に伸ばす (1 ms ごとに読むので一周を取りこぼさない。
-    割り込みが 7 s 以上止まらない限り時間を失わない)。
-  - µs への換算は `cycles / (F_CPU_ACTUAL / 1000000)`。64 bit に伸ばす処理は tick の 1 か所だけで行い、他 (loop の計測など) は tick が出した値を読む。
+- 時刻源は **PIT の Lifetime Timer** (チャネル 0 と 1 をつないだ 64 bit のダウンカウンタ、24 MHz。i.MX RT1060 RM §53.4.5)。
+  - `micros()` は SysTick 割り込みでミリ秒を足すので、flash 保存のように割り込みが長く止まるとその時間を失う (§6.8)。
+    PIT はハードウェアで数え続けるので失わない。64 bit なので一周しない (約 24,000 年)。一周を追う状態も要らない。
+  - DWT サイクルカウンタ (`ARM_DWT_CYCCNT`) は使わない。デバッグ回路にあり、ソフトリセット (AIRCR.SYSRESETREQ = Local reset、
+    SoC では COLD reset) ではリセットされない (ARMv7-M ARM §B1.5.1 / §C1.4、RM §21.3.4.2.2 "IOMUXC, SJC and debug are not reset")。
+    書き込み後の再起動や `reboot` コマンドでは前の値から数え続け、時刻の原点が 0〜7 s ずれた。PIT は COLD reset でもリセットされる
+    (RM Table 21-3 の Functional modules) ので、`SystemClock` のコンストラクタ (static 初期化) で動かした時点が毎回 0 になる。
+  - 読み出しは `LTMR64H` → `LTMR64L` の順 (H を読むと L が保持される、RM §53.6.4)。間に別の ISR が H を読むと保持された L が
+    上書きされるので、2 回の読み出しの間だけ割り込みを止める。
+  - PIT のチャネル 0 / 1 を占有する。`IntervalTimer` (サンプリング ISR) は `TCTRL == 0` の空きチャネルを 0 から探すので、
+    `SystemClock` (static 初期化) が先に動かすので、`IntervalTimer::begin()` (setup の中) はチャネル 2 を使う。
+  - 読み取り口はインターフェース `Clock` (`interfaces/util/clock.hpp`: `nowUs64` と、そこから出す `nowUs` / `nowMs`)。
+    いずれも読んだ瞬間の時刻を返す。実装は `SystemClock` (`util/system_clock.hpp`) で、状態は持たない。PIT の Lifetime Timer を
+    触るのは `SystemClock` だけ。tick は先頭で 1 回読み、その tick の間はその値を部品に配る。
+    実体 `sysClock` は `main.cpp` に 1 つだけ置き (extern 宣言は置かない)、部品へは時刻を引数で渡すか、`Clock` の参照を渡す
+    (`DebugLogger` は `initialize()`、`StopWatch` を使う部品はコンストラクタ)。
+  - 短い区間の計測や待ちのタイムアウトは `StopWatch` (`util/stop_watch.hpp`)。`Clock` を受け取り `nowUs64()` の差で測る。
 - `t_us` は 2^32 µs = **71.6 分で一周**する。レコードには 32 bit のまま入れ、デコーダが「前のレコードより小さくなったら
   上位桁を 1 足す」で 64 bit に戻す。レコードは 1 ms 間隔で並ぶので取り違えは起きない。ファーム内の差分計算は
   符号なしの引き算なので一周しても正しい。
@@ -409,8 +426,8 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 | `src/can/can_bus.{hpp,cpp}`、`can_controller.{hpp,cpp}` | 2a | 受信割り込み + `onReceive`、優先度 64、`poll()` 削除、送信 33 ms |
 | `src/constants.hpp` | 2a | `CAN_TX_INTERVAL_MS` 33、優先度定数 |
 | `src/control/control_input.{hpp,cpp}` | 2a | override の書き込みを割り込み禁止区間に |
-| `src/shift/auto_shifter.{hpp,cpp}` | 2a | `onDriverInput()` (CAN 受信から即時) と `tick()` (1 ms) に分割、最短間隔 0.5 s、`sendDebugf` → イベントキュー |
-| `src/etc/experiment_runner.{hpp,cpp}` | 2a | 開始 / 停止の要求フラグ、イベントキュー |
+| `src/shift/auto_shifter.{hpp,cpp}` | 2a | `onPaddles()` (CAN 受信から即時) と `tick()` (1 ms) に分割、最短間隔 0.5 s、debug は ISR から `DebugLogger::log` |
+| `src/etc/experiment_runner.{hpp,cpp}` | 2a | 開始 / 停止の要求フラグ、debug は ISR から `DebugLogger::log` |
 | `src/etc/plausibility_validator.{hpp,cpp}` | 2a | `validLatched() const` (loop 側の読み出し用) |
 | `src/util/loop_stats.{hpp,cpp}` | 2a | tick / CAN 受信 ISR の所要時間 |
 | `src/sensor/iam20680hp.{hpp,cpp}`、`sensor_hub.{hpp,cpp}` | 2b | SPI1 の DMA、移動平均、`readImu()` 削除 |
@@ -455,7 +472,7 @@ Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え�
 | CAN | 受信は割り込み (即時)。送信は等間隔で、周期は kart-can の定義 (`can.yaml` の `cycle_ms` → `KART_CAN_*_CYCLE_TIME_MS`) をそのまま使う: 0x600〜0x603 は 16 ms、0x60A は 33 ms、0x604〜0x609 (未実装) は 20 ms。周期を変えるときは kart-can を先に変える (当初の「30 Hz」は kart-can の設計を確認する前の決定で、取り消し) |
 | パルスカウンタ | 等間隔 (100 ms) で割り込みから更新 |
 | シフター | 入力は CAN 0x741 の受信で即時処理。チャタリング除去は送信側。パルス出力の最短間隔 0.5 s |
-| ログの時刻 | µs で記録。一周はデコーダで補正。時刻源は DWT サイクルカウンタを tick で 64 bit に伸ばしたもの (旧 Q-G。`micros()` は割り込みが長く止まると時間を失うため) |
+| ログの時刻 | µs で記録。一周はデコーダで補正。時刻源は PIT の Lifetime Timer (64 bit。旧 Q-G。`micros()` は割り込みが長く止まると時間を失い、DWT はソフトリセットで 0 に戻らないため) |
 | SD | exFAT。起動ごとに 1 ディレクトリ、100 MB の事前確保ファイルを順に作る。満杯なら一番古いファイルを消す |
 | 失敗時 | ログを止めるだけ。通知はしない |
 | 仕様書 | 本書 (Phase 2 / 3) にまとめる |
