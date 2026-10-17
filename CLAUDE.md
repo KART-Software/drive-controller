@@ -105,6 +105,15 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る。`tick()` は `tickISR` から毎 ms 呼ばれ、オートシフトの ON/OFF だけで判定する (ETC プラウシビリティには非依存。auto-shift の安全フォールバックは CAN 断→manual)。
 - シフト機構制御 (クラッチ/点火カット/ブリッピング/オーバーレブ保護) は IST コントローラ責務。
 
+### セルモーターリレー
+
+`starter::StarterController` (`dc-firmware/src/starter/`、仕様は `docs/starter_spec.md`) — セルスイッチ (CAN 0x740 byte3、`ControlInput::starterPressed()`) でセルモーターのリレー (`STARTER_RELAY_PIN`、暫定ピン 6) を駆動する。`tickISR` から毎 ms `tick()`。
+
+- 押した瞬間 (0 → 1) に ON。エンジン回転がしきい値を超えていれば ON にしない (押し直すまで待つ)。
+- 回転がしきい値を超えた状態が `running_confirm_ms` 続いたら OFF (エンジンがかかった)。
+- ON にしてから `min_hold_ms` はスイッチや CAN 途絶に関係なく回し、それ以降はスイッチが 0 (途絶を含む) で OFF。押し続ける限り上限なし。
+- しきい値と時間は config (`StarterConfig`、既定 2000 rpm / 1000 ms / 5000 ms)。安全条件 (①②③) とは無関係。0x60A の `starter_relay` と SD ログの flags (bit 6 リレー / bit 7 スイッチ) に載る。telemetry には載せない。
+
 ### Launch Control (現在凍結)
 
 **`-DLAUNCH_CONTROL_ENABLED` が未定義の通常ビルドでは凍結中。** `main.cpp` の `launchController.begin()` と FSM tick が `#if defined(LAUNCH_CONTROL_ENABLED)` でガードされ、`update()` が呼ばれないため FSM は Idle のまま (clutch motor 停止)。インスタンスと参照はビルドに残るので、フラグ ON ビルド (CI 等) で腐敗検知できる。制御フレーム `CONTROL (0x740)` の launch ビットは受信し続けるが何も起きない。
