@@ -15,6 +15,7 @@
 #include "log_record_builder.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "shift/auto_shifter.hpp"
+#include "starter/starter_controller.hpp"
 #include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
 #include "util/flash.hpp"
@@ -66,6 +67,8 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.pulseWheelFR(),
                                sensorHub.gps(),
                                sensorHub.apps1());
+// セルモーターリレー (docs/starter_spec.md)。tickISR がセルスイッチとエンジン回転で駆動する
+starter::StarterController starterController(sensorHub.pulseEngine());
 SdBinaryWriter sdWriter;
 LoopStats loopStats(sysClock);  // loop/SD/tickISR の所要時間 (1 s 窓)。telemetry + SD ログへ
 SensorLogger sensorLogger(sdWriter, loopStats, sysClock);
@@ -79,7 +82,13 @@ etc::ExperimentRunner experimentRunner(sensorHub,
                                        plausibilityValidator,
                                        sensorLogger,
                                        sysClock);
-Configurator configurator(flash, sensorHub, motorController, plausibilityValidator, launchController, autoShifter);
+Configurator configurator(flash,
+                          sensorHub,
+                          motorController,
+                          plausibilityValidator,
+                          launchController,
+                          autoShifter,
+                          starterController);
 CommandRouter commandRouter;
 CommandController commandController(configurator,
                                     motorController,
@@ -178,6 +187,8 @@ void tickISR() {
             .downPressed = controlInput.shiftDownPressed(now),
         },
         nowUs);
+    // セルモーターリレー (押した瞬間に ON、エンジンがかかるか保持時間後にスイッチが離れたら OFF)
+    starterController.tick(controlInput.starterPressed(now), now);
 
     // 9 回転計測 (車輪速・エンジン・クラッチ後)
     sensorHub.updatePulse(now, nowUs);
@@ -190,7 +201,7 @@ void tickISR() {
             .etcMode = sensorHub.target().getMode(),
             .launchActive = false,
             .autoShift = controlInput.autoShiftOn(now),
-            .starterRelay = false,
+            .starterRelay = starterController.relayOn(),
             .shutdownLoopClosed = sensorHub.shutdownSig().isOn(),
         });
     }
@@ -225,6 +236,7 @@ const LogSources logSources = {
     .shifter = autoShifter,
     .motor = motorController,
     .experiment = experimentRunner,
+    .starter = starterController,
 };
 
 void setup() {
@@ -251,6 +263,7 @@ void setup() {
     launchController.begin();
 #endif
     autoShifter.begin();
+    starterController.begin();
 
     // 起動直後の既定モード。0x740 受信前は ControlInput が MOTOR_OFF を返すので、最初の tick で
     // MotorOff に切り替わり、アーミング③が ETC を止めたまま待つ

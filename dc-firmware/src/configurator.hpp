@@ -6,6 +6,7 @@
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
 #include "shift/auto_shifter.hpp"
+#include "starter/starter_controller.hpp"
 #include "util/flash.hpp"
 
 #define CONFIG_FILE_NAME "/config.pb"
@@ -17,7 +18,8 @@ class Configurator {
                  etc::MotorController& motorController,
                  etc::PlausibilityValidator& plausibilityValidator,
                  launch::LaunchController& launchController,
-                 shift::AutoShifter& autoShifter);
+                 shift::AutoShifter& autoShifter,
+                 starter::StarterController& starterController);
     void calibrateFromFlash();
 
     void setAppsMin();
@@ -51,6 +53,7 @@ class Configurator {
     etc::PlausibilityValidator& plausibilityValidator;
     launch::LaunchController& launchController;
     shift::AutoShifter& autoShifter;
+    starter::StarterController& starterController;
     bool configChanged = false;
 
    private:

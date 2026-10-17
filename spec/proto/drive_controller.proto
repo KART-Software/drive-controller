@@ -120,6 +120,13 @@ message AutoShiftConfig {
   float  throttle_on_pct         = 8;  // この APPS% 以上=アクセルオン(UP可) / 未満=オフ(DOWN可)
 }
 
+// セルモーターリレー (docs/starter_spec.md)。出力ピンは constants.hpp (STARTER_RELAY_PIN)
+message StarterConfig {
+  float  engine_running_rpm = 1;  // これを超えたらエンジンがかかったとみなす
+  uint32 running_confirm_ms = 2;  // かかった状態がこの時間続いたらリレーを切る [ms]
+  uint32 min_hold_ms        = 3;  // ON にしてからこの時間はセルスイッチや CAN に関係なく回す [ms]
+}
+
 // Stored separately in /bite_point.pb — learned clutch meet point
 message BitePoint {
   float position = 1;  // 0-100%
@@ -131,6 +138,7 @@ message Config {
   LaunchConfig    launch       = 3;
   TractionConfig  traction     = 4;
   AutoShiftConfig auto_shift   = 5;
+  StarterConfig   starter      = 6;
 }
 
 // ---------------------------------------------------------------------

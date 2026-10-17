@@ -1,7 +1,7 @@
 #include "log_record_builder.hpp"
 
 LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::Snapshot& sys) {
-    const auto& [hub, plausibility, control, shifter, motor, experiment] = src;
+    const auto& [hub, plausibility, control, shifter, motor, experiment, starter] = src;
     static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
     const Adc& adc = hub.adc();
     const Imu* imu = hub.imu();
@@ -20,6 +20,10 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         f |= LOG_FLAG_AUTOSHIFT;
     if (control.launchOn(t_ms))  // launch は凍結 (消費側なし)
         f |= LOG_FLAG_LAUNCH;
+    if (starter.relayOn())
+        f |= LOG_FLAG_STARTER_RELAY;
+    if (control.starterPressed(t_ms))
+        f |= LOG_FLAG_STARTER_SWITCH;
 
     const LogRecord rec = {
         .t_ms = t_ms,

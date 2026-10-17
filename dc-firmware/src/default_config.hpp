@@ -101,4 +101,11 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .normal_neutral_pulse_ms = 25,
             .throttle_on_pct = 50.0f,
         },
+    .has_starter = true,
+    .starter =
+        {
+            .engine_running_rpm = 2000.0f,
+            .running_confirm_ms = 1000,
+            .min_hold_ms = 5000,
+        },
 };

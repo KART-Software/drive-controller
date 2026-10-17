@@ -7,7 +7,8 @@ Configurator::Configurator(Flash& flash,
                            etc::MotorController& motorController,
                            etc::PlausibilityValidator& plausibilityValidator,
                            launch::LaunchController& launchController,
-                           shift::AutoShifter& autoShifter)
+                           shift::AutoShifter& autoShifter,
+                           starter::StarterController& starterController)
     : flash(flash),
       apps1(hub.mut.apps1()),
       apps2(hub.mut.apps2()),
@@ -20,7 +21,8 @@ Configurator::Configurator(Flash& flash,
       motorController(motorController),
       plausibilityValidator(plausibilityValidator),
       launchController(launchController),
-      autoShifter(autoShifter) {}
+      autoShifter(autoShifter),
+      starterController(starterController) {}
 
 void Configurator::loadDefault() {
     config = DEFAULT_CONFIG;
@@ -93,6 +95,9 @@ void Configurator::calibrate() {
         const dc_SensorCalib& sc = config.sensor_calib;
         autoShifter.setConfig(config.auto_shift, sc.gps.type, sc.engine_teeth);
     }
+
+    if (config.has_starter)
+        starterController.setConfig(config.starter, config.sensor_calib.engine_teeth);
 }
 
 void Configurator::overlayConfig(const dc_Config& src) {
@@ -104,6 +109,8 @@ void Configurator::overlayConfig(const dc_Config& src) {
         config.launch = src.launch;
     if (src.has_auto_shift)
         config.auto_shift = src.auto_shift;
+    if (src.has_starter)
+        config.starter = src.starter;
     // 新トップレベルメッセージ (例: traction) はここに追加
 }
 

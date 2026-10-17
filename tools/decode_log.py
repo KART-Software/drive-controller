@@ -42,6 +42,7 @@ SYS_COLS = ["loop_max_us", "sd_max_us", "safety_max_us", "log_drops"]
 FLAG_BITS = [
     ("f_manual", 0), ("f_ittr", 1), ("f_shutdown", 2),
     ("f_valid", 3), ("f_autoshift", 4), ("f_launch", 5),
+    ("f_starter_relay", 6), ("f_starter_switch", 7),  # 旧ファイルでは 0
 ]
 
 COLUMNS = (
