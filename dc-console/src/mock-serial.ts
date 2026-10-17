@@ -81,6 +81,11 @@ const autoShift = {
   normalNeutralPulseMs: 25,
   throttleOnPct: 50,
 };
+const starter = {
+  engineRunningRpm: 2000,
+  runningConfirmMs: 1000,
+  minHoldMs: 5000,
+};
 
 function getFullConfig(): PbConfig {
   return create(ConfigSchema, {
@@ -109,6 +114,7 @@ function getFullConfig(): PbConfig {
       targetCurve: { ...targetCurve },
     },
     autoShift: { ...autoShift },
+    starter: { ...starter },
   });
 }
 
@@ -544,6 +550,7 @@ function handleCommand(cmd: Command): void {
             useIttr = cfg.etc.useIttr;
           }
           if (cfg.autoShift) Object.assign(autoShift, cfg.autoShift);
+          if (cfg.starter) Object.assign(starter, cfg.starter);
           configChanged = true;
         }
         emitResponse(create(ResponseSchema, { id, ok: !!cfg }));

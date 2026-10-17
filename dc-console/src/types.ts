@@ -89,6 +89,12 @@ export interface AutoShiftConfigT {
   throttleOnPct: number;
 }
 
+export interface StarterConfigT {
+  engineRunningRpm: number;
+  runningConfirmMs: number;
+  minHoldMs: number;
+}
+
 export interface DeviceConfig {
   sensorValues: {
     apps1Min: number;
@@ -114,6 +120,7 @@ export interface DeviceConfig {
   // ── 非 ETC ──
   gpsType: number; // 0=IST, 1=NORMAL
   autoShift: AutoShiftConfigT;
+  starter: StarterConfigT;
   // ── FS 使用量 (ConfigResponse 由来, 任意) ──
   fsUsed?: number;
   fsTotal?: number;
