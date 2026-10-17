@@ -53,6 +53,8 @@ class ControlInput {
     bool launchOn(uint32_t nowMs) const { return controlLinkAlive(nowMs) && rx_.launchActive; }  // launch は凍結中
     bool shiftUpPressed(uint32_t nowMs) const { return shiftLinkAlive(nowMs) && rx_.shiftUp; }
     bool shiftDownPressed(uint32_t nowMs) const { return shiftLinkAlive(nowMs) && rx_.shiftDown; }
+    // セルスイッチ (0x740 byte3)。未受信・途絶時は false
+    bool starterPressed(uint32_t nowMs) const { return controlLinkAlive(nowMs) && rx_.starter; }
 
     // CAN 側の値 (override を適用する前。telemetry 表示用)
     std::optional<EtcTarget::Mode> canEtcMode() const;  // 未受信は nullopt

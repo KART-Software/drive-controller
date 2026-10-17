@@ -20,6 +20,8 @@
 #define LOG_FLAG_VALID (1u << 3)      // plausibility 現在 OK (caller)
 #define LOG_FLAG_AUTOSHIFT (1u << 4)  // CAN auto-shift ON (caller)
 #define LOG_FLAG_LAUNCH (1u << 5)     // CAN launch ON (caller)
+#define LOG_FLAG_STARTER_RELAY (1u << 6)   // セルモーターリレー ON (caller)
+#define LOG_FLAG_STARTER_SWITCH (1u << 7)  // セルスイッチ (0x740 byte3、途絶時は 0) (caller)
 
 struct __attribute__((packed)) LogHeader {
     char magic[8];         // "KARTLOG1"

@@ -8,6 +8,7 @@
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
 #include "shift/auto_shifter.hpp"
+#include "starter/starter_controller.hpp"
 #include "util/loop_stats.hpp"
 #include "util/log/log_record.hpp"
 
@@ -22,6 +23,7 @@ struct LogSources {
     const shift::AutoShifter& shifter;
     const etc::MotorController& motor;
     const etc::ExperimentRunner& experiment;
+    const starter::StarterController& starter;
 };
 
 LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::Snapshot& sys);

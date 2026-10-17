@@ -193,6 +193,7 @@ function toDeviceConfig(cfg: PbConfig | undefined): DeviceConfig {
   const sv = cfg?.sensorCalib;
   const ec = cfg?.etc;
   const as = cfg?.autoShift;
+  const st = cfg?.starter;
   return {
     sensorValues: {
       apps1Min: sv?.apps1Min ?? 0,
@@ -221,6 +222,11 @@ function toDeviceConfig(cfg: PbConfig | undefined): DeviceConfig {
       normalDrivePulseMs: as?.normalDrivePulseMs ?? 0,
       normalNeutralPulseMs: as?.normalNeutralPulseMs ?? 0,
       throttleOnPct: as?.throttleOnPct ?? 0,
+    },
+    starter: {
+      engineRunningRpm: st?.engineRunningRpm ?? 0,
+      runningConfirmMs: st?.runningConfirmMs ?? 0,
+      minHoldMs: st?.minHoldMs ?? 0,
     },
     plausibilityFlags: ec?.plausibilityCheckFlags
       ? {
@@ -274,6 +280,7 @@ function buildConfigFromObject(obj: unknown): PbConfig | undefined {
       targetCurve: o.targetCurve ?? o.etc?.targetCurve,
     },
     autoShift: o.autoShift ?? undefined,
+    starter: o.starter ?? undefined,
   });
 }
 
@@ -455,6 +462,23 @@ function buildCommand(
       return create(CommandSchema, {
         id,
         body: { case: "stopEtcExperiment", value: {} },
+      });
+    case "set_starter":
+      // starter のみを設定した部分 Config を送る (overlayConfig が has_starter だけを見る)
+      return create(CommandSchema, {
+        id,
+        body: {
+          case: "setConfig",
+          value: {
+            config: create(ConfigSchema, {
+              starter: {
+                engineRunningRpm: params.engineRunningRpm,
+                runningConfirmMs: params.runningConfirmMs,
+                minHoldMs: params.minHoldMs,
+              },
+            }),
+          },
+        },
       });
     case "set_auto_shift":
       // auto_shift のみを設定した部分 Config を送る。firmware overlayConfig が
