@@ -100,14 +100,14 @@ NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。�
 | 64 | `tickISR` | **GPT2**、1 ms | 安全層、**モーター制御 (PID → PWM)**、モード反映、シフターの時間管理と自動判断、CAN 送信 (kart-can の周期)、CAN 途絶判定、回転計測の更新 (毎 ms)、同定実験の進行、ログ 1 レコード採取 |
 | 64 | `canRxISR` | FlexCAN3 の受信割り込み | 0x740 / 0x741 の取り込み。シフト入力のエッジは**その場で**シフターへ渡す |
 | 128 | USB | (Teensy 既定) | — |
-| 208 | `sensorSamplingISR` | **PIT** (単独使用)、16 kHz | ADC の DMA 取り込みと次の転送開始、**IMU の DMA (2 回に 1 回 = 8 kHz)** |
+| 208 | `sensorSamplingISR` | **PIT** のチャネル 2 (PIT の割り込みはこれだけ)、16 kHz | ADC の DMA 取り込みと次の転送開始、**IMU の DMA (2 回に 1 回 = 8 kHz)** |
 | — | `loop()` | — | SD 書き出し、telemetry 送信、コマンド処理、ISR からのイベントの debug 送信、計測窓の集計 |
 
 - **`tickISR` と `canRxISR` は同じ優先度**にする。同優先度は互いに割り込めないので、シフター・`CanRxData`・
   `ControlInput` をこの 2 つの間で排他しなくてよい (保留側は相手の終了直後に走る。遅れは最大で相手の 1 回分 = 数十 µs)。
 - **モーター制御は `tickISR` に統合する** (旧 `motorControlISR` は廃止)。安全層の判断の直後に回すので、tick の残りの処理を待たない。
   モーターだけ別の割り込みにすると、ETC の停止をタイマーの停止で行う必要があり、出力とタイマー停止の順序を気にすることになる。
-- GPT1 / GPT2 は Teensy コアも使用中のライブラリも使っていない (確認済み)。GPT2 を tick に使い、GPT1 は空きのまま残す。PIT はサンプリング専用になり、優先度 208 が実際に効く。
+- GPT1 / GPT2 は Teensy コアも使用中のライブラリも使っていない (確認済み)。GPT2 を tick に使い、GPT1 は空きのまま残す。PIT の割り込みはサンプリングだけになり、優先度 208 が実際に効く (チャネル 0 / 1 は時計の Lifetime Timer が割り込みなしで使う、§7.2)。
   その結果サンプリングは USB と制御 tick に割り込まれるようになる。62.5 µs を超えて待たされた回は 1 サンプル飛ぶが、
   DMA 転送自体は止まらず、移動平均のサンプル数が 1 つ減るだけ。
 
@@ -115,7 +115,7 @@ NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。�
 
 - **Phase 1 = A + B** (済、PR #9)
 - **Phase 2 = C**。前提: 制御入力の CAN 化 (`feature/can-control-input`, [control_input_spec.md](control_input_spec.md)) が先に入っていること。
-  - 2a: タイマーの付け替え (`tickISR` → GPT2、PIT はサンプリング専用) と、モーター制御・安全層・シフター・CAN・回転計測・同定実験の tick への移動、flash 保存の手順 (§6.8)
+  - 2a: タイマーの付け替え (`tickISR` → GPT2、PIT の割り込みはサンプリングだけ。チャネル 0 / 1 は時計) と、モーター制御・安全層・シフター・CAN・回転計測・同定実験の tick への移動、flash 保存の手順 (§6.8)
   - 2b: IMU の DMA 化 (8 kHz)
   - 2c: エンジン回転・クラッチ後回転を周期計測へ (QuadTimer の入力キャプチャ、§6.7)。最初にベンチで成立確認
 - **Phase 3 = D** (SD: exFAT・ディレクトリ・100 MB 事前確保・リングバッファ・`t_us`)
@@ -188,7 +188,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
   `startEtc()` / `stopEtc()` はタイマーを触らず、`MotorController` の ON / OFF (`setMotorOn()` は内部で `pid.reset()`、
   `setMotorOff()` は PWM 0) だけを行う。tick は「ON なら `cycle()` を呼ぶ」。
 - `tickISR`: GPT2 (優先度 64)、`setup()` の最後で開始し、以後止めない。
-- `sensorSamplingISR`: PIT のまま (単独使用なので優先度 208 が効く)。
+- `sensorSamplingISR`: PIT のまま (チャネル 2。PIT の割り込みはこれだけなので優先度 208 が効く。チャネル 0 / 1 は時計の Lifetime Timer が割り込みなしで使う)。
 
 ### 6.2 `tickISR` (1 ms) — 実行順
 
