@@ -134,7 +134,7 @@ function emitDebug(msg: string): void {
     create(DeviceToHostSchema, {
       payload: {
         case: "debug",
-        value: create(DebugMessageSchema, { timestamp: Date.now() - t0, msg }),
+        value: create(DebugMessageSchema, { timestampUs: BigInt(Date.now() - t0) * 1000n, msg }),
       },
     }),
   );

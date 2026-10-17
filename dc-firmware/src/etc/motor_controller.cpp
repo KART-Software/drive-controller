@@ -12,10 +12,10 @@ void MotorController::initialize() {
     pid.setIntegralLimit(DC_MOTOR_OUTPUT_SCALE_MAX);
 }
 
-void MotorController::cycle() {
+void MotorController::cycle(uint32_t nowUs) {
     double target_ = target.getTarget();
     double tp = tps.convertedValue();
-    output = pid.compute(target_, tp);
+    output = pid.compute(target_, tp, nowUs);
     // DcMotor::write は |output| を DC_MOTOR_OUTPUT_SCALE_MAX で飽和させる。lastOutput_ は
     // 「実印加 duty」(SD ログ / 実験ガード / telemetry が参照) なので同じ飽和を掛ける。
     // 生 PID 出力は D 項で数万 % に達し得る (TPS 校正切替時に +169,000 % を記録した実績)。
@@ -24,9 +24,9 @@ void MotorController::cycle() {
         applied = DC_MOTOR_OUTPUT_SCALE_MAX;
     else if (applied < -DC_MOTOR_OUTPUT_SCALE_MAX)
         applied = -DC_MOTOR_OUTPUT_SCALE_MAX;
-    // stopEtc() は setMotorOff() → timer.end() の順なので、その間に ISR が来ることがある。DcMotor::write は
-    // OFF 中 no-op だが lastOutput_ は書かれてしまうため、OFF なら 0 (= 実印加値) にする。setMotorOff() は
-    // dcMotor.off() → lastOutput_=0 の順なので、どの位置で割り込まれても最終値は 0 になる。
+    // cycle() は tickISR で ON のときだけ呼ばれるので通常 OFF では来ないが、lastOutput_ は「実印加値」なので
+    // OFF なら 0 にしておく。loop の setMotorOff() (etc_motor_off コマンド) は dcMotor.off() → lastOutput_=0
+    // の順なので、どの位置で tick に割り込まれても最終値は 0 になる。
     lastOutput_ = dcMotor.isOn() ? (float)applied : 0.0f;
     dcMotor.write(output);
 }
@@ -46,8 +46,8 @@ bool MotorController::isOn() const {
 }
 
 void MotorController::setPidGains(double kP, double kI, double kD) {
-    // モーター ISR (優先度 0) が compute 中にゲイン 3 値の書き換えへ割り込むと
-    // 混成ゲイン/破損 double を読み得るため、書き換えはアトミックに行う。
+    // loop からの書き換え中に tickISR が入って compute すると混成ゲイン/破損 double を読み得るため、
+    // 書き換えはアトミックに行う。
     noInterrupts();
     pid.setGains(kP, kI, kD);
     interrupts();

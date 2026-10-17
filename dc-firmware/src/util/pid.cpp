@@ -17,21 +17,21 @@ void PID::setDirection(int8_t direction)
     }
 }
 
-double PID::compute(double setPoint, double position)
+double PID::compute(double setPoint, double position, uint32_t nowUs)
 {
-    unsigned long now = micros();
+    const double dtSec = (nowUs - lastUs) * 1e-6;
+    lastUs = nowUs;
     double error = position - setPoint;
     double differential;
 
-    if (lastTime == 0)
+    if (first || dtSec <= 0.0)
     {
         differential = 0.0;
     }
     else
     {
-        double timeDelta = (now - lastTime) / 1000000.0; // sec
-        differential = (error - lastError) / timeDelta;
-        errorSum += error * timeDelta;
+        differential = (error - lastError) / dtSec;
+        errorSum += error * dtSec;
 
         // Anti-windup: |kI * errorSum| を integralLimit 以下にクランプ
         if (integralLimit > 0.0 && kI != 0.0) {
@@ -40,7 +40,7 @@ double PID::compute(double setPoint, double position)
             if (errorSum < -maxSum) errorSum = -maxSum;
         }
     }
-    lastTime = now;
+    first = false;
     lastError = error;
 
     return -direction * (kP * error + kI * errorSum + kD * differential);
@@ -57,5 +57,5 @@ void PID::reset()
 {
     errorSum = 0.0;
     lastError = 0.0;
-    lastTime = 0;
+    first = true;
 }

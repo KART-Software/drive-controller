@@ -31,24 +31,30 @@ void PulseCounter::begin() {
     timer->ENBL |= 1 << channel;
 
     lastCount = readCounter();
-    lastUpdateUs = micros();
 }
 
-void PulseCounter::update() {
+void PulseCounter::update(uint32_t nowUs) {
     if (!enabled) {
         frequencyHz = 0;
         return;
     }
 
-    uint32_t currentCount = readCounter();
-    uint32_t now = micros();
-    uint32_t elapsed = now - lastUpdateUs;
-    if (elapsed > 0) {
-        uint32_t delta = (currentCount - lastCount) & 0xFFFF;
-        frequencyHz = (float)delta * 1000000.0f / (float)elapsed;
-    }
+    const uint32_t currentCount = readCounter();
+    total += (currentCount - lastCount) & 0xFFFF;
     lastCount = currentCount;
-    lastUpdateUs = now;
+
+    // 窓の始点 = WINDOW_TICKS 回前 (まだ溜まっていなければ一番古いもの)
+    if (filled > 0) {
+        const uint32_t oldest = (filled < WINDOW_TICKS) ? 0 : head;
+        const uint32_t elapsed = nowUs - histUs[oldest];
+        if (elapsed > 0)
+            frequencyHz = (float)(total - histCount[oldest]) * 1000000.0f / (float)elapsed;
+    }
+    histCount[head] = total;
+    histUs[head] = nowUs;
+    head = (head + 1) % WINDOW_TICKS;
+    if (filled < WINDOW_TICKS)
+        filled++;
 }
 
 float PulseCounter::getFrequencyHz() const {

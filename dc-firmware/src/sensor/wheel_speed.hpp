@@ -16,7 +16,7 @@ class WheelSpeedSensor {
     explicit WheelSpeedSensor(uint8_t pin) : pin_(pin) {}
 
     void begin();
-    void update();  // loop から定期呼び出し: キャプチャ平均→Hz、無入力で 0 に減衰
+    void update(uint32_t nowMs);  // tickISR から 1 ms ごと (nowMs は sysClock の ms): この間に来た周期の平均→Hz (来なければ前の値)、無入力が続けば 0 に減衰
 
     float getFrequencyHz() const { return frequencyHz_; }
     float getRpm(uint8_t pulsesPerRev) const {
@@ -28,7 +28,7 @@ class WheelSpeedSensor {
     uint8_t pin_;
     FreqMeasureMulti fm_;
     bool enabled_ = false;
-    float frequencyHz_ = 0.0f;
+    volatile float frequencyHz_ = 0.0f;
     uint32_t pulseCount_ = 0;
     uint32_t lastEdgeMs_ = 0;
     // 一定時間エッジが来なければ停止とみなし 0Hz にする (停車判定用)。

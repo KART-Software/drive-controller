@@ -6,6 +6,7 @@
 #include <DMAChannel.h>
 #endif
 #include "constants.hpp"
+#include "interfaces/util/clock.hpp"
 #include "sensor/frequency_meter.hpp"
 
 // https://www.ti.com/jp/lit/ds/symlink/ads8688.pdf
@@ -46,7 +47,8 @@
 template <size_t NUM_DEV>
 class _adc {
    public:
-    _adc(uint8_t csPin = ADC_CS_PIN, SPIClass& spi = SPI);
+    // clock: SPI 受信待ちのタイムアウトとサンプリング頻度 (sps) の計測
+    explicit _adc(const Clock& clock, uint8_t csPin = ADC_CS_PIN, SPIClass& spi = SPI);
 
     void begin();
     void read();  // ブロッキング読み (非DMA経路 / フォールバック)
@@ -64,6 +66,7 @@ class _adc {
 #endif
 
    private:
+    const Clock& clock_;
     SPIClass& spi;
     uint8_t csPin;
     SPISettings spiSettings = SPISettings(SPI_FREQUENCY, SPI_BIT_ORDER, SPI_MODE_ADC);

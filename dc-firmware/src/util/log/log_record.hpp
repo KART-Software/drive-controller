@@ -27,12 +27,12 @@ struct __attribute__((packed)) LogHeader {
     uint16_t record_size;  // sizeof(LogRecord)
     uint32_t rtc_epoch;    // ログ開始時の Unix 時刻 (0=RTC未設定)
     uint32_t log_hz;       // SENSOR_LOG_HZ
-    uint32_t boot_ms;      // 開始時 millis() (t_ms の基準)
+    uint32_t boot_ms;      // 開始時の sysClock.nowMs() (t_ms の基準)
 };
 
 // 148 バイト固定 (4 バイト整列)。u32/float は全て 4 整列オフセットに並べてある。
 struct __attribute__((packed)) LogRecord {
-    uint32_t t_ms;            // millis() (boot 基準)  ※ caller
+    uint32_t t_ms;            // sysClock.nowMs() (boot 基準)  ※ caller
     uint16_t adc[8];          // ADC 生 ch0..7  (hub)
     float apps1, apps2, ittr; // 変換済みセンサ値 (hub)
     float tps1, tps2, bps;    //   〃
@@ -58,7 +58,7 @@ struct __attribute__((packed)) LogRecord {
     // ── v4: loop 停止の可視化 (LoopStats::live() = 直前の窓と現在の窓のここまでの大きい方) ※ caller ──
     uint32_t loop_max_us;    // loop 1 周の最大 [µs] (120 ms 停止を記録するため uint32)
     uint32_t sd_max_us;      // SD write/flush 1 回の最大 [µs]
-    uint16_t safety_max_us;  // 安全層 ISR 1 回の最大 [µs] (Phase 2 以降、それまで 0)
+    uint16_t safety_max_us;  // tickISR 1 回の最大 [µs] (安全層・モーター制御などを含む)
     uint16_t log_drops;      // リング溢れ累積 (Phase 3 以降、それまで 0)
 };
 

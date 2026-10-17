@@ -10,7 +10,7 @@ class MotorController {
    public:
     MotorController(const EtcTarget& target, const Tps& tps);
     void initialize();
-    void cycle();
+    void cycle(uint32_t nowUs);  // tickISR から。nowUs = その tick の時刻
     void setMotorOn();
     void setMotorOff();
     bool isOn() const;
@@ -26,7 +26,6 @@ class MotorController {
     PID pid{0.0, 0.0, 0.0, MOTOR_DIRECTION};
     const EtcTarget& target;
     const Tps& tps;
-    const unsigned long cycleTime = MOTOR_CONTROLL_CYCLE_TIME;
     double output;
     volatile float lastOutput_ = 0.0f;
 };

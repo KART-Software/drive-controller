@@ -21,7 +21,10 @@
 //     launch / オートシフト / セル = false
 //   0x741 が CAN_SHIFT_TIMEOUT_MS 途絶 → 両パドル false
 //
-// getter は直前の update() の時刻で判定する (最大 1 周分古い)。
+// update() は tickISR から 1 ms ごと。時刻で判定する getter (途絶・経過時間) は呼ぶ側が時刻を渡す。
+// 受信時刻 (CanRxData) は CAN 受信割り込みがその場の時刻で刻むので、渡された時刻より新しいことがある
+// (loop が時刻を読んだ後に受信した場合など)。その差は符号付きで扱い、新しいものは経過 0 とみなす。
+// setOverride / clearOverride は loop (コマンド) から呼ばれ、中で割り込みを禁止して書き換える。
 class ControlInput {
    public:
     enum class Source : uint8_t { WaitingForCan, Can, Override };
@@ -37,35 +40,36 @@ class ControlInput {
 
     explicit ControlInput(const CanRxData& rx) : rx_(rx) {}
 
-    // loop から毎回 (CAN poll の直後)。新しい 0x740 の取り込み、途絶時のフォールバック、
+    // tickISR から毎回。新しい 0x740 の取り込み、途絶時のフォールバック、
     // override の自動解除 (override 中に 0x740 を受信し始めたら解除) を行う
-    void update(unsigned long nowMs);
+    void update(uint32_t nowMs);
 
     // 0x740 を受信している間は受け付けない (車載時にドライバーのスイッチを上書きしないため)
-    bool setOverride(const Override& o);
-    void clearOverride() { overrideActive_ = false; }
+    bool setOverride(const Override& o, uint32_t nowMs);
+    void clearOverride();
 
     EtcTarget::Mode etcMode() const;
-    bool autoShiftOn() const;
-    bool launchOn() const { return controlLinkAlive() && rx_.launchActive; }  // launch は凍結中 (消費側なし)
-    bool shiftUpPressed() const { return shiftLinkAlive() && rx_.shiftUp; }
-    bool shiftDownPressed() const { return shiftLinkAlive() && rx_.shiftDown; }
+    bool autoShiftOn(uint32_t nowMs) const;
+    bool launchOn(uint32_t nowMs) const { return controlLinkAlive(nowMs) && rx_.launchActive; }  // launch は凍結中
+    bool shiftUpPressed(uint32_t nowMs) const { return shiftLinkAlive(nowMs) && rx_.shiftUp; }
+    bool shiftDownPressed(uint32_t nowMs) const { return shiftLinkAlive(nowMs) && rx_.shiftDown; }
 
     // CAN 側の値 (override を適用する前。telemetry 表示用)
     std::optional<EtcTarget::Mode> canEtcMode() const;  // 未受信は nullopt
-    bool canAutoShift() const { return controlLinkAlive() && rx_.autoShiftActive; }
+    bool canAutoShift(uint32_t nowMs) const { return controlLinkAlive(nowMs) && rx_.autoShiftActive; }
 
     Source source() const;
-    bool controlLinkAlive() const;    // 0x740 を CAN_CONTROL_TIMEOUT_MS 以内に受信している
-    bool shiftLinkAlive() const;      // 0x741 を CAN_SHIFT_TIMEOUT_MS 以内に受信している
-    uint32_t controlRxAgeMs() const;  // 最後に 0x740 を受信してからの経過 (未受信は 0)
+    bool controlLinkAlive(uint32_t nowMs) const;    // 0x740 を CAN_CONTROL_TIMEOUT_MS 以内に受信している
+    bool shiftLinkAlive(uint32_t nowMs) const;      // 0x741 を CAN_SHIFT_TIMEOUT_MS 以内に受信している
+    uint32_t controlRxAgeMs(uint32_t nowMs) const;  // 最後に 0x740 を受信してからの経過 (未受信は 0)
 
    private:
+    bool setOverrideLocked(const Override& o, uint32_t nowMs);
+
     const CanRxData& rx_;
-    unsigned long nowMs_ = 0;
     uint32_t seenControlFrames_ = 0;
     EtcTarget::Mode canMode_ = EtcTarget::Mode::Normal;  // 取り込み済みの CAN のモード (フォールバック適用後)
-    bool overrideActive_ = false;
+    volatile bool overrideActive_ = false;
     Override override_ = {
         .hasEtcMode = false, .etcMode = EtcTarget::Mode::MotorOff, .hasAutoShift = false, .autoShift = false};
 };

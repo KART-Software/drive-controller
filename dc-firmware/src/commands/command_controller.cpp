@@ -1,7 +1,12 @@
 #include "command_controller.hpp"
 #include "serial/serial_protocol.hpp"
+#include "util/log/debug_logger.hpp"
 
 #include <TimeLib.h>
+
+#if defined(BENCH_DEBUG)
+extern volatile uint32_t tickCount;  // main.cpp (tickISR の実行回数)。DebugStallCmd の確認用
+#endif
 
 namespace {
 
@@ -28,8 +33,7 @@ void etcMotorOff(void* ctx, const dc_Command& cmd) {
 
 void save(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
-    c->configurator.save();
-    sendConfigResponse(c, cmd.id, true);
+    sendConfigResponse(c, cmd.id, c->configurator.save());
 }
 
 void setAppsMin(void* ctx, const dc_Command& cmd) {
@@ -252,11 +256,11 @@ void startEtcExperiment(void* ctx, const dc_Command& cmd) {
     }
     // 前提条件 (spec §5: ノブ≠MOTOR_OFF・エンジン停止・車両静止・plausibility・SD) は
     // start() が検証し、不成立なら false 応答になる。
-    SerialProtocol::sendResponse(cmd.id, c->experimentRunner.start(t, millis()));
+    SerialProtocol::sendResponse(cmd.id, c->experimentRunner.requestStart(t));
 }
 
 void stopEtcExperiment(void* ctx, const dc_Command& cmd) {
-    static_cast<CommandContainer*>(ctx)->experimentRunner.stop();
+    static_cast<CommandContainer*>(ctx)->experimentRunner.requestStop();
     SerialProtocol::sendResponse(cmd.id, true);
 }
 
@@ -275,7 +279,21 @@ void setControlOverride(void* ctx, const dc_Command& cmd) {
         .hasAutoShift = d.has_auto_shift,
         .autoShift = d.auto_shift,
     };
-    SerialProtocol::sendResponse(cmd.id, c->controlInput.setOverride(o));
+    SerialProtocol::sendResponse(cmd.id, c->controlInput.setOverride(o, c->clock.nowMs()));
+}
+
+// ベンチ専用: loop を止める (tick / CAN 受信は割り込みなので止まらないことを確かめる)。上限 2 s
+void debugStall(void* ctx, const dc_Command& cmd) {
+    (void)ctx;
+#if defined(BENCH_DEBUG)
+    const uint32_t ms = min(cmd.body.debug_stall.ms, (uint32_t)2000);
+    const uint32_t ticks0 = tickCount;
+    delay(ms);
+    DebugLogger::log("stall %lu ms: tick ran %lu times", (unsigned long)ms, (unsigned long)(tickCount - ticks0));
+    SerialProtocol::sendResponse(cmd.id, true);
+#else
+    SerialProtocol::sendResponse(cmd.id, false);
+#endif
 }
 
 }  // namespace
@@ -284,8 +302,9 @@ CommandController::CommandController(Configurator& configurator,
                                      etc::MotorController& motorController,
                                      EtcTarget& target,
                                      etc::ExperimentRunner& experimentRunner,
-                                     ControlInput& controlInput)
-    : container{configurator, motorController, target, experimentRunner, controlInput} {}
+                                     ControlInput& controlInput,
+                                     const Clock& clock)
+    : container{configurator, motorController, target, experimentRunner, controlInput, clock} {}
 
 void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_etc_motor_off_tag, etcMotorOff, &container);
@@ -315,4 +334,5 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_start_etc_experiment_tag, startEtcExperiment, &container);
     router.on(dc_Command_stop_etc_experiment_tag, stopEtcExperiment, &container);
     router.on(dc_Command_set_control_override_tag, setControlOverride, &container);
+    router.on(dc_Command_debug_stall_tag, debugStall, nullptr);
 }

@@ -35,7 +35,7 @@ class Configurator {
     void setGpsGear(int8_t gear);
     void setTransmissionType(dc_TransmissionType type);
     bool importConfig(const dc_Config& cfg);
-    void save();
+    bool save();  // flash に書けなければ false (configChanged は残る)
     void revert();
     bool formatFs();  // FS を消去し現在の config を必ず書き戻す (設定保持フォーマット)
 

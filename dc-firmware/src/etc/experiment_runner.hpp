@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "control/control_input.hpp"
+#include "interfaces/util/clock.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
 #include "sensor/sensor_hub.hpp"
@@ -11,7 +12,7 @@
 namespace etc {
 
 // ETC 同定実験モード (docs/etc_experiment_mode_spec.md)。
-// loop() から毎イテレーション tick() される FSM。目標値は EtcTarget の manual
+// tickISR から 1 ms ごとに tick() される FSM。目標値は EtcTarget の manual
 // モード経由で注入するので、PID・モーター経路は通常運用と完全に同一
 // (「使う構成のまま測る」という同定の前提)。
 //
@@ -32,10 +33,15 @@ class ExperimentRunner {
                      EtcTarget& target,
                      const MotorController& motor,
                      PlausibilityValidator& validator,
-                     const SensorLogger& logger);
+                     const SensorLogger& logger,
+                     const Clock& clock);  // clock: loop から要求の処理を待つときのタイムアウト
 
-    bool start(Type type, unsigned long now);  // 前提条件 (§5) を満たさなければ false
-    void stop();            // 完走/中断共通の後始末 (manual 解除・チェックフラグ復元)
+    // loop (コマンド) から。状態を書き換えるのは tick だけにするため、要求を置いて tick の処理を待つ
+    // (1〜2 ms)。start は前提条件 (§5) を満たさなければ false
+    bool requestStart(Type type);
+    void requestStop();
+
+    // tickISR から。開始 / 停止の要求を取り込んでから FSM を進める
     void tick(unsigned long now);
 
     bool active() const { return type_ != Type::None; }
@@ -48,6 +54,15 @@ class ExperimentRunner {
     uint8_t logPhase() const { return (uint8_t)phase_; }
 
    private:
+    bool start(Type type, unsigned long now);
+    void stop(unsigned long now);  // 完走/中断共通の後始末 (manual 解除・チェックフラグ復元)
+    // loop → tick の要求。loop が req_ を立てて待ち、tick が処理して None に戻す
+    enum class Request : uint8_t { None, Start, Stop };
+    volatile Request req_ = Request::None;
+    volatile Type reqType_ = Type::None;
+    volatile bool reqResult_ = false;
+    bool waitRequest(Request r);
+
     bool preconditionsOk() const;
     bool guardsOk(unsigned long now);  // 破れたら理由を debug 送信して false
     double currentTargetTp() const;
@@ -62,9 +77,10 @@ class ExperimentRunner {
     const MotorController& motor_;
     PlausibilityValidator& validator_;
     const SensorLogger& logger_;
+    const Clock& clock_;
 
-    Type type_ = Type::None;
-    Phase phase_ = Phase::Idle;
+    volatile Type type_ = Type::None;
+    volatile Phase phase_ = Phase::Idle;
     uint16_t index_ = 0;     // シーケンス内インデックス (ログの exp_index)
     bool stepPost_ = false;  // Step: false=開始位置へ整定中 / true=到達位置側
     unsigned long phaseStartMs_ = 0;

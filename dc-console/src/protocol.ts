@@ -34,7 +34,7 @@ const pending = new Map<
 >();
 
 let onSensorData: ((data: SensorData) => void) | null = null;
-let onDebugLog: ((msg: string, ts: number) => void) | null = null;
+let onDebugLog: ((msg: string, deviceUs: number) => void) | null = null;
 let onSerialLog: ((direction: "rx" | "tx", line: string) => void) | null = null;
 
 const decoder = new FrameDecoder(handleFramePayload);
@@ -150,7 +150,7 @@ function handleFramePayload(payload: Uint8Array): void {
       onSensorData?.(toAppSensor(p.value));
       break;
     case "debug":
-      onDebugLog?.(p.value.msg, p.value.timestamp);
+      onDebugLog?.(p.value.msg, Number(p.value.timestampUs));
       onSerialLog?.("rx", `dbg: ${p.value.msg}`);
       break;
     case "response": {
@@ -523,7 +523,7 @@ export const protocol = {
   setOnSensorData(fn: (data: SensorData) => void) {
     onSensorData = fn;
   },
-  setOnDebugLog(fn: (msg: string, ts: number) => void) {
+  setOnDebugLog(fn: (msg: string, deviceUs: number) => void) {
     onDebugLog = fn;
   },
   setOnSerialLog(fn: (direction: "rx" | "tx", line: string) => void) {

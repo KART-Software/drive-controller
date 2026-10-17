@@ -1,6 +1,6 @@
 #include "sensor/iam20680hp.hpp"
 
-#include "serial/serial_protocol.hpp"
+#include "util/log/debug_logger.hpp"
 
 Iam20680hp::Iam20680hp(uint8_t csPin, SPIClass& spi) : spi(spi), csPin(csPin) {}
 
@@ -57,7 +57,7 @@ void Iam20680hp::begin() {
     // WHO_AM_I を読んでログのみ (期待 ID は実機 datasheet で確定後に検証へ変更)。
     // IMU 未実装でもハングしないよう、ここで停止はしない。
     uint8_t who = readRegister(IAM20680_WHO_AM_I);
-    SerialProtocol::sendDebugf("IAM20680HP WHO_AM_I=0x%02X", who);
+    DebugLogger::log("IAM20680HP WHO_AM_I=0x%02X", who);
 }
 
 void Iam20680hp::read() {

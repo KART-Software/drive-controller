@@ -33,7 +33,7 @@ class LaunchController {
     // どちらも複数回呼べる (例: SetConfigCmd で再適用)。
     void setConfig(const dc_LaunchConfig& cfg, uint32_t engineTeeth, uint32_t wheelTeethFront, uint32_t wheelTeethRear);
     void begin();
-    void update(bool launchRequested);
+    void update(bool launchRequested, uint32_t nowMs);  // nowMs は sysClock の ms
 
     enum class State { Idle, Ready, Approach, EngageControl, FullEngage };
     State state() const { return state_; }
@@ -80,9 +80,9 @@ class LaunchController {
 
     void transitionTo(State next);
     void handleIdle(bool launchRequested);
-    void handleReady(bool launchRequested);
-    void handleApproach(bool launchRequested);
-    void handleEngageControl(bool launchRequested);
+    void handleReady(bool launchRequested, uint32_t nowMs);
+    void handleApproach(bool launchRequested, uint32_t nowMs);
+    void handleEngageControl(bool launchRequested, uint32_t nowMs);
     void handleFullEngage(bool launchRequested);
 };
 

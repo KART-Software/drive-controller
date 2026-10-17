@@ -49,5 +49,9 @@ struct CanRxData {
     uint32_t shiftFrames = 0;
     unsigned long lastShiftFrameMs = 0;
 
-    void mergeFrame(const CAN_message_t& msg);
+    void mergeFrame(const CAN_message_t& msg, uint32_t nowMs);  // 受信割り込みから。nowMs を受信時刻として刻む
 };
+
+// 受信割り込みの中ですぐ処理すべきフレームか (シフトパドル 0x741。tick を待つと最大 1 ms 遅れる)。
+// それ以外 (0x740 など) は次の tickISR で反映すれば足りる
+bool needsImmediateHandling(const CAN_message_t& msg);

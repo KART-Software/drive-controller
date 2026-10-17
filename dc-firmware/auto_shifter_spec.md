@@ -75,13 +75,14 @@ OFF の「manual」とは「シフトの**判断**をドライバーが行う（
    [Pulsing]  該当出力を pulseWidthFor() の幅だけアサート
                  │  幅経過
                  ▼
-   [Cooldown] 両出力デアサート、cooldown_ms 待機
+   [Cooldown] 両出力デアサート。パルス開始から最短間隔 (既定 0.5 s、cooldown_ms が長ければそちら) まで待機
                  │  経過
                  ▼
    [Idle]     次の要求を受理可能
 ```
 
-- `Pulsing` / `Cooldown` 中に来た要求は **破棄**（v1。キューイングは将来）。これが
+- `Pulsing` / `Cooldown` 中に来た要求は **破棄**（キューイングしない。後で出すとドライバーの意図と違うタイミングでシフトするため）。
+  0x741 の押下は受信割り込みから `onPaddles()` で即時に処理する (docs/loop_nonblocking_spec.md §6.3)。これが
   チャタリング・連打・モード切替時の暴発を防ぐ安全層を兼ねる。
 - 入力エッジ追跡（`prevUpIn_`/`prevDownIn_`）は毎ティック更新し、立ち上がり検出は
   `Idle` のときのみ行動に移す。
@@ -303,7 +304,7 @@ message AutoShiftConfig {
   float  upshift_rpm             = 1;  // UP しきい値 (RPM)
   float  downshift_rpm           = 2;  // DOWN しきい値 (RPM)
   float  min_wheel_hz            = 3;  // 停止/走行 境界 (兼 ON 時の停車抑止しきい)
-  uint32 cooldown_ms             = 4;  // シフト間ロックアウト (両モード)
+  uint32 cooldown_ms             = 4;  // シフト間の最短間隔 [ms] (パルス開始→次の開始、両モード)。500 未満は 500
   uint32 ist_pulse_ms            = 5;  // IST: 全シフト共通パルス幅
   uint32 normal_drive_pulse_ms   = 6;  // NORMAL 走行中/通常: N スキップ
   uint32 normal_neutral_pulse_ms = 7;  // NORMAL 停車中 1速UP/2速DOWN: N 入れ

@@ -5,6 +5,7 @@ import type { SysStatsT } from "../types";
 interface LogEntry {
   ts: string;
   msg: string;
+  deviceUs?: number;  // デバイスの debug メッセージの時刻 (並べ替え用)。console 自身のメッセージは undefined
 }
 
 interface Props {

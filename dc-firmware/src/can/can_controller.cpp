@@ -1,11 +1,9 @@
 #include "can_controller.hpp"
 
-#include "constants.hpp"
-
 CanController::CanController(const SensorHub& sensorHub) : sensorHub_(sensorHub) {}
 
-void CanController::begin() {
-    bus_.begin();
+void CanController::begin(void (*onRx)(const CAN_message_t& msg), uint8_t priority) {
+    bus_.begin(onRx, priority);
 }
 
 void CanController::send() {
@@ -24,11 +22,4 @@ void CanController::send() {
 
 void CanController::sendStatus(const CanStatusData& status) {
     bus_.send(status);
-}
-
-void CanController::poll() {
-    // rxData_ は前回値を保持し、受信フレームのみ mergeFrame() で上書きする
-    while (auto msg = bus_.read())
-        rxData_.mergeFrame(*msg);
-    // 途絶時のフォールバックは ControlInput が行う
 }

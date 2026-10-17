@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 
-// バイナリログの出力先インターフェース (テキスト用 LogWriter のバイナリ版)。
+// バイナリログの出力先インターフェース (テキスト用 LogWriter (interfaces/util/log/log_writer.hpp) のバイナリ版)。
 // SD カードや将来の他媒体 (USB バルク等) を抽象化する。SensorLogger が本 writer へ
 // ヘッダ/レコードを書き出す。SerialDebugWriter ↔ LogWriter と同じ関係を
 // SdBinaryWriter ↔ BinaryWriter が担う。

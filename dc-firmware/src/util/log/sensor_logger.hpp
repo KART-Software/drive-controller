@@ -4,6 +4,7 @@
 
 #include "binary_writer.hpp"
 #include "log_record.hpp"
+#include "interfaces/util/clock.hpp"
 #include "util/loop_stats.hpp"
 
 // センサーデータのバイナリロガー (facade)。テキスト用 DebugLogger に対応するバイナリ版。
@@ -12,8 +13,9 @@
 
 class SensorLogger {
    public:
-    // stats: write/flush 1 回ごとの所要を noteSdUs() で報告する先 (loop 停止の可視化)
-    SensorLogger(BinaryWriter& writer, LoopStats& stats) : writer_(writer), stats_(stats) {}
+    // stats: write/flush 1 回ごとの所要を noteSdUs() で報告する先 (loop 停止の可視化)。clock: その所要を測る
+    SensorLogger(BinaryWriter& writer, LoopStats& stats, const Clock& clock)
+        : writer_(writer), stats_(stats), clock_(clock) {}
     bool begin();                    // writer.begin() + ヘッダ書込
     void log(const LogRecord& rec);  // 1 レコード追記
     void service(uint32_t nowMs);    // 定期 flush (loop から毎回呼ぶ)
@@ -22,6 +24,7 @@ class SensorLogger {
    private:
     BinaryWriter& writer_;
     LoopStats& stats_;
+    const Clock& clock_;
     uint32_t lastSyncMs_ = 0;
     static constexpr uint32_t SYNC_INTERVAL_MS = 1000;
 };
