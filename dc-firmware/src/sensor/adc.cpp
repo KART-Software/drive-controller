@@ -2,10 +2,8 @@
 
 #include "util/stop_watch.hpp"
 
-// LPSPI RX 待ちの最大スピン時間 (us)。ADC 無応答時に 8kHz ISR (NVIC 優先度16) が
-// 固まって USB 等の低優先割り込みを枯渇させるのを防ぐ。
-// read() は 1 回の ISR で transferCommand を 8 回呼ぶため、最悪 8×timeout が
-// ISR 周期 125us を超えないこと。1 フレーム転送は ~3us (@10MHz) なので 10us で十分。
+// LPSPI RX 待ちの最大スピン時間 (us)。setup の初期化 (writeRegister / transferCommand) で ADC が無応答でも
+// 固まらないようにする。1 フレーム転送は ~3us (@10MHz) なので 10us で十分。
 static constexpr uint32_t ADC_SPI_TIMEOUT_US = 10;
 
 template <size_t NUM_DEV>
@@ -30,14 +28,11 @@ void _adc<NUM_DEV>::begin() {
     writeRegister(AUTO_SEQ_EN_ADDR, 0xFF);    // 全ch自動シーケンス
     uint16_t dummy[NUM_DEV];
     transferCommand(AUTO_RST, dummy);  // 初期化用ダミー
-#ifdef ADC_DMA
     beginDma();
-#endif
 }
 
-#ifdef ADC_DMA
-// DMA 経路: 8kHz ISR から startDma() を kick し、while ビジーウェイトなしで 8ch を取得。
-// CS フレーミングは非DMA経路と同じく 32bit フレーム/フレーム毎 (CONT=0)。
+// DMA 経路: 16kHz ISR から startDma() を kick し、while ビジーウェイトなしで 8ch を取得。
+// CS フレーミングは 32bit フレーム/フレーム毎 (CONT=0)。
 template <size_t NUM_DEV>
 void _adc<NUM_DEV>::beginDma() {
     // 送信コマンド列: ch0..6=NO_OP, 末尾=AUTO_RST (ブロッキング read() と同じ並び)
@@ -80,7 +75,6 @@ void _adc<NUM_DEV>::latchDma() {
     for (size_t i = 0; i < NUM_DEV * ADC_NUM_CH; ++i)
         value[i] = rxBuf_[i] & 0xFFFF;
 }
-#endif  // ADC_DMA
 
 template <size_t NUM_DEV>
 void _adc<NUM_DEV>::writeRegister(uint8_t addr, uint8_t value) {
@@ -136,19 +130,6 @@ void _adc<NUM_DEV>::transferCommand(uint16_t cmd, uint16_t* out) {
     }
 }
 
-template <size_t NUM_DEV>
-void _adc<NUM_DEV>::read() {
-    freqMeter_.tick();
-    // 全デバイス・全チャンネルを順次取得
-    for (uint8_t seq = 0; seq < ADC_NUM_CH; ++seq) {
-        uint16_t data[NUM_DEV];
-        transferCommand(seq == ADC_NUM_CH - 1 ? AUTO_RST : NO_OP, data);
-        for (size_t dev = 0; dev < NUM_DEV; ++dev) {
-            value[dev * ADC_NUM_CH + seq] = data[dev];
-        }
-    }
-}
-
 template class _adc<1>;
 // _adc<2> は現在未使用 (using Adc = _adc<1>)。2 台構成に戻す際は再度実体化する。
-// ADC_DMA は単一デバイス専用のため _adc<2> を実体化すると static_assert で落ちる。
+// DMA の読み出しは単一デバイス専用のため _adc<2> を実体化すると static_assert で落ちる。
