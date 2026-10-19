@@ -76,14 +76,17 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - `SensorHub` がすべてのセンサーと `EtcTarget` を所有する。多くのコードは `SensorHub&` を `const` で受け取り、`Configurator` だけが `SensorHub::mut` 経由で mutable アクセサに到達する (意図的な friend-by-API)。
 - `EtcTarget` がターゲットスロットル開度を決める: APPS と ITTR (IST コントローラからの CAN コマンド) の切り替え、モード (Normal / Restricted / Calibration / MotorOff)、アイドリングおよびモード別キャップ、オプションの多項式ターゲットカーブ。
 
-### パルスカウント (車輪速 / RPM)
+### 回転計測 (車輪速 / エンジン / クラッチ後)
 
-回転系は **2 系統のハードウェア機構**で計測する (`SensorHub` が所有し、`tickISR` が `updatePulse()` を毎 ms 呼ぶ):
+6 つの回転センサーを同じ形で扱う (`docs/loop_nonblocking_spec.md` §6.7)。`SensorHub` が所有し、`tickISR` が `updatePulse(nowUs)` を毎 ms 呼ぶ。
 
-- **車輪速 FL/FR/RL/RR** — `WheelSpeedSensor` (`sensor/wheel_speed.{hpp,cpp}`)。**FreqMeasureMulti** (FlexPWM 入力キャプチャ = 周期計測) を使う。各輪は **別々の FlexPWM サブモジュール**のピンに割り当てること (同一サブモジュールの 2 ピンは同時計測不可)。一定時間 (`STALE_MS`) エッジが無ければ 0Hz に減衰 (停車判定)。
-- **エンジン RPM / クラッチ後 (出力軸) RPM** — `PulseCounter` (`sensor/pulse_counter.{hpp,cpp}`)。Teensy の **QuadTimer** 外部エッジカウンタ。QuadTimer 対応ピン (10–15,18,19) のみ。`CNTR` 差分 ÷ 経過時間で Hz を算出。
-
-両者は `getFrequencyHz()` / `getRpm()` / `count()` の同一インターフェースを持つので、`AutoShifter` / `LaunchController` は backend を意識せず const 参照で受け取る。FlexPWM ピンは QuadTimer で数えられず、QuadTimer ピンは ADC(SPI0=10–13) を除くと残り少ないため、この 2 系統併用になっている。現在のピン割り当ては `constants.hpp` の Pulse Counter Settings を参照。
+- **使う側の口**: `RotationSensor` (`interfaces/sensor/rotation_sensor.hpp`)。`sample()` で `RotationSample { hz, rpm, timeUs (窓の中心), windowUs, edges }`、`hz()` / `rpm()` / `count()`。使う側 (`AutoShifter`・`StarterController`・`LaunchController`・telemetry・ログ) はハードウェアを知らず、歯数の換算もしない (rpm はセンサーが出す)。loop からも組の揃った値が読める (seqlock)。**tickISR より優先度の高い割り込みから `sample()` / `hz()` / `rpm()` を呼ばないこと** (tick の書き込み途中に割り込むと読み直しが終わらない)。
+- **計算**: `EdgeRateEstimator` (ハードウェア非依存)。(エッジ番号, 時刻) の履歴から、窓 = 「N 歯か最大時間 T の短いほう」で回転を出す。両端は同じ向きのエッジに揃える (両エッジ時のデューティ比のずれを打ち消す)。エッジが来ない間は「1 歯 ÷ 経過時間」を上限に下げ、`stale_ms` で 0。
+- **ハードウェア** (`EdgeSource`、`interfaces/sensor/edge_source.hpp`):
+  - **エンジン (pin 14) / クラッチ後 (pin 15)** — `QuadTimerEdgeSource`。QuadTimer3 ch2 / ch3 でエッジを数え、空きの ch0 / ch1 を IP バス ÷64 で自走させて副入力でエッジ時刻をキャプチャ (割り込みなし)。入力選択 (daisy) を pin 14 / 15 のパッドに設定すること (リセット値は別パッド)。ピン 18 / 19 は `analogWrite` に使えない。
+  - **車輪 FL/FR/RL/RR** — `FreqMeasureEdgeSource`。**FreqMeasureMulti** (FlexPWM 入力キャプチャ) の周期の列からエッジ時刻を組み立てる。各輪は **別々の FlexPWM サブモジュール**のピンに割り当てること (同一サブモジュールの 2 ピンは同時計測不可)。
+- **config**: `Config.rotation` (`RotationConfig`): エンジン・クラッチ後・前輪・後輪 (左右共通) ごとに 歯数・窓の歯数・最大時間・止まり判定・両エッジ、車輪はタイヤ直径。歯数は以前の `SensorCalib` から移した。設定は `setParams()` で置き、setup では `SensorHub::begin()` (config の適用の後に呼ぶ) が、実行中は次の tick が取り込む。
+- telemetry と SD ログはパルスの Hz (`hz()`)。`count()` は両エッジならエッジ数 (パルス数の 2 倍)。
 
 ### CAN
 

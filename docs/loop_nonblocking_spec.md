@@ -1,6 +1,6 @@
 # loop() 非依存化・ギャップレスログ 仕様書
 
-Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-11)、2b / 2c / 3 は未着手。**
+Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-17 マージ)、2c 実装済み (2026-10-19)、2b / 3 は未着手。**
 作成: 2026-10-06、改訂: 2026-10-11。関連: [control_input_spec.md](control_input_spec.md) (制御入力の CAN 化。Phase 2 の前提)、
 [etc_experiment_mode_spec.md](etc_experiment_mode_spec.md) (記録の消費側)、
 [etc_control_improvement_plan.md](etc_control_improvement_plan.md) §6 (同定計画。ギャップレス記録の動機)、
@@ -117,7 +117,7 @@ NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。�
 - **Phase 2 = C**。前提: 制御入力の CAN 化 (`feature/can-control-input`, [control_input_spec.md](control_input_spec.md)) が先に入っていること。
   - 2a: タイマーの付け替え (`tickISR` → GPT2、PIT の割り込みはサンプリングだけ。チャネル 0 / 1 は時計) と、モーター制御・安全層・シフター・CAN・回転計測・同定実験の tick への移動、flash 保存の手順 (§6.8)
   - 2b: IMU の DMA 化 (8 kHz)
-  - 2c: エンジン回転・クラッチ後回転を周期計測へ (QuadTimer の入力キャプチャ、§6.7)。最初にベンチで成立確認
+  - 2c: 回転センサー 6 つを周期計測へ (エンジン・クラッチ後は QuadTimer の入力キャプチャ、車輪は FreqMeasureMulti の周期列。§6.7)。ベンチで成立確認済み
 - **Phase 3 = D** (SD: exFAT・ディレクトリ・100 MB 事前確保・リングバッファ・`t_us`)
 
 各フェーズは独立にコミット・検証する。Phase 2 以降は CLAUDE.md の並行性節を更新する。
@@ -288,17 +288,34 @@ flash への書き込みは割り込み禁止で約 150 ms かかり、その間
 
 - **2a**: 更新を tick の毎回にする。車輪速は周期計測なので精度は変わらない。エンジン・クラッチ後は当面、毎 ms のカウント値を
   リングに残し「今 − 100 ms 前」で求める (分解能は現状と同じ、100 ms ごとの段差が消える)。
-- **2c**: エンジン・クラッチ後を周期計測にする。**ピンは変えない。**
-  - ch2 / ch3 はこれまでどおり外部エッジを数える。
-  - 空いている ch0 / ch1 を IP バスクロックで自走させ、副入力 (SCS) に入力 2 / 3 を選んでエッジ時刻をキャプチャする
-    (同一モジュールのチャネルは互いの入力を選べる、i.MX RT RM の記載に基づく。未検証)。
-  - tick で「エッジ数」と「最後のエッジ時刻」を読み、直近 N 歯にかかった時間から回転を出す。歯ごとの割り込みは不要。
-  - キャプチャ側は 16 bit なので tick ごとに上位をソフトで拡張する (4 チャネルとも使うのでカスケードで 32 bit にはできない)。
-  - 平均歯数 N: エンジン 12 (1 回転。歯の加工誤差と燃焼ごとの回転変動を 1 回転で平均。揺れるなら 24)、クラッチ後 10
-    (1/10 回転。発進直後の低回転でも遅れが小さい: 500 rpm で 12 ms、3,000 rpm で 2 ms)。
-  - 300 ms エッジが無ければ 0 rpm (車輪速の `STALE_MS` と同じ)。
-  - 成立確認: ベンチで空きピンの PWM を pin 14 / 15 にループバックし、周波数を振って精度と追従を見る。
-- 影響: ピン 18 / 19 (QuadTimer3 ch1 / ch0) は以後 `analogWrite` に使えない (GPIO / I2C としては使える)。
+- **2c**: 6 つの回転センサー (エンジン・クラッチ後・車輪 4 輪) を「何番目のエッジがいつ来たか」で揃え、同じ計算で回転を出す。
+  将来の Launch Control (エンゲージ率 = クラッチ後 ÷ エンジン) で使えるよう、低回転の立ち上がり・止まりかけ・時刻の揃いを重視する。
+  **ピンは変えない。**
+  - 構成 (3 層):
+    - `RotationSensor` (`interfaces/sensor/rotation_sensor.hpp`): 使う側に見せる口。`sample()` で
+      `RotationSample { hz, rpm, timeUs (窓の中心、Clock の時間軸), windowUs, edges }` を返す。`hz()` / `rpm()` / `count()`。
+      tick が書き loop が読むので、2 面のバッファと番号 (seqlock) で組を揃える (割り込みは止めない)。
+    - `EdgeRateEstimator`: ハードウェアに依存しない計算。tick ごとに (エッジ番号, 時刻) を履歴に入れ、回転を出す。
+    - `EdgeSource` (`interfaces/sensor/edge_source.hpp`): ハードウェア。tick ごとに累計エッジ数と、1 つのエッジの (番号, 時刻) を返す。
+      - `QuadTimerEdgeSource` (エンジン pin 14 = QuadTimer3 ch2、クラッチ後 pin 15 = ch3): ch2 / ch3 でエッジを数え、空いている ch0 / ch1 を
+        IP バスクロック ÷64 (0.43 µs、16 bit で約 28 ms で一周) で自走させ、副入力 (SCS) に入力 2 / 3 を選んで CAPT にエッジ時刻を取る
+        (RM §54.9 CTRL[SCS])。CAPT は IEF を消すまで最初の 1 回しか更新されない (RM §54.4.4) ので、tick ごとに
+        「エッジ数を読む → IEF を消す → エッジ数を読む」を同じ値になるまで繰り返し、次の tick の CAPT を「その値 + 1 番目のエッジ」とする。
+        上位はソフトで拡張し、tick 時の CNTR と Clock の時刻の対応で Clock の時間軸に直す。割り込みは使わない。
+      - `FreqMeasureEdgeSource` (車輪 4 輪、FreqMeasureMulti): 周期の列からエッジ時刻を組み立てる。止まった後の最初のエッジだけ tick の時刻で
+        位置を決め (誤差 1 ms 以内)、あとは周期を足す (FlexPWM と PIT は同じ水晶由来でずれない)。両エッジは `ALTERNATE` (半周期を交互に出す)。
+  - 計算 (`EdgeRateEstimator`):
+    - 窓は「N 歯か最大時間 T の短いほう」。窓の始まりと終わりは同じ向きのエッジに揃える (両エッジ時はエッジ間隔を偶数にしてデューティ比の
+      ずれを打ち消す)。1 歯の間隔が T より長い低回転では直近 1 歯分。1 歯分そろう前 (動き出し) は半歯の値を仮に出す。
+    - エッジが来ない間は、直前の 1 歯の間隔より長くなった時点から「1 歯 ÷ 経過時間」を上限として値を下げる。`stale_ms` で 0、履歴を捨てる。
+    - tick が止まった (flash 書き込みで約 150 ms) などでタイマーの一周を追えなくなったら、そのセンサーの履歴を捨てて数え直す。
+    - rpm = hz ÷ 歯数 × 60。歯数はセンサーが持つ (使う側で換算しない)。
+  - config (`Config.rotation`、`RotationConfig`): エンジン・クラッチ後・前輪・後輪 (左右共通) ごとに 歯数・窓の歯数 N・最大時間 T・
+    止まり判定・両エッジ、車輪はタイヤ直径 (km/h 換算用、0x607 で使う予定)。`SensorCalib` の歯数 (14〜16) は `rotation` に移して廃止。
+    既定: エンジン 12 歯 / N 24 (720°) / T 20 ms、クラッチ後 100 歯 / N 100 / T 10 ms、車輪 N = 1 回転 / T 20 ms、止まり 300 ms、両エッジ。
+  - telemetry と SD ログは今どおりパルスの Hz (`hz()`)。
+  - 成立確認: ベンチで空き PWM ピンを pin 14 / 15 にループバック (pin 9 → 14、pin 33 → 15。車輪の FlexPWM サブモジュールと
+    モーターの PWM4 SM0 を避ける) し、周波数を振って精度と追従を見る。
 - Launch Control の FSM (現在 50 ms) は、凍結解除時に tick へ移す (本書のスコープ外、注記のみ)。
 
 ### 6.8 flash 保存 (Phase 2a)
@@ -431,7 +448,7 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 | `src/etc/plausibility_validator.{hpp,cpp}` | 2a | `validLatched() const` (loop 側の読み出し用) |
 | `src/util/loop_stats.{hpp,cpp}` | 2a | tick / CAN 受信 ISR の所要時間 |
 | `src/sensor/iam20680hp.{hpp,cpp}`、`sensor_hub.{hpp,cpp}` | 2b | SPI1 の DMA、移動平均、`readImu()` 削除 |
-| `src/sensor/pulse_counter.{hpp,cpp}`、`sensor_hub.{hpp,cpp}` | 2a / 2c | 毎 ms 更新とカウント値のリング (2a)、QuadTimer3 ch0 / ch1 のキャプチャで周期計測 (2c) |
+| `src/sensor/{edge_rate_estimator,edge_rotation_sensor,quadtimer_edge_source,freqmeasure_edge_source}.{hpp,cpp}`、`interfaces/sensor/`、`sensor_hub.{hpp,cpp}` | 2a / 2c | 毎 ms 更新 (2a)、エッジ番号と時刻による周期計測・可変窓・RotationConfig (2c) |
 | `src/commands/command_controller.cpp`、`spec/proto/drive_controller.proto`、`dc-console/` | 3 | SD フォーマットのコマンド (確認ダイアログ、ETC 停止中のみ) |
 | `src/util/log/sd_binary_writer.{hpp,cpp}` | 3 | `SdFs` / `FsFile`、ディレクトリ・100 MB 事前確保・切り替え・古いファイルの削除・失敗時停止 |
 | `src/util/log/sensor_logger.{hpp,cpp}` | 3 | リング (ISR から採取)、まとめ書き出し、drops |
@@ -484,7 +501,7 @@ Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え�
 | モーター制御 | `tickISR` に統合 (旧 `motorControlISR` と GPT1 は使わない)。安全層の直後に回す |
 | flash 保存 | 書き込みの直前に ETC を止め、終わったら再開 (§6.8)。シフターのパルス中は待つ |
 | 回転計測の平均歯数 (旧 Q-F) | 定数 (`constants.hpp`)。エンジン 12、クラッチ後 10 |
-| 回転計測 | 毎 ms 更新。エンジン (12 歯)・クラッチ後 (100 歯) は Phase 2c で QuadTimer の入力キャプチャによる周期計測へ。ピンは変えない (§6.7) |
+| 回転計測 | 毎 ms 更新。6 センサーとも (エッジ番号, 時刻) から可変窓 (N 歯か T の短いほう)・両エッジで周期計測 (2c、§6.7)。設定は config RotationConfig。ピンは変えない |
 
 ## 11. 未決事項
 
