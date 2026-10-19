@@ -98,10 +98,8 @@ CommandController commandController(configurator,
                                     sysClock);
 
 void sensorSamplingISR() {
-#ifdef ADC_DMA
     // 非ブロッキング: 前回 DMA 結果を averages に反映し次の DMA を kick するだけ (~数 us)
-    sensorHub.sampleAdcDmaIsr();
-#endif
+    sensorHub.sampleDmaIsr();
 }
 
 // ETC (モーター制御) を開始/停止する。冪等 (既にその状態なら何もしない)。tickISR からのみ呼ぶ。
@@ -276,20 +274,14 @@ void setup() {
     // CAN は受信割り込みがシフターを呼ぶので、シフターの初期化の後で始める
     canController.begin(canRxISR, CAN_RX_ISR_PRIORITY);
 
-#ifdef ADC_DMA
-    // ADC は DMA 駆動。8kHz ISR は非ブロッキング (DMA 結果の反映 + 次 kick のみ) なので
-    // USB を枯渇させない。IMU は loop で読む (sensorHub.readImu)。
+    // ADC は DMA 駆動。16kHz ISR は非ブロッキング (DMA 結果の反映 + 次 kick のみ) なので
+    // USB を枯渇させない。IMU も同じ ISR から IMU_SAMPLING_DIVIDER 回に 1 回 (8 kHz) DMA で読む。
     sensorSamplingTimer.begin(sensorSamplingISR, SENSOR_SAMPLING_RATE_US);
     // USB(既定 ~128) より低い優先度にして、ISR が USB の送受信(コマンド処理)を
     // 阻害しないようにする。ISR は kick+反映のみの軽処理なのでサンプリングへの影響は小。
     // PIT の割り込みはこのタイマーだけが使うので、この優先度がそのまま効く (tick は GPT2。チャネル 0 / 1 は
     // sysClock の Lifetime Timer が割り込みなしで使い、このタイマーはチャネル 2 になる)
     sensorSamplingTimer.priority(SENSOR_SAMPLING_ISR_PRIORITY);
-#else
-    // 非DMA: sensorHub.read() (ADC ブロッキング + IMU) を loop() で呼ぶ。
-    // 8kHz ISR でブロッキング SPI を回すと USB(低優先) を枯渇させポートが開けなくなるため
-    // ISR 化はしない (DMA 化が前提)。
-#endif
 
     commandController.registerCommands(commandRouter);
 
@@ -316,12 +308,6 @@ void loop() {
     if (statsWindow.due(now)) {
         loopStats.rollover(0 /* log_drops: Phase 3 */);
     }
-
-#ifdef ADC_DMA
-    sensorHub.readImu();  // ADC は 8kHz DMA ISR でサンプリング済み。loop は IMU のみ
-#else
-    sensorHub.read();     // 非DMA: ADC(ブロッキング) + sensor.update + IMU を loop で
-#endif
 
 #if defined(LAUNCH_CONTROL_ENABLED)
     // Launch FSM tick — 20Hz (pulse counter 周期 100ms と整合)

@@ -1,6 +1,6 @@
 # loop() 非依存化・ギャップレスログ 仕様書
 
-Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-17 マージ)、2c 実装済み (2026-10-19)、2b / 3 は未着手。**
+Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-17 マージ)、2c 実装済み (2026-10-20 マージ)、2b 実装済み (2026-10-20)、3 は未着手。**
 作成: 2026-10-06、改訂: 2026-10-11。関連: [control_input_spec.md](control_input_spec.md) (制御入力の CAN 化。Phase 2 の前提)、
 [etc_experiment_mode_spec.md](etc_experiment_mode_spec.md) (記録の消費側)、
 [etc_control_improvement_plan.md](etc_control_improvement_plan.md) §6 (同定計画。ギャップレス記録の動機)、
@@ -241,6 +241,16 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 - 移動平均の窓 **8 サンプル (= 1 ms 分)** 経由で、telemetry・CAN・ログは平均値を読む (`MovingAverage<N>` の `noInterrupts()` 保護を踏襲)。
 - 初期化 (`WHO_AM_I` 確認とレジスタ設定) は今どおり `setup()` でブロッキング。
 - `SensorHub::readImu()` は削除。
+- 実装 (2026-10-20):
+  - CS はハードウェア (LPSPI3 PCS0 = pin 0、`SPI1.setCS(0)`)。TCR[FRAMESZ] = 119 で 120 bit (アドレス 1 + 14 バイト) を 1 フレームにし、
+    転送の間 CS を Low に保つ。120 bit は 32 + 32 + 32 + 24 bit の 4 ワードで FIFO を通る (RM LPSPI TCR[FRAMESZ])。
+  - 送る内容 (アドレス + ダミー) は毎回同じなので `beginDma()` で一度だけ用意する。DMA チャネルは送信 / 受信の 2 本 (DMAMUX LPSPI3_TX / RX)。
+  - `Iam20680hp::sampleDmaIsr()`: 前回の受信が終わっていれば 14 バイトを移動平均へ入れ、次の転送を開始。終わっていなければ数えて飛ばす (`dmaMissed`)。
+  - `Imu` (`interfaces/sensor/imu.hpp`) は公開配列 `accel[]` / `gyro[]` をやめ、`accel()` / `gyro()` で移動平均から読む (`getAvg()` は割り込みを止めて読む)。
+  - ベンチ (IMU 未接続): 8000 回/s、取りこぼし 0、loop の平均 18 → 1 µs。値の正しさは IMU を接続して要確認。
+  - DMA なしの経路 (`-DADC_DMA` を外したときに loop でブロッキングに読むフォールバック) は廃止した。ADC と IMU は常に DMA。
+  - IMU はサンプリング ISR の `IMU_SAMPLING_DIVIDER` 回に 1 回。移動平均の窓が 1 ms 分であることを `static_assert` で確かめる。
+  - `MovingAverage` は合計を持ち越さず、`getAvg()` のたびに 4 列で足し直す (float の丸め誤差の積み重なりをなくす。割り込みを止める必要もなくなった)。
 
 ### 6.5 ISR 内の禁止事項と、loop への伝達
 

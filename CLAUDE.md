@@ -60,8 +60,8 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `safety_max_us` (約 10 µs)。
 2. **`canRxISR`** — FlexCAN3 の受信 (FIFO) 割り込み, 優先度 **64**。`CanRxData` に取り込み、0x741 のシフト入力はその場で `autoShifter.onPaddles()` に渡す。tick と同じ優先度なので互いに割り込まず、シフター・`CanRxData`・`ControlInput` はこの 2 つの間で排他不要。FlexCAN の `events()` は呼ばない (呼ぶとコールバックがキュー経由になる)。
-3. **センサーサンプリング ISR** — `IntervalTimer` (PIT のチャネル 2。0 / 1 は時刻の Lifetime Timer), 周期 62.5 µs, 優先度 **208** (USB より下)。既定 (`-DADC_DMA`) では ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleAdcDmaIsr()`)。`-DADC_DMA` を外すとブロッキング読み (`sensor_hub.read()`) を `loop()` で行うフォールバックになる。
-4. **`loop()`** — 非 ISR: IMU 読み (Phase 2b で DMA 化予定)、telemetry (50 Hz)、コマンドディスパッチ、SD ロギング (1kHz, カード挿入時)、ISR が積んだ debug の送信、launch FSM tick (凍結時はビルドから除外)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。50 Hz telemetry は TX バッファ 1 本分 (2 KB) を残して先に捨てるので、コマンド応答と debug は最後まで届く。
+3. **センサーサンプリング ISR** — `IntervalTimer` (PIT のチャネル 2。0 / 1 は時刻の Lifetime Timer), 周期 62.5 µs, 優先度 **208** (USB より下)。ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleDmaIsr()`)。IMU (IAM-20680HP、SPI1 = LPSPI3) も同じ ISR の `IMU_SAMPLING_DIVIDER` (= 2) 回に 1 回 (8 kHz) で DMA (CS はハードウェア PCS0 = pin 0、120 bit の 1 フレーム)、移動平均 8 サンプル (1 ms)。**SPI1 は IMU 専用** (トランザクションを開いたまま CS をハードウェアにするので、ほかのデバイスはつなげない)。値は `Imu::accel()` / `gyro()` (`interfaces/sensor/imu.hpp`) で移動平均から読む。ブロッキングで読むのは setup の初期化だけ (DMA なしの経路は廃止した)。
+4. **`loop()`** — 非 ISR: telemetry (50 Hz)、コマンドディスパッチ、SD ロギング (1kHz, カード挿入時)、ISR が積んだ debug の送信、launch FSM tick (凍結時はビルドから除外)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。50 Hz telemetry は TX バッファ 1 本分 (2 KB) を残して先に捨てるので、コマンド応答と debug は最後まで届く。
 
 **時刻は `Clock` で、`millis()` / `micros()` は使わない。** `Clock` はインターフェース (`interfaces/util/clock.hpp`)、実装は `SystemClock` (`util/system_clock.hpp`)。時刻源は PIT の Lifetime Timer (64 bit、24 MHz。ソフトリセットでも 0 に戻る。DWT はソフトリセットで戻らないので使わない)。`SystemClock` は状態を持たず、コンストラクタで PIT を動かす (その時点が時刻の 0。static 初期化なので `IntervalTimer` より前)。`Clock` は読んだ瞬間の時刻 (`nowUs64()` / `nowUs()` / `nowMs()`) だけを返す。tick は先頭で 1 回読んで部品に配る。実体 `sysClock` は `main.cpp` だけが持ち (extern しない)、部品へは時刻を引数で渡すか `Clock` の参照を渡す (`DebugLogger::initialize()`、`StopWatch` を使う部品のコンストラクタ)。区間の計測やタイムアウトは `StopWatch` (`util/stop_watch.hpp`)。時刻はクラスのメンバーにしまわず、使う関数まで引数で渡す (`nowMs_` を持つと、別の文脈が刻んだ時刻のほうが新しくなって差が負になる)。別の文脈 (CAN 受信割り込みなど) が刻んだ時刻との差は符号付きで扱い、新しいものは経過 0 とみなす。`src/interfaces/` はインターフェースを置く場所で、中は `src/` と同じ構成にする。
 
@@ -69,7 +69,7 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 **flash (LittleFS) への書き込み中は割り込みが約 150 ms 止まる。** `Flash` が `FlashWriteGate` で tick に知らせ、tick は ETC を止めてから (シフトのパルス中は待つ) 書き込みを許可し、終われば再開する (§6.8)。書き込みは必ず `Flash` 経由で行うこと。
 
-ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は既に `sum` の読み取りを `noInterrupts()` で守っている — このパターンを踏襲すること。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
+ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は合計を持ち越さず `getAvg()` のたびに N 個を足し直す (float の丸め誤差が積み重ならない)。`add()` は 32 bit の要素を 1 個書くだけなので、どの文脈から読んでも壊れた値は見えず、割り込みを止める必要はない。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
 
 ### センサー / ターゲットの所有
 

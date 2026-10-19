@@ -7,15 +7,14 @@ void CanController::begin(void (*onRx)(const CAN_message_t& msg), uint8_t priori
 }
 
 void CanController::send() {
-    const Imu* imu = sensorHub_.imu();
+    const Imu::Vec3 gyro = sensorHub_.imu().gyro();
+    const Imu::Vec3 accel = sensorHub_.imu().accel();
     CanTxData data;
     data.gear = sensorHub_.gps().getGear();
-    data.gyro[0] = imu ? imu->gyro[0] : 0.0f;
-    data.gyro[1] = imu ? imu->gyro[1] : 0.0f;
-    data.gyro[2] = imu ? imu->gyro[2] : 0.0f;
-    data.accel[0] = imu ? imu->accel[0] : 0.0f;
-    data.accel[1] = imu ? imu->accel[1] : 0.0f;
-    data.accel[2] = imu ? imu->accel[2] : 0.0f;
+    for (int i = 0; i < 3; i++) {
+        data.gyro[i] = gyro[i];
+        data.accel[i] = accel[i];
+    }
     bus_.send(data);
 
 }

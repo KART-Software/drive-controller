@@ -2,11 +2,9 @@
 
 LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::Snapshot& sys) {
     const auto& [hub, plausibility, control, shifter, motor, experiment, starter] = src;
-    static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
     const Adc& adc = hub.adc();
-    const Imu* imu = hub.imu();
-    const float* accel = imu ? imu->accel : kZero3;
-    const float* gyro = imu ? imu->gyro : kZero3;
+    const Imu::Vec3 accel = hub.imu().accel();
+    const Imu::Vec3 gyro = hub.imu().gyro();
     uint16_t f = 0;
     if (hub.target().isManual())
         f |= LOG_FLAG_MANUAL;

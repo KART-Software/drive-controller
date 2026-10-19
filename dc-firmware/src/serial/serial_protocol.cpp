@@ -184,10 +184,8 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
                                     const ControlInput& control,
                                     uint32_t nowMs) {
     const std::optional<EtcTarget::Mode> canMode = control.canEtcMode();
-    static const float kZero3[3] = {0.0f, 0.0f, 0.0f};
-    const Imu* imu = hub.imu();
-    const float* accel = imu ? imu->accel : kZero3;
-    const float* gyro = imu ? imu->gyro : kZero3;
+    const Imu::Vec3 accel = hub.imu().accel();
+    const Imu::Vec3 gyro = hub.imu().gyro();
     const dc_DeviceToHost env = {
         .which_payload = dc_DeviceToHost_sensor_tag,
         .payload = {.sensor = {
