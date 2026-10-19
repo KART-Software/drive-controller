@@ -1,10 +1,11 @@
-import type { DeviceConfig, AutoShiftConfigT, StarterConfigT } from "../types";
+import type { DeviceConfig, AutoShiftConfigT, StarterConfigT, RotationConfigT } from "../types";
 import { DrivetrainMonitor } from "./DrivetrainMonitor";
 import { DrivetrainChart } from "./DrivetrainChart";
 import { GearCalibration } from "./GearCalibration";
 import { ClutchCalibration } from "./ClutchCalibration";
 import { AutoShiftTuner } from "./AutoShiftTuner";
 import { StarterTuner } from "./StarterTuner";
+import { RotationTuner } from "./RotationTuner";
 import { DebugLog, type LogEntry } from "./DebugLog";
 
 type SetConfig = (
@@ -43,6 +44,12 @@ export function DrivetrainView({ config, setConfig, addLog, setDirty, logs }: Pr
           addLog={addLog}
           onDirty={() => setDirty(true)}
           onUpdate={(s: StarterConfigT) => setConfig((prev) => (prev ? { ...prev, starter: s } : prev))}
+        />
+        <RotationTuner
+          config={config}
+          addLog={addLog}
+          onDirty={() => setDirty(true)}
+          onUpdate={(r: RotationConfigT) => setConfig((prev) => (prev ? { ...prev, rotation: r } : prev))}
         />
       </div>
       <div class="dt-log"><DebugLog entries={logs} /></div>

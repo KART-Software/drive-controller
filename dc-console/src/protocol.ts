@@ -194,6 +194,14 @@ function toDeviceConfig(cfg: PbConfig | undefined): DeviceConfig {
   const ec = cfg?.etc;
   const as = cfg?.autoShift;
   const st = cfg?.starter;
+  const rc = cfg?.rotation;
+  const rs = (c?: { teeth: number; windowTeeth: number; maxWindowMs: number; staleMs: number; bothEdges: boolean }) => ({
+    teeth: c?.teeth ?? 0,
+    windowTeeth: c?.windowTeeth ?? 0,
+    maxWindowMs: c?.maxWindowMs ?? 0,
+    staleMs: c?.staleMs ?? 0,
+    bothEdges: c?.bothEdges ?? false,
+  });
   return {
     sensorValues: {
       apps1Min: sv?.apps1Min ?? 0,
@@ -222,6 +230,12 @@ function toDeviceConfig(cfg: PbConfig | undefined): DeviceConfig {
       normalDrivePulseMs: as?.normalDrivePulseMs ?? 0,
       normalNeutralPulseMs: as?.normalNeutralPulseMs ?? 0,
       throttleOnPct: as?.throttleOnPct ?? 0,
+    },
+    rotation: {
+      engine: rs(rc?.engine),
+      clutch: rs(rc?.clutch),
+      wheelFront: { sensor: rs(rc?.wheelFront?.sensor), tireDiameterMm: rc?.wheelFront?.tireDiameterMm ?? 0 },
+      wheelRear: { sensor: rs(rc?.wheelRear?.sensor), tireDiameterMm: rc?.wheelRear?.tireDiameterMm ?? 0 },
     },
     starter: {
       engineRunningRpm: st?.engineRunningRpm ?? 0,
@@ -281,6 +295,7 @@ function buildConfigFromObject(obj: unknown): PbConfig | undefined {
     },
     autoShift: o.autoShift ?? undefined,
     starter: o.starter ?? undefined,
+    rotation: o.rotation ?? undefined,
   });
 }
 
@@ -462,6 +477,15 @@ function buildCommand(
       return create(CommandSchema, {
         id,
         body: { case: "stopEtcExperiment", value: {} },
+      });
+    case "set_rotation":
+      // rotation のみを設定した部分 Config を送る (overlayConfig が has_rotation だけを見る)。params.rotation = RotationConfigT
+      return create(CommandSchema, {
+        id,
+        body: {
+          case: "setConfig",
+          value: { config: create(ConfigSchema, { rotation: params.rotation }) },
+        },
       });
     case "set_starter":
       // starter のみを設定した部分 Config を送る (overlayConfig が has_starter だけを見る)

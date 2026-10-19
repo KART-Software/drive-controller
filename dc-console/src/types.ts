@@ -95,6 +95,27 @@ export interface StarterConfigT {
   minHoldMs: number;
 }
 
+// 回転センサー 1 つ分 (firmware RotationSensorConfig、docs/loop_nonblocking_spec.md §6.7)
+export interface RotationSensorConfigT {
+  teeth: number;
+  windowTeeth: number;
+  maxWindowMs: number;
+  staleMs: number;
+  bothEdges: boolean;
+}
+
+export interface WheelConfigT {
+  sensor: RotationSensorConfigT;
+  tireDiameterMm: number;
+}
+
+export interface RotationConfigT {
+  engine: RotationSensorConfigT;
+  clutch: RotationSensorConfigT;
+  wheelFront: WheelConfigT;
+  wheelRear: WheelConfigT;
+}
+
 export interface DeviceConfig {
   sensorValues: {
     apps1Min: number;
@@ -121,6 +142,7 @@ export interface DeviceConfig {
   gpsType: number; // 0=IST, 1=NORMAL
   autoShift: AutoShiftConfigT;
   starter: StarterConfigT;
+  rotation: RotationConfigT;
   // ── FS 使用量 (ConfigResponse 由来, 任意) ──
   fsUsed?: number;
   fsTotal?: number;

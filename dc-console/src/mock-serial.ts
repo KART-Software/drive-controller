@@ -81,6 +81,19 @@ const autoShift = {
   normalNeutralPulseMs: 25,
   throttleOnPct: 50,
 };
+const rotationSensor = (teeth: number, windowTeeth: number, maxWindowMs: number) => ({
+  teeth,
+  windowTeeth,
+  maxWindowMs,
+  staleMs: 300,
+  bothEdges: true,
+});
+const rotation = {
+  engine: rotationSensor(12, 24, 20),
+  clutch: rotationSensor(100, 100, 10),
+  wheelFront: { sensor: rotationSensor(1, 1, 20), tireDiameterMm: 0 },
+  wheelRear: { sensor: rotationSensor(1, 1, 20), tireDiameterMm: 0 },
+};
 const starter = {
   engineRunningRpm: 2000,
   runningConfirmMs: 1000,
@@ -115,6 +128,7 @@ function getFullConfig(): PbConfig {
     },
     autoShift: { ...autoShift },
     starter: { ...starter },
+    rotation: structuredClone(rotation),
   });
 }
 
@@ -551,6 +565,7 @@ function handleCommand(cmd: Command): void {
           }
           if (cfg.autoShift) Object.assign(autoShift, cfg.autoShift);
           if (cfg.starter) Object.assign(starter, cfg.starter);
+          if (cfg.rotation) Object.assign(rotation, structuredClone(cfg.rotation));
           configChanged = true;
         }
         emitResponse(create(ResponseSchema, { id, ok: !!cfg }));
