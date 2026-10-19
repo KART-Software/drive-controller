@@ -6,9 +6,8 @@
 #include "bite_point_file.hpp"
 #include "clutch_motor.hpp"
 #include "proto/drive_controller.pb.h"
-#include "sensor/pulse_counter.hpp"
+#include "interfaces/sensor/rotation_sensor.hpp"
 #include "sensor/sensors.hpp"
-#include "sensor/wheel_speed.hpp"
 #include "util/pid.hpp"
 
 namespace launch {
@@ -22,16 +21,16 @@ namespace launch {
 // Tire traction control is delegated entirely to the engine ECU.
 class LaunchController {
    public:
-    LaunchController(const PulseCounter& engine,
-                     const WheelSpeedSensor& wheelRL,
-                     const WheelSpeedSensor& wheelRR,
+    LaunchController(const RotationSensor& engine,
+                     const RotationSensor& wheelRL,
+                     const RotationSensor& wheelRR,
                      const ClutchSensor& clutch,
                      Flash& flash);
 
     // setConfig() / begin() は任意の順序で呼んで良い。begin() は保存値を
     // flash からロード、setConfig() は実行時パラメータを適用する。
     // どちらも複数回呼べる (例: SetConfigCmd で再適用)。
-    void setConfig(const dc_LaunchConfig& cfg, uint32_t engineTeeth, uint32_t wheelTeethFront, uint32_t wheelTeethRear);
+    void setConfig(const dc_LaunchConfig& cfg);  // 歯数は回転センサーが持つ (config RotationConfig)
     void begin();
     void update(bool launchRequested, uint32_t nowMs);  // nowMs は sysClock の ms
 
@@ -40,9 +39,9 @@ class LaunchController {
 
    private:
     // -- sensors & actuator --
-    const PulseCounter& engine_;
-    const WheelSpeedSensor& wheelRL_;
-    const WheelSpeedSensor& wheelRR_;
+    const RotationSensor& engine_;
+    const RotationSensor& wheelRL_;
+    const RotationSensor& wheelRR_;
     const ClutchSensor& clutch_;
     ClutchMotor motor_;
     BitePointFile bitePointFile_;
@@ -57,9 +56,6 @@ class LaunchController {
     float creepSpeedPctPerS_ = 10.0f;
     float gearRatio_ = 3.0f;
     float finalDriveRatio_ = 3.5f;
-    uint32_t engineTeeth_ = 1;
-    uint32_t wheelTeethFront_ = 1;
-    uint32_t wheelTeethRear_ = 1;
 
     // -- control --
     PID engagementPid_;

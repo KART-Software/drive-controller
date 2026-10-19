@@ -235,8 +235,8 @@ auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or
 
 ```
 gear     = gps.getGear()
-rpm      = engine.getFrequencyHz() / engine_teeth * 60   // RPM 換算
-vWheelHz = (wheelFL.getFrequencyHz() + wheelFR.getFrequencyHz()) / 2
+rpm      = engine.rpm()                                // RotationSensor が歯数で換算 (config RotationConfig)
+vWheelHz = (wheelFL.hz() + wheelFR.hz()) / 2
 apps     = apps1.convertedValue()                        // ドライバーのアクセル開度 (0-100%)
 
 §6 抑止条件のいずれか成立 → None
@@ -320,8 +320,8 @@ message Config {
 
 - transmission 種別（IST/NORMAL）は既存 `SensorCalib.gps.type` を流用。`setConfig` に
   渡す。
-- engine_teeth（RPM 換算用）も既存 `SensorCalib.engine_teeth` を `setConfig` に渡す。
-- `Configurator::calibrate()`: `if (config.has_auto_shift) autoShifter.setConfig(config.auto_shift, gps.type, engine_teeth)`。
+- RPM は回転センサー (`RotationSensor::rpm()`) が歯数 (config `RotationConfig`) で換算して出す (2026-10-19、Phase 2c)。
+- `Configurator::calibrate()`: `if (config.has_auto_shift) autoShifter.setConfig(config.auto_shift, gps.type)`。
 - `Configurator::overlayConfig()`: `if (src.has_auto_shift) config.auto_shift = src.auto_shift;`
 - デフォルト値は `default_config.hpp` に追記（パルス幅は §4 の表、RPM は要実機調整）。
 
@@ -374,9 +374,9 @@ namespace shift {
 
 class AutoShifter {
    public:
-    AutoShifter(const PulseCounter& engine,
-                const PulseCounter& wheelFL,
-                const PulseCounter& wheelFR,
+    AutoShifter(const RotationSensor& engine,
+                const RotationSensor& wheelFL,
+                const RotationSensor& wheelFR,
                 const GearPositionSensor& gps,
                 const Apps& apps);
 
@@ -391,9 +391,9 @@ class AutoShifter {
     enum class Dir { None, Up, Down };
 
     // -- 入力センサー (SensorHub 全体ではなく必要分だけ const 参照) --
-    const PulseCounter& engine_;
-    const PulseCounter& wheelFL_;          // 非駆動輪 = 真の車速 (ホイールスピン非依存)
-    const PulseCounter& wheelFR_;
+    const RotationSensor& engine_;
+    const RotationSensor& wheelFL_;          // 非駆動輪 = 真の車速 (ホイールスピン非依存)
+    const RotationSensor& wheelFR_;
     const GearPositionSensor& gps_;
     const Apps& apps_;                     // ドライバーのアクセル開度 (スロットルゲート)
 
@@ -496,7 +496,7 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
 - [ ] `can/can_data.{hpp,cpp}`: `autoShiftActive` / `lastAutoShiftFrameMs` + merge/timeout
 - [ ] `sensor/sensor_hub.hpp`: `pulseWheelFL()` / `pulseWheelFR()` / `gps()` / `apps1()` の const 参照（いずれも既存）
 - [ ] `shift/auto_shifter.{hpp,cpp}`: 本体実装（両モード整形パルス + パルス幅 + スロットルゲート）
-- [ ] `configurator.{hpp,cpp}`: `AutoShifter&` 注入 + calibrate（tx/engine_teeth 渡し）+ overlayConfig 1 行
+- [ ] `configurator.{hpp,cpp}`: `AutoShifter&` 注入 + calibrate（tx 渡し）+ overlayConfig 1 行
 - [ ] `default_config.hpp`: デフォルト値（パルス幅 15/100/25、throttle_on_pct 50、RPM/cooldown 暫定）
 - [ ] `main.cpp`: インスタンス生成 + begin + loop tick（毎イテレーション、安全 AND 付き）
 - [ ] (任意) `AutoShiftState` proto + シリアル送信

@@ -717,6 +717,15 @@ button.danger:hover:not(:disabled) { background: var(--err); color: white; }
   .autoshift-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ── Rotation sensors config ── */
+.rotation-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 0.9em; }
+.rotation-table th, .rotation-table td { padding: 2px 4px; text-align: center; white-space: nowrap; }
+.rotation-table td:first-child { text-align: left; }
+.rotation-table input[type="number"] { width: 5em; }
+@media (max-width: 768px) {
+  .rotation-table { display: block; overflow-x: auto; }
+}
+
 /* ── Transmission toggle (gear calib) ── */
 .tx-toggle { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tx-label { font-size: 0.8rem; color: var(--text-dim); margin-right: 4px; }

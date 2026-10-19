@@ -3,7 +3,7 @@
 #include <Arduino.h>
 
 #include "proto/drive_controller.pb.h"
-#include "sensor/pulse_counter.hpp"
+#include "interfaces/sensor/rotation_sensor.hpp"
 
 namespace starter {
 
@@ -18,10 +18,10 @@ namespace starter {
 // 安全条件 (プラウシビリティ・SIG_IN・MOTOR_OFF) とは無関係に動く。
 class StarterController {
    public:
-    explicit StarterController(const PulseCounter& engine) : engine_(engine) {}
+    explicit StarterController(const RotationSensor& engine) : engine_(engine) {}
 
     void begin();  // リレー出力を OFF で初期化
-    void setConfig(const dc_StarterConfig& cfg, uint32_t engineTeeth);
+    void setConfig(const dc_StarterConfig& cfg);
 
     // switchPressed = セルスイッチ (ControlInput::starterPressed)、nowMs = tick の時刻
     void tick(bool switchPressed, uint32_t nowMs);
@@ -34,8 +34,7 @@ class StarterController {
     float engineRpm() const;
     void setRelay(bool on);
 
-    const PulseCounter& engine_;
-    uint32_t engineTeeth_ = 1;
+    const RotationSensor& engine_;
     float runningRpm_ = 2000.0f;
     uint32_t runningConfirmMs_ = 1000;
     uint32_t minHoldMs_ = 5000;

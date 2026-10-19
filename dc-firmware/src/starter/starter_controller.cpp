@@ -10,15 +10,14 @@ void StarterController::begin() {
     setRelay(false);
 }
 
-void StarterController::setConfig(const dc_StarterConfig& cfg, uint32_t engineTeeth) {
+void StarterController::setConfig(const dc_StarterConfig& cfg) {
     runningRpm_ = cfg.engine_running_rpm;
     runningConfirmMs_ = cfg.running_confirm_ms;
     minHoldMs_ = cfg.min_hold_ms;
-    engineTeeth_ = (engineTeeth > 0) ? engineTeeth : 1;
 }
 
 float StarterController::engineRpm() const {
-    return engine_.getFrequencyHz() / static_cast<float>(engineTeeth_) * 60.0f;
+    return engine_.rpm();
 }
 
 void StarterController::setRelay(bool on) {

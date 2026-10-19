@@ -87,10 +87,10 @@ bool ExperimentRunner::preconditionsOk() const {
     // MOTOR_OFF はアーミング③が ETC を止めるため実験が進行できない (spec Q11)。
     if (control_.etcMode() == EtcTarget::Mode::MotorOff)
         return false;
-    if (hub_.pulseEngine().getFrequencyHz() > 0.5f)  // エンジン停止
+    if (hub_.pulseEngine().hz() > 0.5f)  // エンジン停止
         return false;
-    if (hub_.pulseWheelFL().getFrequencyHz() > 0.5f || hub_.pulseWheelFR().getFrequencyHz() > 0.5f ||
-        hub_.pulseWheelRL().getFrequencyHz() > 0.5f || hub_.pulseWheelRR().getFrequencyHz() > 0.5f)
+    if (hub_.pulseWheelFL().hz() > 0.5f || hub_.pulseWheelFR().hz() > 0.5f ||
+        hub_.pulseWheelRL().hz() > 0.5f || hub_.pulseWheelRR().hz() > 0.5f)
         return false;  // 車両静止
     if (!validator_.currentlyValid() || !validator_.validLatched())
         return false;
@@ -221,7 +221,7 @@ bool ExperimentRunner::guardsOk(unsigned long now) {
         DebugLogger::log("EXP abort: MOTOR_OFF knob");
         return false;
     }
-    if (hub_.pulseEngine().getFrequencyHz() > 0.5f) {
+    if (hub_.pulseEngine().hz() > 0.5f) {
         DebugLogger::log("EXP abort: engine running");
         return false;
     }

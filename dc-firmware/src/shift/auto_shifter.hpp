@@ -4,9 +4,8 @@
 
 #include "constants.hpp"
 #include "proto/drive_controller.pb.h"
-#include "sensor/pulse_counter.hpp"
+#include "interfaces/sensor/rotation_sensor.hpp"
 #include "sensor/sensors.hpp"
-#include "sensor/wheel_speed.hpp"
 
 namespace shift {
 
@@ -30,14 +29,14 @@ namespace shift {
 //   ④ I/O                       入力エッジ検出 / センサー getter / digitalWrite
 class AutoShifter {
    public:
-    AutoShifter(const PulseCounter& engine,
-                const WheelSpeedSensor& wheelFL,
-                const WheelSpeedSensor& wheelFR,
+    AutoShifter(const RotationSensor& engine,
+                const RotationSensor& wheelFL,
+                const RotationSensor& wheelFR,
                 const GearPositionSensor& gps,
                 const Apps& apps);
 
     void begin();  // pinMode 設定、出力を非アサート初期化、入力ベースライン取得
-    void setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx, uint32_t engineTeeth);
+    void setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx);
     // tickISR から毎 ms。autoOn = オートシフト指令 (ON=auto / OFF=manual)。
     // オートシフターは ETC プラウシビリティに依存しない (安全フォールバックは CAN 断→manual,
     // ControlInput::update)。ETC の停止/安全は別系統 (main.cpp の ETC アーミング)。
@@ -67,9 +66,9 @@ class AutoShifter {
     enum class Dir { None, Up, Down };
 
     // -- 入力 (SensorHub 全体ではなく必要分だけ const 参照) --
-    const PulseCounter& engine_;
-    const WheelSpeedSensor& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
-    const WheelSpeedSensor& wheelFR_;
+    const RotationSensor& engine_;
+    const RotationSensor& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
+    const RotationSensor& wheelFR_;
     const GearPositionSensor& gps_;
     const Apps& apps_;  // ドライバーのアクセル開度 (スロットルゲート)
 
@@ -83,7 +82,6 @@ class AutoShifter {
     uint32_t normalDrivePulseMs_ = 100;
     uint32_t normalNeutralPulseMs_ = 25;
     dc_TransmissionType tx_ = dc_TransmissionType_TRANSMISSION_IST;
-    uint32_t engineTeeth_ = 1;
     int8_t maxGear_ = 4;  // tx から決定 (IST=4 / NORMAL=6)
 
     // -- 出力状態機械 --

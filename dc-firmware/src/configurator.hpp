@@ -54,6 +54,7 @@ class Configurator {
     launch::LaunchController& launchController;
     shift::AutoShifter& autoShifter;
     starter::StarterController& starterController;
+    SensorHub::Mut& hub;  // 回転センサーの設定 (RotationConfig) の適用先
     bool configChanged = false;
 
    private:

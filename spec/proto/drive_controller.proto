@@ -46,9 +46,8 @@ message SensorCalib {
   float    target_tp_idling         = 11;
   float    target_tp_normal_max     = 12;
   float    target_tp_restricted_max = 13;
-  uint32   wheel_rotor_teeth_front  = 14;
-  uint32   wheel_rotor_teeth_rear   = 15;
-  uint32   engine_teeth             = 16;
+  reserved 14, 15, 16;  // 歯数 (wheel_rotor_teeth_front / rear、engine_teeth) は RotationConfig に移した
+  reserved "wheel_rotor_teeth_front", "wheel_rotor_teeth_rear", "engine_teeth";
   uint32   clutch_min               = 17;
   uint32   clutch_max               = 18;
   GpsCalib gps                      = 19;
@@ -120,6 +119,28 @@ message AutoShiftConfig {
   float  throttle_on_pct         = 8;  // この APPS% 以上=アクセルオン(UP可) / 未満=オフ(DOWN可)
 }
 
+// 回転センサー 1 つ分 (docs/loop_nonblocking_spec.md §6.7)
+message RotationSensorConfig {
+  uint32 teeth         = 1;  // 1 回転あたりの歯数
+  uint32 window_teeth  = 2;  // 窓の最大の歯数 N (エンジン 24 = 720°、クラッチ後・車輪は 1 回転分)
+  uint32 max_window_ms = 3;  // 窓の最大時間 T [ms]。低回転ではこれで打ち切って遅れを抑える
+  uint32 stale_ms      = 4;  // この時間エッジが来なければ 0 (止まった)
+  bool   both_edges    = 5;  // 立ち上がりと立ち下がりの両方を数える
+}
+
+// 車輪 (左右共通)
+message WheelConfig {
+  RotationSensorConfig sensor           = 1;
+  float                tire_diameter_mm = 2;  // 速度 (km/h) への換算用 (0x607 DC_WheelSpeed で使う予定)
+}
+
+message RotationConfig {
+  RotationSensorConfig engine      = 1;
+  RotationSensorConfig clutch      = 2;  // クラッチ後 (出力軸)
+  WheelConfig          wheel_front = 3;
+  WheelConfig          wheel_rear  = 4;
+}
+
 // セルモーターリレー (docs/starter_spec.md)。出力ピンは constants.hpp (STARTER_RELAY_PIN)
 message StarterConfig {
   float  engine_running_rpm = 1;  // これを超えたらエンジンがかかったとみなす
@@ -139,6 +160,7 @@ message Config {
   TractionConfig  traction     = 4;
   AutoShiftConfig auto_shift   = 5;
   StarterConfig   starter      = 6;
+  RotationConfig  rotation     = 7;
 }
 
 // ---------------------------------------------------------------------

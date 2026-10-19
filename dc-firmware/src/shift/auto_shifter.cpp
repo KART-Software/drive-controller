@@ -4,9 +4,9 @@
 
 namespace shift {
 
-AutoShifter::AutoShifter(const PulseCounter& engine,
-                         const WheelSpeedSensor& wheelFL,
-                         const WheelSpeedSensor& wheelFR,
+AutoShifter::AutoShifter(const RotationSensor& engine,
+                         const RotationSensor& wheelFL,
+                         const RotationSensor& wheelFR,
                          const GearPositionSensor& gps,
                          const Apps& apps)
     : engine_(engine), wheelFL_(wheelFL), wheelFR_(wheelFR), gps_(gps), apps_(apps) {}
@@ -22,7 +22,7 @@ void AutoShifter::begin() {
     state_ = State::Idle;
 }
 
-void AutoShifter::setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx, uint32_t engineTeeth) {
+void AutoShifter::setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx) {
     upshiftRpm_ = cfg.upshift_rpm;
     downshiftRpm_ = cfg.downshift_rpm;
     minWheelHz_ = cfg.min_wheel_hz;
@@ -32,7 +32,6 @@ void AutoShifter::setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType t
     normalNeutralPulseMs_ = cfg.normal_neutral_pulse_ms;
     throttleOnPct_ = cfg.throttle_on_pct;
     tx_ = tx;
-    engineTeeth_ = (engineTeeth > 0) ? engineTeeth : 1;
     maxGear_ = (tx == dc_TransmissionType_TRANSMISSION_IST) ? 4 : 6;
 }
 
@@ -44,11 +43,11 @@ void AutoShifter::writeOutputs(bool up, bool down) {
 }
 
 float AutoShifter::engineRpm() const {
-    return engine_.getFrequencyHz() / static_cast<float>(engineTeeth_) * 60.0f;
+    return engine_.rpm();
 }
 
 float AutoShifter::wheelHz() const {
-    return (wheelFL_.getFrequencyHz() + wheelFR_.getFrequencyHz()) * 0.5f;
+    return (wheelFL_.hz() + wheelFR_.hz()) * 0.5f;
 }
 
 bool AutoShifter::moving() const {

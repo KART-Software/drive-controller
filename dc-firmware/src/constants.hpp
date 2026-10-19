@@ -156,11 +156,11 @@
 #define PULSE_WHEEL_FR_PIN 25
 #define PULSE_WHEEL_RL_PIN 28
 #define PULSE_WHEEL_RR_PIN 36
-// Engine / クラッチ後(出力軸) RPM は QuadTimer ハードカウンタ (PulseCounter)。
+// Engine / クラッチ後(出力軸) RPM は QuadTimer3 (QuadTimerEdgeSource: ch2/ch3 で数え、ch0/ch1 でエッジ時刻をキャプチャ)。
 //   Engine=14(QuadTimer3_2)  ClutchRPM=15(QuadTimer3_3)
 #define PULSE_ENGINE_PIN 14
 #define PULSE_CLUTCH_RPM_PIN 15
-// 回転計測は tickISR が毎 ms 更新する。エンジン / クラッチ後は直近 100 ms の窓 (PulseCounter::WINDOW_TICKS)
+// 回転計測は tickISR が毎 ms 更新する。窓・歯数などは config RotationConfig (docs/loop_nonblocking_spec.md §6.7)
 
 ////////////////////
 /// CAN Settings ///
