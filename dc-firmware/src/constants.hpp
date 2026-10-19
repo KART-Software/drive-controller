@@ -22,6 +22,10 @@
 /////////////////////////
 
 #define SENSOR_SAMPLING_RATE_US 62.5  // 16kHz sensor ISR interval (IntervalTimer は float us 可)
+// IMU はサンプリング ISR の何回に 1 回読むか (DMA 経路)。16 kHz / 2 = 8 kHz で、IAM-20680HP のジャイロの内部更新 (8 kHz) に合わせる。
+// 1 回の転送 (15 バイト @ 8 MHz、約 15 µs) が次に読むまで (SENSOR_SAMPLING_RATE_US × これ) に終わること。
+// 変えたら IAM20680_AVG_WINDOW (1 ms 分) も合わせる (sensor_hub.cpp の static_assert で確かめる)
+#define IMU_SAMPLING_DIVIDER 2
 
 ////////////////////
 /// PWM Settings ///
@@ -143,6 +147,8 @@
 /// IMU Settings (SPI1) //
 //////////////////////////
 
+// SPI1 (LPSPI3) は IMU 専用: DMA 経路では beginDma() 以降トランザクションを開いたままにし、CS (pin 0) を
+// ハードウェア (LPSPI3 PCS0) に切り替えるので、SPI1 にほかのデバイスはつなげない
 #define IMU_CS_PIN 0
 
 /////////////////////////////

@@ -16,14 +16,13 @@ class SensorHub {
     explicit SensorHub(const Clock& clock) : adc_(clock) {}
 
     void begin();
-    void read();         // 非DMA: adc(ブロッキング) + sensors + imu (loop から)
     void updatePulse(uint64_t nowUs);  // tickISR (1 ms): 車輪速 x4 + エンジン / クラッチ後回転 (docs/loop_nonblocking_spec.md §6.7)
     void readShutdownSig(uint32_t nowMs);              // tickISR (1 ms): SHUTDOWN 回路出力をデバウンス更新
-#ifdef ADC_DMA
-    void sampleAdcDmaIsr();  // 8kHz ISR: 前回 DMA 結果を averages に反映し次を kick (非ブロッキング)
-    void readImu();          // loop: IMU のみ (DMA 経路では adc と分離)
+    // サンプリング ISR (16 kHz): ADC は毎回、IMU は IMU_SAMPLING_DIVIDER 回に 1 回 (8 kHz)。前回の DMA の結果を反映して次を開始する (非ブロッキング)
+    void sampleDmaIsr();
     uint32_t adcDmaCount() const { return adc_.dmaCount(); }
-#endif
+    uint32_t imuDmaCount() const { return imu_.dmaCount(); }
+    uint32_t imuDmaMissed() const { return imu_.dmaMissed(); }
 
     // ── const getters (read-only) ──
     const Apps& apps1() const { return apps1_; }
@@ -35,7 +34,7 @@ class SensorHub {
     const EtcTarget& target() const { return target_; }
     const GearPositionSensor& gps() const { return gps_; }
     const ClutchSensor& clutch() const { return clutch_; }
-    const Imu* imu() const { return imu_; }
+    const Imu& imu() const { return imu_; }
     const Adc& adc() const { return adc_; }
     const RotationSensor& pulseEngine() const { return pulseEngine_; }
     const RotationSensor& pulseClutchRpm() const { return pulseClutchRpm_; }
@@ -82,8 +81,8 @@ class SensorHub {
     GearPositionSensor gps_;
     ClutchSensor clutch_;
 
-    Iam20680hp imu_impl_{IMU_CS_PIN};
-    Imu* imu_ = &imu_impl_;
+    Iam20680hp imu_{IMU_CS_PIN};
+    uint8_t imuDivCount_ = 0;  // サンプリング ISR の IMU_SAMPLING_DIVIDER 回に 1 回 IMU
 
     // 回転センサー: ハードウェア (EdgeSource) + 計算 (EdgeRotationSensor)。
     // 車輪速は FlexPWM (FreqMeasureMulti)、エンジン / クラッチ後は QuadTimer3 (エッジ数 + キャプチャ)

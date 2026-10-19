@@ -23,15 +23,6 @@ uint8_t Iam20680hp::readRegister(uint8_t reg) {
     return val;
 }
 
-void Iam20680hp::readRegisters(uint8_t reg, uint8_t* buf, uint8_t len) {
-    digitalWriteFast(csPin, LOW);
-    spi.beginTransaction(spiSettings);
-    spi.transfer(reg | 0x80);  // レジスタアドレス (read bit)
-    spi.transfer(buf, len);    // ブロック転送 (read なので送信内容は don't-care)
-    spi.endTransaction();
-    digitalWriteFast(csPin, HIGH);
-}
-
 void Iam20680hp::begin() {
     spi.begin();
     pinMode(csPin, OUTPUT);
@@ -60,10 +51,7 @@ void Iam20680hp::begin() {
     DebugLogger::log("IAM20680HP WHO_AM_I=0x%02X", who);
 }
 
-void Iam20680hp::read() {
-    uint8_t buf[14];  // accel(6) + temp(2) + gyro(6)
-    readRegisters(IAM20680_ACCEL_XOUT_H, buf, sizeof(buf));
-
+void Iam20680hp::addSample(const uint8_t* buf) {
     int16_t ax = (int16_t)(buf[0] << 8 | buf[1]);
     int16_t ay = (int16_t)(buf[2] << 8 | buf[3]);
     int16_t az = (int16_t)(buf[4] << 8 | buf[5]);
@@ -78,9 +66,66 @@ void Iam20680hp::read() {
     gyrAvg_[0].add(gx * IAM20680_GYR_DPS_PER_LSB);
     gyrAvg_[1].add(gy * IAM20680_GYR_DPS_PER_LSB);
     gyrAvg_[2].add(gz * IAM20680_GYR_DPS_PER_LSB);
+}
 
-    for (int i = 0; i < 3; i++) {
-        accel[i] = accAvg_[i].getAvg();  // 移動平均値を公開 (ノイズ低減後)
-        gyro[i] = gyrAvg_[i].getAvg();
+Imu::Vec3 Iam20680hp::accel() const {
+    return {accAvg_[0].getAvg(), accAvg_[1].getAvg(), accAvg_[2].getAvg()};
+}
+
+Imu::Vec3 Iam20680hp::gyro() const {
+    return {gyrAvg_[0].getAvg(), gyrAvg_[1].getAvg(), gyrAvg_[2].getAvg()};
+}
+
+void Iam20680hp::beginDma() {
+    // 送信: 1 バイト目 = 読み始めのアドレス (read ビット付き)、残りはダミー。ワード内は MSB から送られる
+    txWords_[0] = (uint32_t)(IAM20680_ACCEL_XOUT_H | 0x80) << 24;
+    txWords_[1] = 0;
+    txWords_[2] = 0;
+    txWords_[3] = 0;
+
+    // CS をハードウェア (LPSPI3 PCS0) に切り替え、120 bit = 1 フレームにする。トランザクションは開いたまま (SPI1 は IMU 専用)
+    spi.setCS(csPin);
+    spi.beginTransaction(spiSettings);
+    IMXRT_LPSPI3_S.TCR = (IMXRT_LPSPI3_S.TCR & ~(LPSPI_TCR_FRAMESZ(0xFFF) | LPSPI_TCR_PCS(3))) |
+                         LPSPI_TCR_FRAMESZ(IAM20680_READ_BYTES * 8 - 1) | LPSPI_TCR_PCS(0);
+    IMXRT_LPSPI3_S.FCR = LPSPI_FCR_RXWATER(0) | LPSPI_FCR_TXWATER(0);
+    IMXRT_LPSPI3_S.DER = LPSPI_DER_TDDE | LPSPI_DER_RDDE;
+
+    rxDma_.disable();
+    rxDma_.source(*(volatile uint32_t*)&IMXRT_LPSPI3_S.RDR);
+    rxDma_.destinationBuffer((uint32_t*)rxWords_, sizeof(rxWords_));
+    rxDma_.triggerAtHardwareEvent(DMAMUX_SOURCE_LPSPI3_RX);
+    rxDma_.disableOnCompletion();
+
+    txDma_.disable();
+    txDma_.sourceBuffer((uint32_t*)txWords_, sizeof(txWords_));
+    txDma_.destination(*(volatile uint32_t*)&IMXRT_LPSPI3_S.TDR);
+    txDma_.triggerAtHardwareEvent(DMAMUX_SOURCE_LPSPI3_TX);
+    txDma_.disableOnCompletion();
+}
+
+void Iam20680hp::sampleDmaIsr() {
+    if (dmaStarted_) {
+        if (!rxDma_.complete()) {
+            dmaMissed_ = dmaMissed_ + 1;  // まだ転送中: 取り込みも次の開始もしない
+            return;
+        }
+        rxDma_.clearComplete();
+        // 受信の 4 ワードを 15 バイトに戻す (最後のワードは下位 24 bit)。1 バイト目はアドレスを送っている間の不定値
+        const uint32_t w0 = rxWords_[0], w1 = rxWords_[1], w2 = rxWords_[2], w3 = rxWords_[3];
+        const uint8_t bytes[IAM20680_READ_BYTES] = {
+            (uint8_t)(w0 >> 24), (uint8_t)(w0 >> 16), (uint8_t)(w0 >> 8), (uint8_t)w0,
+            (uint8_t)(w1 >> 24), (uint8_t)(w1 >> 16), (uint8_t)(w1 >> 8), (uint8_t)w1,
+            (uint8_t)(w2 >> 24), (uint8_t)(w2 >> 16), (uint8_t)(w2 >> 8), (uint8_t)w2,
+            (uint8_t)(w3 >> 16), (uint8_t)(w3 >> 8), (uint8_t)w3,
+        };
+        addSample(&bytes[1]);
+        dmaCount_ = dmaCount_ + 1;
     }
+    // 次の転送を開始 (disableOnCompletion で止まっているので、位置を戻して受信 → 送信の順に有効にする)
+    rxDma_.destinationBuffer((uint32_t*)rxWords_, sizeof(rxWords_));
+    txDma_.sourceBuffer((uint32_t*)txWords_, sizeof(txWords_));
+    rxDma_.enable();
+    txDma_.enable();
+    dmaStarted_ = true;
 }
