@@ -4,9 +4,9 @@
 
 namespace launch {
 
-LaunchController::LaunchController(const PulseCounter& engine,
-                                   const WheelSpeedSensor& wheelRL,
-                                   const WheelSpeedSensor& wheelRR,
+LaunchController::LaunchController(const RotationSensor& engine,
+                                   const RotationSensor& wheelRL,
+                                   const RotationSensor& wheelRR,
                                    const ClutchSensor& clutch,
                                    Flash& flash)
     : engine_(engine),
@@ -16,10 +16,7 @@ LaunchController::LaunchController(const PulseCounter& engine,
       bitePointFile_(flash),
       bitePoint_(bitePointFile_) {}
 
-void LaunchController::setConfig(const dc_LaunchConfig& cfg,
-                                 uint32_t engineTeeth,
-                                 uint32_t wheelTeethFront,
-                                 uint32_t wheelTeethRear) {
+void LaunchController::setConfig(const dc_LaunchConfig& cfg) {
     launchRpmThreshold_ = cfg.launch_rpm_threshold;
     clutchDepressThreshold_ = cfg.clutch_depress_threshold;
     approachSpeedPctPerS_ = cfg.approach_speed_pct_per_s;
@@ -28,9 +25,6 @@ void LaunchController::setConfig(const dc_LaunchConfig& cfg,
     creepSpeedPctPerS_ = cfg.creep_speed_pct_per_s;
     gearRatio_ = (cfg.gear_ratio > 0.0f) ? cfg.gear_ratio : 1.0f;
     finalDriveRatio_ = (cfg.final_drive_ratio > 0.0f) ? cfg.final_drive_ratio : 1.0f;
-    engineTeeth_ = (engineTeeth > 0) ? engineTeeth : 1;
-    wheelTeethFront_ = (wheelTeethFront > 0) ? wheelTeethFront : 1;
-    wheelTeethRear_ = (wheelTeethRear > 0) ? wheelTeethRear : 1;
 
     bitePoint_.setParams(cfg.slip_detect_threshold, cfg.slip_detect_debounce, cfg.bite_point_ema_alpha);
 
@@ -69,7 +63,7 @@ void LaunchController::update(bool launchRequested, uint32_t nowMs) {
 // ── helpers ──────────────────────────────────────────────────────────
 
 float LaunchController::engineRps() const {
-    return engine_.getFrequencyHz() / static_cast<float>(engineTeeth_);
+    return engine_.rpm() / 60.0f;
 }
 
 float LaunchController::engineRpm() const {
@@ -77,9 +71,8 @@ float LaunchController::engineRpm() const {
 }
 
 float LaunchController::wheelRpsAtEngine() const {
-    // Average rear wheel Hz → RPS → multiply by total drive ratio
-    float hz = (wheelRL_.getFrequencyHz() + wheelRR_.getFrequencyHz()) * 0.5f;
-    float wheelRps = hz / static_cast<float>(wheelTeethRear_);
+    // 後輪の回転 (左右平均) → エンジン換算 (ギア比 × 最終減速比)
+    float wheelRps = (wheelRL_.rpm() + wheelRR_.rpm()) * 0.5f / 60.0f;
     return wheelRps * gearRatio_ * finalDriveRatio_;
 }
 

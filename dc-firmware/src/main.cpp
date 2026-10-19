@@ -191,7 +191,7 @@ void tickISR() {
     starterController.tick(controlInput.starterPressed(now), now);
 
     // 9 回転計測 (車輪速・エンジン・クラッチ後)
-    sensorHub.updatePulse(now, nowUs);
+    sensorHub.updatePulse(nowUs64);
 
     // 10 CAN 送信。周期は kart-can の定義 (can.yaml の cycle_ms) どおり
     if (n % KART_CAN_DC_GYRO_XY_CYCLE_TIME_MS == 0)  // 0x600-0x603 (4 フレームとも同じ周期)
@@ -254,11 +254,12 @@ void setup() {
     pinMode(SHUTDOWN_RELAY_PIN, OUTPUT);
     digitalWrite(SHUTDOWN_RELAY_PIN, HIGH);
 
-    sensorHub.begin();
-
     flash.initialize();
     flash.setWriteGate(&flashGate);  // 書き込みの前後で ETC を止めて再開 (tick が動き出してから有効)
-    configurator.calibrateFromFlash();
+    configurator.calibrateFromFlash();  // config を各部品に適用 (ハードウェアには触らない)
+
+    // センサーのハードウェアは config の後に動かす (回転センサーは config の歯数・窓・両エッジで動き出す)
+    sensorHub.begin();
 #if defined(LAUNCH_CONTROL_ENABLED)
     launchController.begin();
 #endif

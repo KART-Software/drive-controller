@@ -3,10 +3,12 @@
 #include "adc.hpp"
 #include "constants.hpp"
 #include "iam20680hp.hpp"
-#include "pulse_counter.hpp"
+#include "edge_rotation_sensor.hpp"
+#include "freqmeasure_edge_source.hpp"
+#include "interfaces/sensor/rotation_sensor.hpp"
+#include "quadtimer_edge_source.hpp"
 #include "sensors.hpp"
 #include "util/toggle_switch.hpp"
-#include "wheel_speed.hpp"
 
 class SensorHub {
    public:
@@ -15,7 +17,7 @@ class SensorHub {
 
     void begin();
     void read();         // 非DMA: adc(ブロッキング) + sensors + imu (loop から)
-    void updatePulse(uint32_t nowMs, uint32_t nowUs);  // tickISR (1 ms): 車輪速 x4 + エンジン / クラッチ後回転
+    void updatePulse(uint64_t nowUs);  // tickISR (1 ms): 車輪速 x4 + エンジン / クラッチ後回転 (docs/loop_nonblocking_spec.md §6.7)
     void readShutdownSig(uint32_t nowMs);              // tickISR (1 ms): SHUTDOWN 回路出力をデバウンス更新
 #ifdef ADC_DMA
     void sampleAdcDmaIsr();  // 8kHz ISR: 前回 DMA 結果を averages に反映し次を kick (非ブロッキング)
@@ -35,12 +37,12 @@ class SensorHub {
     const ClutchSensor& clutch() const { return clutch_; }
     const Imu* imu() const { return imu_; }
     const Adc& adc() const { return adc_; }
-    const PulseCounter& pulseEngine() const { return pulseEngine_; }
-    const PulseCounter& pulseClutchRpm() const { return pulseClutchRpm_; }
-    const WheelSpeedSensor& pulseWheelFL() const { return pulseWheelFL_; }
-    const WheelSpeedSensor& pulseWheelFR() const { return pulseWheelFR_; }
-    const WheelSpeedSensor& pulseWheelRL() const { return pulseWheelRL_; }
-    const WheelSpeedSensor& pulseWheelRR() const { return pulseWheelRR_; }
+    const RotationSensor& pulseEngine() const { return pulseEngine_; }
+    const RotationSensor& pulseClutchRpm() const { return pulseClutchRpm_; }
+    const RotationSensor& pulseWheelFL() const { return pulseWheelFL_; }
+    const RotationSensor& pulseWheelFR() const { return pulseWheelFR_; }
+    const RotationSensor& pulseWheelRL() const { return pulseWheelRL_; }
+    const RotationSensor& pulseWheelRR() const { return pulseWheelRR_; }
 
     // SHUTDOWN 回路出力 (点火系 AND の結果)。tickISR が readShutdownSig() で毎 ms 更新。
     // isOn()==true で ETC 許可。他センサー同様 const 参照で返す。
@@ -59,6 +61,13 @@ class SensorHub {
         EtcTarget& target() { return hub.target_; }
         GearPositionSensor& gps() { return hub.gps_; }
         ClutchSensor& clutch() { return hub.clutch_; }
+        // 回転センサーの設定 (config RotationConfig の適用)
+        EdgeRotationSensor& pulseEngine() { return hub.pulseEngine_; }
+        EdgeRotationSensor& pulseClutchRpm() { return hub.pulseClutchRpm_; }
+        EdgeRotationSensor& pulseWheelFL() { return hub.pulseWheelFL_; }
+        EdgeRotationSensor& pulseWheelFR() { return hub.pulseWheelFR_; }
+        EdgeRotationSensor& pulseWheelRL() { return hub.pulseWheelRL_; }
+        EdgeRotationSensor& pulseWheelRR() { return hub.pulseWheelRR_; }
     } mut{*this};
 
    private:
@@ -76,13 +85,20 @@ class SensorHub {
     Iam20680hp imu_impl_{IMU_CS_PIN};
     Imu* imu_ = &imu_impl_;
 
-    // 車輪速は FlexPWM (FreqMeasureMulti)、Engine/クラッチ後RPM は QuadTimer (PulseCounter)
-    WheelSpeedSensor pulseWheelFL_{PULSE_WHEEL_FL_PIN};
-    WheelSpeedSensor pulseWheelFR_{PULSE_WHEEL_FR_PIN};
-    WheelSpeedSensor pulseWheelRL_{PULSE_WHEEL_RL_PIN};
-    WheelSpeedSensor pulseWheelRR_{PULSE_WHEEL_RR_PIN};
-    PulseCounter pulseEngine_{PULSE_ENGINE_PIN};
-    PulseCounter pulseClutchRpm_{PULSE_CLUTCH_RPM_PIN};
+    // 回転センサー: ハードウェア (EdgeSource) + 計算 (EdgeRotationSensor)。
+    // 車輪速は FlexPWM (FreqMeasureMulti)、エンジン / クラッチ後は QuadTimer3 (エッジ数 + キャプチャ)
+    FreqMeasureEdgeSource wheelFLSource_{PULSE_WHEEL_FL_PIN};
+    FreqMeasureEdgeSource wheelFRSource_{PULSE_WHEEL_FR_PIN};
+    FreqMeasureEdgeSource wheelRLSource_{PULSE_WHEEL_RL_PIN};
+    FreqMeasureEdgeSource wheelRRSource_{PULSE_WHEEL_RR_PIN};
+    QuadTimerEdgeSource engineSource_{PULSE_ENGINE_PIN};
+    QuadTimerEdgeSource clutchSource_{PULSE_CLUTCH_RPM_PIN};
+    EdgeRotationSensor pulseWheelFL_{wheelFLSource_};
+    EdgeRotationSensor pulseWheelFR_{wheelFRSource_};
+    EdgeRotationSensor pulseWheelRL_{wheelRLSource_};
+    EdgeRotationSensor pulseWheelRR_{wheelRRSource_};
+    EdgeRotationSensor pulseEngine_{engineSource_};
+    EdgeRotationSensor pulseClutchRpm_{clutchSource_};
 
     // SHUTDOWN 回路出力。アクティブHIGH + 外部 PULLDOWN (素の INPUT)。
     ToggleSwitch shutdownSig_{SHUTDOWN_SIG_IN_PIN, HIGH, ToggleSwitch::InputMode::External};

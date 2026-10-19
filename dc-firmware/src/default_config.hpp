@@ -19,10 +19,6 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .target_tp_idling = 15,
             .target_tp_normal_max = 100,
             .target_tp_restricted_max = 60,
-            // パルスカウンタの 1 回転あたりパルス数 (実機の歯数に合わせて要設定)
-            .wheel_rotor_teeth_front = 1,
-            .wheel_rotor_teeth_rear = 1,
-            .engine_teeth = 1,
             .clutch_min = 5000,
             .clutch_max = 60000,
             .has_gps = true,
@@ -107,5 +103,28 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             .engine_running_rpm = 2000.0f,
             .running_confirm_ms = 1000,
             .min_hold_ms = 5000,
+        },
+    // 回転センサー (docs/loop_nonblocking_spec.md §6.7)。車輪の歯数とタイヤ直径は実車の値に要設定
+    .has_rotation = true,
+    .rotation =
+        {
+            .has_engine = true,
+            .engine = {.teeth = 12, .window_teeth = 24, .max_window_ms = 20, .stale_ms = 300, .both_edges = true},
+            .has_clutch = true,
+            .clutch = {.teeth = 100, .window_teeth = 100, .max_window_ms = 10, .stale_ms = 300, .both_edges = true},
+            .has_wheel_front = true,
+            .wheel_front =
+                {
+                    .has_sensor = true,
+                    .sensor = {.teeth = 1, .window_teeth = 1, .max_window_ms = 20, .stale_ms = 300, .both_edges = true},
+                    .tire_diameter_mm = 0.0f,
+                },
+            .has_wheel_rear = true,
+            .wheel_rear =
+                {
+                    .has_sensor = true,
+                    .sensor = {.teeth = 1, .window_teeth = 1, .max_window_ms = 20, .stale_ms = 300, .both_edges = true},
+                    .tire_diameter_mm = 0.0f,
+                },
         },
 };

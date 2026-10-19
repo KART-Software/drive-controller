@@ -22,7 +22,22 @@ Configurator::Configurator(Flash& flash,
       plausibilityValidator(plausibilityValidator),
       launchController(launchController),
       autoShifter(autoShifter),
-      starterController(starterController) {}
+      starterController(starterController),
+      hub(hub.mut) {}
+
+namespace {
+
+RotationParams toRotationParams(const dc_RotationSensorConfig& c) {
+    return {
+        .teeth = c.teeth,
+        .windowTeeth = c.window_teeth,
+        .maxWindowUs = c.max_window_ms * 1000,
+        .staleUs = c.stale_ms * 1000,
+        .bothEdges = c.both_edges,
+    };
+}
+
+}  // namespace
 
 void Configurator::loadDefault() {
     config = DEFAULT_CONFIG;
@@ -85,19 +100,24 @@ void Configurator::calibrate() {
         }
     }
 
-    if (config.has_launch) {
-        const dc_SensorCalib& sc = config.sensor_calib;
-        launchController.setConfig(config.launch, sc.engine_teeth, sc.wheel_rotor_teeth_front,
-                                   sc.wheel_rotor_teeth_rear);
-    }
+    if (config.has_launch)
+        launchController.setConfig(config.launch);
 
-    if (config.has_auto_shift) {
-        const dc_SensorCalib& sc = config.sensor_calib;
-        autoShifter.setConfig(config.auto_shift, sc.gps.type, sc.engine_teeth);
-    }
+    if (config.has_auto_shift)
+        autoShifter.setConfig(config.auto_shift, config.sensor_calib.gps.type);
 
     if (config.has_starter)
-        starterController.setConfig(config.starter, config.sensor_calib.engine_teeth);
+        starterController.setConfig(config.starter);
+
+    if (config.has_rotation) {
+        const dc_RotationConfig& rc = config.rotation;
+        hub.pulseEngine().setParams(toRotationParams(rc.engine));
+        hub.pulseClutchRpm().setParams(toRotationParams(rc.clutch));
+        hub.pulseWheelFL().setParams(toRotationParams(rc.wheel_front.sensor));
+        hub.pulseWheelFR().setParams(toRotationParams(rc.wheel_front.sensor));
+        hub.pulseWheelRL().setParams(toRotationParams(rc.wheel_rear.sensor));
+        hub.pulseWheelRR().setParams(toRotationParams(rc.wheel_rear.sensor));
+    }
 }
 
 void Configurator::overlayConfig(const dc_Config& src) {
@@ -111,6 +131,8 @@ void Configurator::overlayConfig(const dc_Config& src) {
         config.auto_shift = src.auto_shift;
     if (src.has_starter)
         config.starter = src.starter;
+    if (src.has_rotation)
+        config.rotation = src.rotation;
     // 新トップレベルメッセージ (例: traction) はここに追加
 }
 
