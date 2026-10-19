@@ -69,7 +69,7 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 **flash (LittleFS) への書き込み中は割り込みが約 150 ms 止まる。** `Flash` が `FlashWriteGate` で tick に知らせ、tick は ETC を止めてから (シフトのパルス中は待つ) 書き込みを許可し、終われば再開する (§6.8)。書き込みは必ず `Flash` 経由で行うこと。
 
-ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は既に `sum` の読み取りを `noInterrupts()` で守っている — このパターンを踏襲すること。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
+ISR と loop の間で共有される可変状態は **必ず保護する**。`MovingAverage<N>` は合計を持ち越さず `getAvg()` のたびに N 個を足し直す (float の丸め誤差が積み重ならない)。`add()` は 32 bit の要素を 1 個書くだけなので、どの文脈から読んでも壊れた値は見えず、割り込みを止める必要はない。センサーの `update()` を呼ぶのは ISR のみで、読み手は移動平均経由で十分整合した値を見る。
 
 ### センサー / ターゲットの所有
 
