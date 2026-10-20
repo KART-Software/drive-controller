@@ -107,6 +107,15 @@ export function App() {
       .catch((err: Error) => addLog("Format error: " + err.message));
   }
 
+  // SD カードを exFAT でフォーマット (中身は消える)。ファーム側は ETC 動作中なら拒否する
+  function handleFormatSd() {
+    if (!window.confirm("SD カードをフォーマットします。カードの中身 (ログ) はすべて消えます。よろしいですか?")) return;
+    addLog("Formatting SD card...");
+    protocol.sendCommand("format_sd")
+      .then((resp) => addLog(resp.ok ? "SD card formatted (exFAT), logging restarted" : "SD format refused or failed (ETC on?)"))
+      .catch((err: Error) => addLog("SD format error: " + err.message));
+  }
+
   function handleRtcSync() {
     const epoch = Math.floor(Date.now() / 1000);
     protocol.sendCommand("set_rtc", { epoch })
@@ -198,6 +207,7 @@ export function App() {
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("motor_off").catch((err: Error) => addLog("Command error: " + err.message))}>Motor OFF</button>
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("reboot").catch((err: Error) => addLog("Command error: " + err.message))}>Reboot</button>
           <button disabled={!connected} onClick={handleRtcSync} title="デバイスのRTCをこのPCの現在時刻に同期">RTC Sync</button>
+          <button class="danger" disabled={!connected} onClick={handleFormatSd} title="SD カードを exFAT でフォーマット (ログは消える)。ETC 停止中のみ">Format SD</button>
           <button disabled={sensorStore.totalRows === 0} onClick={async () => {
             try {
               const blob = await sensorStore.exportCsv();

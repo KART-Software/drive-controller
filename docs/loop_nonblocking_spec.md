@@ -1,7 +1,7 @@
 # loop() 非依存化・ギャップレスログ 仕様書
 
-Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-17 マージ)、2c 実装済み (2026-10-20 マージ)、2b 実装済み (2026-10-20)、3 は未着手。**
-作成: 2026-10-06、改訂: 2026-10-11。関連: [control_input_spec.md](control_input_spec.md) (制御入力の CAN 化。Phase 2 の前提)、
+Status: **Phase 1 実装済み (PR #9, 2026-10-09 マージ)。Phase 2 / 3 は 2026-10-11 に全面改訂。Phase 2a 実装済み (2026-10-17 マージ)、2c 実装済み (2026-10-20 マージ)、2b 実装済み (2026-10-20 マージ)、3 実装済み (2026-10-20、ベンチ確認済み)。**
+作成: 2026-10-06、改訂: 2026-10-11、§7 改訂: 2026-10-20。関連: [control_input_spec.md](control_input_spec.md) (制御入力の CAN 化。Phase 2 の前提)、
 [etc_experiment_mode_spec.md](etc_experiment_mode_spec.md) (記録の消費側)、
 [etc_control_improvement_plan.md](etc_control_improvement_plan.md) §6 (同定計画。ギャップレス記録の動機)、
 CLAUDE.md「ファームウェア並行性」「SD ロギング」節 (本書で更新対象)。
@@ -166,7 +166,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 ### 5.2 出力先
 
 - **telemetry**: `State` に `SysStats sys = 4` を追加 (`loop_max_us / loop_mean_us / sd_max_us /
-  safety_max_us / log_drops / loop_max_us_boot`、全て uint32)。直近に完了した 1 s 窓の値を 50 Hz の State に同梱 (Q2 決定)。
+  tick_max_us (旧 safety_max_us) / log_drops / loop_max_us_boot`、全て uint32)。直近に完了した 1 s 窓の値を 50 Hz の State に同梱 (Q2 決定)。
   `loop_max_us_boot` は起動以来の最大で、ポート開閉後に 120 ms 停止が無くなったことを SD を抜かずに確認するための値。
   注意: `save` / `set_config` の flash 消去 (割り込み禁止で約 150 ms、モーター ISR も止まる) もここに記録される。
 - **SD ログ**: LogRecord **v4** (136 → 148 B): `uint32 loop_max_us, sd_max_us` + `uint16 safety_max_us, log_drops`
@@ -204,7 +204,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 | 8 | シフターの時間管理 (パルス終端・最短間隔・自動判断) (`autoShifter.tick()`) | 毎回 | loop (`update`) |
 | 9 | 回転計測の更新 (`sensorHub.updatePulse()`。車輪速・エンジン・クラッチ後、§6.7) | **毎回** | loop (100 ms) |
 | 10 | CAN 送信 0x600〜0x603 / 0x60A (DC_Status)。周期は kart-can の `KART_CAN_*_CYCLE_TIME_MS` をそのまま使う | 16 ms / 33 ms | loop |
-| 11 | ログ 1 レコード採取 → リング (Phase 3) | 毎回 | loop |
+| 11 | ログ 1 レコード採取 → リング (Phase 3、§7.1。SD ログが無効なら `log_drops` を数えるだけ) | 毎回 | loop |
 | 12 | 自身の所要時間を計測 (`LoopStats` の ISR 枠) | 毎回 | — |
 
 - 時刻: ISR 内の周期判定は tick 回数 (1 ms 単位の `uint32_t` カウンタ) で行い、`millis()` の読み直しはしない。
@@ -350,42 +350,78 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 
 ## 7. D: ギャップレスログ (Phase 3)
 
+2026-10-20 に §7 を改訂した (フォーマットの形を決め直し、`t_us` を 64 bit に、構成を §7.8 に)。まだ開発中なので、今までの
+v3 / v4 の継ぎ足しも含めて並べ直し、`version` は 0 から始める (しばらく 0 のまま。固まったら上げる)。デコーダは新しい形だけを読む
+(旧ファイルの存在は仮定しない)。
+
 ### 7.1 採取
 
-- `tickISR` の最後 (§6.2 の 11) で `buildLogRecord()` を呼び、リングに書く。GPT2 の 1 ms 周期なので**等間隔**。
-  同じ tick の判断結果 (アーミング・シフター) がそのレコードに入る。
+- `tickISR` の最後 (§6.2 の 11) で `buildLogRecord()` を呼び、リング (§7.3) に書く。GPT2 の 1 ms 周期なので**等間隔**。
+  同じ tick の判断結果 (アーミング・シフター) がそのレコードに入る。loop が SD で何百 ms 止まっても採取は止まらない。
+- SD ログが無効なとき (カードなし、失敗で停止、フォーマット中) は組み立てず、`log_drops` を数えるだけにする
+  (tick の時間を使わない。`log_drops` は「記録されなかったレコードの数」で、リングの溢れも同じ数に入る)。
+- tick の所要は約 4 µs 増える見込み (移動平均 13 個の読み出し + 148 B の組み立て + リングへのコピー)。実装後に計測して評価する。
+- レコードの `loop_max_us` / `sd_max_us` / `tick_max_us` / `log_drops` は loop が集計する値 (`LoopStats::live()`) を tick が読む。
+  途中の値を読む競合はありうるが、診断用なので許容する (Q12 と同じ扱い)。
 
-### 7.2 レコードと時刻 (v5)
+### 7.2 レコードと時刻
 
-- `t_ms` (`millis()`) を **`t_us`** (µs、`uint32_t`) に置き換える。レコードは 148 B のまま。
-- 時刻源は **PIT の Lifetime Timer** (チャネル 0 と 1 をつないだ 64 bit のダウンカウンタ、24 MHz。i.MX RT1060 RM §53.4.5)。
-  - `micros()` は SysTick 割り込みでミリ秒を足すので、flash 保存のように割り込みが長く止まるとその時間を失う (§6.8)。
-    PIT はハードウェアで数え続けるので失わない。64 bit なので一周しない (約 24,000 年)。一周を追う状態も要らない。
-  - DWT サイクルカウンタ (`ARM_DWT_CYCCNT`) は使わない。デバッグ回路にあり、ソフトリセット (AIRCR.SYSRESETREQ = Local reset、
-    SoC では COLD reset) ではリセットされない (ARMv7-M ARM §B1.5.1 / §C1.4、RM §21.3.4.2.2 "IOMUXC, SJC and debug are not reset")。
-    書き込み後の再起動や `reboot` コマンドでは前の値から数え続け、時刻の原点が 0〜7 s ずれた。PIT は COLD reset でもリセットされる
-    (RM Table 21-3 の Functional modules) ので、`SystemClock` のコンストラクタ (static 初期化) で動かした時点が毎回 0 になる。
-  - 読み出しは `LTMR64H` → `LTMR64L` の順 (H を読むと L が保持される、RM §53.6.4)。間に別の ISR が H を読むと保持された L が
-    上書きされるので、2 回の読み出しの間だけ割り込みを止める。
-  - PIT のチャネル 0 / 1 を占有する。`IntervalTimer` (サンプリング ISR) は `TCTRL == 0` の空きチャネルを 0 から探すので、
-    `SystemClock` (static 初期化) が先に動かすので、`IntervalTimer::begin()` (setup の中) はチャネル 2 を使う。
-  - 読み取り口はインターフェース `Clock` (`interfaces/util/clock.hpp`: `nowUs64` と、そこから出す `nowUs` / `nowMs`)。
-    いずれも読んだ瞬間の時刻を返す。実装は `SystemClock` (`util/system_clock.hpp`) で、状態は持たない。PIT の Lifetime Timer を
-    触るのは `SystemClock` だけ。tick は先頭で 1 回読み、その tick の間はその値を部品に配る。
-    実体 `sysClock` は `main.cpp` に 1 つだけ置き (extern 宣言は置かない)、部品へは時刻を引数で渡すか、`Clock` の参照を渡す
-    (`DebugLogger` は `initialize()`、`StopWatch` を使う部品はコンストラクタ)。
-  - 短い区間の計測や待ちのタイムアウトは `StopWatch` (`util/stop_watch.hpp`)。`Clock` を受け取り `nowUs64()` の差で測る。
-- `t_us` は 2^32 µs = **71.6 分で一周**する。レコードには 32 bit のまま入れ、デコーダが「前のレコードより小さくなったら
-  上位桁を 1 足す」で 64 bit に戻す。レコードは 1 ms 間隔で並ぶので取り違えは起きない。ファーム内の差分計算は
-  符号なしの引き算なので一周しても正しい。
-- `LogHeader` v5 (各ファイルの先頭、32 B): `magic[8]`、`version`=5、`record_size`、`log_hz`、予約、
-  `dir_number` (起動ごとの通し番号)、`file_index` (ディレクトリ内の連番)、`rtc_epoch`。
-- `SENSOR_LOG_VERSION` を 5 に上げ、`tools/decode_log.py` はディレクトリ単位でファイルを連結して読む。
+- 時刻 `t_us` は **PIT の Lifetime Timer** (`Clock`、§6.8。起動 = 0、割り込みが止まっても進む) の **64 bit** µs。
+  一周しないので、デコーダの補正もファイル境界や欠けの前後の取り違えもない (32 bit + デコーダ補正の案は取り消し。
+  レコードは `vbat` (常に 0、CAN 未実装) を外すので 148 B のまま)。
+- RTC の時刻は起動時 (SD の初期化の後) に 1 回だけ読み、読んだ瞬間の `t_us` と組にしてヘッダに入れる。デコーダは
+  `rtc_epoch + (t_us - rtc_t_us) / 1e6` で絶対時刻を出す。ディレクトリ内の全ファイルで同じ組 (`set_rtc` で途中で変えても、
+  その起動のログには反映されない)。
+- `LogHeader` (各ファイルの先頭、32 B):
+
+| オフセット | 型 | 名前 | 内容 |
+|---|---|---|---|
+| 0 | `char[8]` | `magic` | `"KARTLOG1"` |
+| 8 | `uint16` | `version` | フォーマットの版。開発中は 0 (固まったら上げる) |
+| 10 | `uint16` | `record_size` | `sizeof(LogRecord)` = 148 (デコーダの検査用) |
+| 12 | `uint16` | `log_hz` | 1000 |
+| 14 | `uint16` | `dir_number` | 起動ごとの通し番号 `NNNN` |
+| 16 | `uint16` | `file_index` | ディレクトリ内の連番 (`0000.bin` = 0) |
+| 18 | `uint16` | `reserved` | 0 |
+| 20 | `uint32` | `rtc_epoch` | Unix 時刻。0 = RTC 未設定 |
+| 24 | `uint64` | `rtc_t_us` | `rtc_epoch` を読んだ瞬間の `t_us` |
+
+- `LogRecord` (148 B、packed。4 B の項目は 4 の倍数のオフセットに置く):
+
+| オフセット | 型 | 名前 | 内容 |
+|---|---|---|---|
+| 0 | `uint64` | `t_us` | tick の時刻 |
+| 8 | `uint16[8]` | `adc` | ADC 生値 ch0〜7 |
+| 24 | `float ×7` | `apps1, apps2, ittr, tps1, tps2, bps, clutch` | 変換後のセンサー値 |
+| 52 | `float[3]` | `accel` | mg (移動平均後) |
+| 64 | `float[3]` | `gyro` | dps (移動平均後) |
+| 76 | `float[4]` | `wheel_hz` | FL, FR, RL, RR のパルス周波数 [Hz] |
+| 92 | `float` | `engine_hz` | エンジンのパルス周波数 [Hz] (旧 `rpm`。中身は Hz だったので名前を直す) |
+| 96 | `float` | `clutch_hz` | クラッチ後のパルス周波数 [Hz] (旧 `clutch_rpm`) |
+| 100 | `uint32[4]` | `wheel_count` | FL, FR, RL, RR の累計エッジ数 |
+| 116 | `float` | `target_tp` | ターゲットスロットル |
+| 120 | `float` | `duty` | モーターの実印加 duty [%] (停止中は 0) |
+| 124 | `uint32` | `errors` | プラウシビリティのエラービット |
+| 128 | `uint16` | `flags` | `LOG_FLAG_*` (今のまま) |
+| 130 | `int8` | `gear` | -1 = 不明、0 = N、1〜 |
+| 131 | `uint8` | `mode` | `EtcTarget::Mode` |
+| 132 | `uint8` | `autoshift_state` | `shift::AutoShifter::State` |
+| 133 | `uint8 ×3` | `exp_type, exp_index, exp_phase` | 同定実験 |
+| 136 | `uint32` | `loop_max_us` | loop 1 周の最大 [µs] (`LoopStats::live()`) |
+| 140 | `uint32` | `sd_max_us` | SD の write / sync 1 回の最大 [µs] |
+| 144 | `uint16` | `tick_max_us` | tick 1 回の最大 [µs] (旧 `safety_max_us`) |
+| 146 | `uint16` | `log_drops` | 記録されなかったレコードの累計 (65535 で飽和) |
+
+- ファイル構成: `[LogHeader] [LogRecord] [LogRecord] …`。レコードはファイルをまたがない。
 
 ### 7.3 リングバッファ
 
-- `DMAMEM` に 2048 レコード (≈2 s、303 KB)。RAM2 空き約 500 KB に収まる。
-- 満杯時は新しいレコードを捨てて `log_drops` を数える (順序を保つ。Q6)。
+- `DMAMEM` (RAM2) に 2048 レコード (≈2 s、303 KB)。RAM2 の空き約 500 KB に収まる。
+- 書き手は tick (1 つ)、読み手は loop (1 つ) の SPSC。先頭 / 末尾の添字は 32 bit で、書き手は末尾だけ、読み手は先頭だけを
+  動かすので、割り込みを止めずに済む。
+- 満杯なら新しいレコードを捨てて `log_drops` を数える (順序を保つ、Q6)。
+- 読み手は連続した区間 (末尾で折り返す手前まで) を値で受け取り (`{先頭ポインタ, 個数}`)、書き終えたら進める。
+- SDIO は FIFO モード (CPU がコピーする。Teensy の `SD.h` の既定) なので、RAM2 のキャッシュを気にしなくてよい。
 - 必要量の見込み: カード内部の待ち 最大 0.5 s、ファイル切り替え・古いファイルの削除 (exFAT なら数 ms〜数十 ms) を合わせても 1 s 未満。
 
 ### 7.4 カードとファイルシステム
@@ -394,17 +430,25 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
   連続ファイルはクラスタの連結 (FAT チェーン) を書かずに済む。
 - クラスタ境界をカードの消去単位にそろえてフォーマットする (カード内部の待ちが減る)。公式の SD Card Formatter は
   32 GB 以下のカードを FAT32 にし、OS 標準のフォーマットは境界がそろう保証がない。そこで **Teensy 自身が SdFat の
-  `ExFatFormatter` (SD 規格どおりに境界をそろえる) でフォーマットする**。console にフォーマットのコマンドを追加し、
-  確認ダイアログを出したうえで、ETC 停止中のみ実行できる。実行前にログ書き込みを止める。どの PC でもブラウザだけで同じ結果になる。
-- FAT32 のカードが挿されても動作はする (SdFat は両対応)。ただし確保が遅く、§7.6 の終端判定が使えない (§7.6 末尾)。
+  `ExFatFormatter` (SD 規格どおりに境界をそろえる) でフォーマットする** (§7.7)。
+- **起動時に FS を確認し、exFAT でなければフォーマットし直す** (2026-10-20 決定)。対象は FAT32 / FAT16 のカードと、
+  マウントできないカード (未フォーマット、壊れている、NTFS など。カード自体の初期化はできるもの)。PC で exFAT にしたカードは
+  そのまま使う (境界がそろっていない分だけ少し遅い)。フォーマットは setup の中 (tick を始める前) で行うので、その起動は
+  数秒長くなる。**挿したカードの中身は消える**ので、カードはログ専用にする。
+  - 理由: FAT32 は確保が遅く (FAT の書き込みと空き探し。満杯に近いと FAT 全体を読む)、`preAllocate()` でファイルサイズが
+    100 MB になる (`FatFile.cpp` の `m_fileSize = length`) ので電源断の後は末尾に古いデータが見え、§7.6 の終端判定が使えない。
+    exFAT だけに決めれば、デコーダも書き出しも 1 つの前提で済む。
+- カードは起動時に挿さっているときだけ使う (今と同じ。途中で挿しても記録しない)。カードの初期化そのものに失敗したら (カードなし)
+  記録しない。
 - 推奨カード: 高耐久 (High Endurance) または産業用で、A1 / A2 か V30 の表示があるもの。
 
 ### 7.5 ディレクトリとファイル
 
 - 起動ごとに 1 ディレクトリ: `dc_NNNN_YYYYMMDD_HHMMSS/` (RTC 未設定なら `dc_NNNN/`)。`NNNN` は起動時にルートを走査した
   最大番号 + 1。日時ではなく番号で新旧を決める (RTC 設定あり / なしの起動が混ざっても順序が崩れない)。
+  ルートで見るのは `dc_` + 4 桁で始まるディレクトリだけ。それ以外 (旧 `dc_log_*.bin` を含む) は無視する (消さない、数えない)。
 - その中に `0000.bin`, `0001.bin`, … を **100 MB (100,000,000 B) ずつ**作る。各ファイルは作成時に `preAllocate()` で
-  連続領域を確保し、先頭にヘッダ、続けてレコードを書く (レコードはファイルをまたがない)。1 ファイル ≈ 67.5 万レコード ≈ 11.3 分。
+  連続領域を確保し、先頭にヘッダ、続けてレコードを書く。1 ファイル = (100,000,000 − 32) ÷ 148 = 675,675 レコード ≈ 11.3 分。
 - **ファイルが埋まったら** (Q3 決定: a): loop がそのファイルを `sync()` して閉じ、次のファイルを作って確保する。その間 loop は
   止まるが、リングが吸収する。
 - **カードが満杯で確保できなかったら**: 一番古いファイル (最小の `NNNN` の最小の番号) を削除し、空になったディレクトリも削除して、
@@ -415,24 +459,80 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 
 ### 7.6 書き出しと終端の判定
 
-- loop の `SensorLogger::service()` がリングから 4 KB 以上たまったら最大 8 KB をまとめて `write()` (Q7)。
+- loop の `SensorLogger::service()` がリングに 4 KB 以上 (28 レコード) たまったら、最大 8 KB (55 レコード) をまとめて
+  `write()` (Q7)。リングの折り返しとファイルの残り容量で区切る (レコードはファイルをまたがない)。
 - `sync()` は 2 s ごと (Q8)。exFAT の事前確保ファイルは「確保済みの長さ (DataLength)」と「有効な長さ (ValidDataLength)」を
   別に持つ。`preAllocate()` は前者だけを 100 MB にし、後者は `sync()` のたびにディレクトリへ書かれる。
   **有効な長さより後ろは、PC からはゼロとして読める** (SdFat の `fileSize()` も有効な長さを返す)。
 - そのため、以前消したファイルの古いデータが確保領域に残っていても、PC やデコーダからは見えない。終端は
   「全バイトがゼロのレコード」で判定できるので、起動ごとの識別子 (旧案) は不要。
 - 電源断で失うのは、最後の `sync()` 以降に書いた分 (最大 2 s) と、リングに残っていた分。
-- FAT32 カードの場合は有効な長さの仕組みがないので、末尾に古いデータが見えうる。デコーダは `t_us` の連続性
-  (前のレコードから 0〜1 s 後でなければ終端) でも止める。
+- デコーダは念のため `t_us` の連続性 (前のレコードから 0〜1 s 後でなければ終端) でも止める。
 
-### 7.7 検証
+### 7.7 フォーマット (起動時の自動と、コマンド)
+
+- フォーマットの実体は `SdLogStore::format()`: `ExFatFormatter::format()` でカード全体を exFAT にする (カードの容量によらず
+  exFAT。512 B のセクタバッファを渡す)。マウントに失敗したカードにも効くように、カードの初期化 (`cardBegin()`) からやり直す。
+- **起動時**: `SdLogStore::begin()` が exFAT でないカードをこれでフォーマットしてからマウントする (§7.4)。
+- **コマンド**: console に「SD をフォーマット」のボタンを置き、確認ダイアログの後にコマンド `format_sd` を送る
+  (中身を空にしたいときや、PC で exFAT にしたカードの境界をそろえ直したいとき用)。
+- **実行できるのは ETC 停止中だけ**: `motorController.isOn()` が true なら失敗で返す。停止中 = アーミング ①〜⑤ のどれかで
+  止まっているとき (ベンチの Teensy は SIG_IN が LOW なので常に停止中。車載ではドライバーのスイッチを MOTOR_OFF にする)。
+  これは走行中に行わないための歯止めで、安全の条件ではない (下記)。確認はコマンドを受けたときの 1 回。
+- 手順: ログを止める (`sync()`、閉じる) → フォーマット → マウントし直す → ログを始め直す (新しいディレクトリ `dc_0001/`)。
+  結果 (成否と所要時間) は応答と debug で返す。
+- flash の `format_fs` (§6.8) と違い、割り込みは止まらない。止まるのは loop だけ (数秒) で、tick (ETC・安全層・CAN) は
+  動き続ける。止まっている間は telemetry・コマンド・SD ログが止まる。フォーマット中に CAN でモードが変わって ETC が動き出しても
+  tick は普通に動くので問題ない。
+- 旧ファイル (`dc_log_*.bin`) や別のデータで満杯のカードは、このコマンドで空ける。
+
+### 7.8 構成
+
+| 部品 | 置き場所 | 役割 | 呼ぶ側 |
+|---|---|---|---|
+| `LogRecord` / `LogHeader` | `util/log/log_record.hpp` | フォーマット (§7.2) | — |
+| `buildLogRecord()` | `log_record_builder.{hpp,cpp}` | 各部品の現在値からレコードを組み立てる純粋関数 (今のまま。`t_us` と `nowMs` を受ける) | tick |
+| `LogRing` | `util/log/log_ring.hpp` | `DMAMEM` の SPSC リング (§7.3)。`push()` (tick)、`peek()` / `pop()` (loop)、`drops()` | tick / loop |
+| `LogStore` (interface) | `interfaces/util/log/log_store.hpp` | 媒体とファイルの操作: `begin()` (マウント、ディレクトリ作成)、`openNextFile()` (確保、満杯なら古いものを削除)、`write()`、`sync()`、`closeFile()`、`format()`、`active()`。レコードの形は知らない。旧 `BinaryWriter` を置き換える | `SensorLogger` |
+| `SdLogStore` | `util/log/sd_log_store.{hpp,cpp}` | `LogStore` の SD (SdFat `SdFs` / `FsFile`) 実装 (§7.4〜7.7)。`begin()` で FS を確認し exFAT でなければフォーマット。旧 `SdBinaryWriter` を置き換える | — |
+| `SensorLogger` | `util/log/sensor_logger.{hpp,cpp}` | facade: `begin()` (store → 最初のファイル → ヘッダ)、`capture(build)` (tick: 有効なら組み立ててリングへ、無効なら drops だけ)、`service()` (loop: リングを書き出す、ファイルの切り替え、2 s の `sync()`、失敗で停止)、`stop()` / `restart()` (フォーマット用)、`drops()` | tick / loop / コマンド |
+| `format_sd` | `commands/command_controller.cpp`、proto `FormatSdCmd`、console | §7.7 | loop |
+
+- `LoopStats::rollover()` には `SensorLogger::drops()` を渡す。loop の 1 kHz のログタイマー (`sdLog`) は廃止。
+- `tools/decode_log.py`: ディレクトリを受け取り、`file_index` 順にファイルをつないで 1 つの CSV にする (1 ファイルも可)。`magic`・`version`・
+  `record_size` を検査し、全バイトがゼロのレコードか `t_us` の飛び (1 s 超) で止める。`rtc_epoch` があれば絶対時刻の列を足す。
+
+### 7.9 検証
 
 - 30 分のログ中にポート開閉・コマンド送信・`set_config` (flash 保存) を混ぜても、`t_us` の差分が全て 1000 µs ± ジッタ、
   `log_drops == 0`。ただし flash 保存の間 (約 150 ms) はレコードが欠ける (§6.8)。
 - 100 MB のファイル切り替えをまたいで連続していること (ファイル境界で欠けがない)。
-- `t_us` の一周 (起動から 71.6 分) をまたいでデコーダが連続した時刻を出すこと。
 - 小容量のカード (または確保サイズを一時的に小さくしたビルド) で満杯にし、一番古いファイルが消えて記録が続くこと。
 - ストール注入 (§8) 500 ms → 欠け 0 / drops 0。3 s → drops が計上され、その後も記録が続く。
+- `format_sd`: ETC 動作中は拒否、停止中は exFAT になって `dc_0001/` から記録が始まること。所要時間を記録する。
+- FAT32 のカードで起動すると、setup の中で exFAT になり `dc_0001/` から記録が始まること (起動が何秒延びるかを記録する)。
+- tick の所要 (`tick_max_us`) が採取を入れても 50 µs 未満。
+- カードなしで起動しても tick / loop の所要が変わらず、`log_drops` が増え続けること。
+
+### 7.10 ベンチの結果 (2026-10-20、16 GB カード、IMU 未接続)
+
+- FAT32 のカードで起動: 約 90 ms で exFAT にフォーマットし、起動 112 ms でログ開始。以後の起動は 30 ms 前後。
+- tick の所要: 16 → 19〜20 µs (採取で +3〜4 µs)。loop の平均 1 µs。
+- ファイルの切り替え (`-DSENSOR_LOG_FILE_BYTES=1000000` で 1 MB ごと): 5〜16 ms。境界をまたいだ `t_us` の差は 1000 µs ちょうど。
+  通常運転の全レコードで差が 999〜1001 µs。
+- ストール注入: 500 ms / 2000 ms → drops 0、欠けなし。3000 ms → drops 954 (≈ 3000 − 2048)、ログに 955 ms の欠けが 1 か所、その後も継続。
+- 満杯 (ダミーの事前確保ファイルで埋めた): 古いファイルの削除 11〜62 ms (883 エントリのディレクトリの走査を含む)、空になった
+  ディレクトリの除去、その間も drops 0。
+- `format_sd`: フォーマット 81 ms、再開まで 0.1 s (その間 drops ≈ 100)。フォーマット直後にカードを初期化し直す (CMD0) と
+  カードが書き終える前に中断して FS が壊れたので、カードの初期化は 1 回だけにし、フォーマット後は `syncDevice()` で待つ。
+- 書き込み中の再書き込み (電源断相当): 作ったばかりで sync 前のファイルは PC から 0 B に見える (exFAT の有効な長さ)。デコーダは
+  空のファイルを飛ばす。
+- 最終ビルドで再確認 (レビュー後): FAT32 → exFAT の起動時フォーマット (116 ms で開始)、34 s のログを MTP で取り出して
+  ヘッダ (version 0、dir 1、file 0、`rtc_t_us` = 開始時刻) と全レコードの間隔 998〜1002 µs・欠け 0 を確認。その間に SD の
+  内部遅延で loop が 134 ms 止まった回があったが drops 0 (リングが吸収)。PC から見えるサイズは書いた分だけ (5,029,516 B =
+  32 + 33,983 × 148)。`format_sd` 79 ms、再開まで 0.1 s。
+- 未確認: `format_sd` の拒否 (ETC 動作中)。ベンチでは 0x740 を受けないので ETC が動かず試せない。100 MB の実ファイルでの長時間 (30 分以上) の連続と、`t_us` の 71.6 分 (旧 32 bit の一周に相当する時間) 越え
+  (64 bit なので問題はないはず)。
 
 ## 8. 検証用デバッグコマンド (ベンチ専用)
 
@@ -459,11 +559,12 @@ flash (LittleFS) への書き込み中は割り込みが約 150 ms 禁止され�
 | `src/util/loop_stats.{hpp,cpp}` | 2a | tick / CAN 受信 ISR の所要時間 |
 | `src/sensor/iam20680hp.{hpp,cpp}`、`sensor_hub.{hpp,cpp}` | 2b | SPI1 の DMA、移動平均、`readImu()` 削除 |
 | `src/sensor/{edge_rate_estimator,edge_rotation_sensor,quadtimer_edge_source,freqmeasure_edge_source}.{hpp,cpp}`、`interfaces/sensor/`、`sensor_hub.{hpp,cpp}` | 2a / 2c | 毎 ms 更新 (2a)、エッジ番号と時刻による周期計測・可変窓・RotationConfig (2c) |
-| `src/commands/command_controller.cpp`、`spec/proto/drive_controller.proto`、`dc-console/` | 3 | SD フォーマットのコマンド (確認ダイアログ、ETC 停止中のみ) |
-| `src/util/log/sd_binary_writer.{hpp,cpp}` | 3 | `SdFs` / `FsFile`、ディレクトリ・100 MB 事前確保・切り替え・古いファイルの削除・失敗時停止 |
-| `src/util/log/sensor_logger.{hpp,cpp}` | 3 | リング (ISR から採取)、まとめ書き出し、drops |
-| `src/util/log/log_record.hpp`、`src/log_record_builder.cpp` | 3 | v5 (`t_us`、ヘッダ) |
-| `tools/decode_log.py` | 3 | v5、ディレクトリ単位の連結、`t_us` の一周補正、終端判定 |
+| `src/commands/command_controller.cpp`、`spec/proto/drive_controller.proto`、`dc-console/` | 3 | `format_sd` (確認ダイアログ、ETC 停止中のみ、§7.7) |
+| `src/interfaces/util/log/log_store.hpp`、`src/util/log/sd_log_store.{hpp,cpp}` | 3 | `LogStore` / `SdLogStore` (旧 `BinaryWriter` / `SdBinaryWriter` を置き換え): `SdFs` / `FsFile`、ディレクトリ・100 MB 事前確保・切り替え・古いファイルの削除・失敗時停止・フォーマット |
+| `src/util/log/log_ring.hpp`、`src/util/log/sensor_logger.{hpp,cpp}` | 3 | リング (tick から採取)、まとめ書き出し、drops、stop / restart |
+| `src/util/log/log_record.hpp`、`src/log_record_builder.cpp` | 3 | §7.2 の形 (`t_us` 64 bit、`vbat` 削除、名前の整理、ヘッダ) |
+| `src/main.cpp`、`src/util/loop_stats.hpp` | 3 | tick 11 で `capture()`、loop は `service()` だけ、`rollover(drops)` |
+| `tools/decode_log.py` | 3 | ディレクトリ単位の連結、終端判定、絶対時刻 |
 | `spec/proto/drive_controller.proto` | 2a | `SysStats` に tick / CAN 受信 ISR の最大、`DebugStallCmd` → 両側再生成 |
 | `src/commands/command_controller.cpp` | 2a | `DebugStallCmd` (BENCH_DEBUG)、実験は要求フラグ経由 |
 | `src/configurator.{hpp,cpp}`、`src/util/flash.{hpp,cpp}` | 2a | flash 書き込みの前後で要求 / 準備完了の受け渡し (§6.8) |
@@ -513,6 +614,24 @@ Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え�
 | 回転計測の平均歯数 (旧 Q-F) | 定数 (`constants.hpp`)。エンジン 12、クラッチ後 10 |
 | 回転計測 | 毎 ms 更新。6 センサーとも (エッジ番号, 時刻) から可変窓 (N 歯か T の短いほう)・両エッジで周期計測 (2c、§6.7)。設定は config RotationConfig。ピンは変えない |
 
+### 10.3 2026-10-20 (§7 改訂)
+
+| 項目 | 決定 |
+|---|---|
+| フォーマットのバージョン | `version` を持ち、開発中は 0 のまま (固まったら上げる)。今までの継ぎ足しも含めて並べ直す。旧ファイルの存在は仮定しない |
+| `t_us` | 64 bit (一周の補正をなくす)。`vbat` を外して 148 B のまま |
+| 絶対時刻の基準 | ヘッダに `rtc_epoch` と、それを読んだ瞬間の `rtc_t_us` (64 bit)。起動時に 1 回 |
+| tick の所要 | 採取を入れて実装後に計測・評価 |
+| loop の集計値を tick が読む競合 | 許容 (診断用) |
+| フォーマットの後 | 新しいディレクトリでログを再開する |
+| カードの抜き差し | 起動時に挿さっているときだけ (今と同じ) |
+| 削除の対象 | `dc_NNNN` のディレクトリだけ。旧 `dc_log_*.bin` は無視 |
+| 「ETC 停止中」 | `motorController.isOn()` が false。コマンド受付時に 1 回確認。走行中に行わないための歯止めで、安全の条件ではない |
+| 別の FS のカード | 起動時に確認し、exFAT でなければ (マウントできないものも) フォーマットし直す。カードはログ専用 (中身が消える)。「自分ではフォーマットしない」の旧方針は取り消し |
+| 構成 | `LogRing` + `LogStore` (interface) / `SdLogStore` + `SensorLogger` (§7.8)。`BinaryWriter` / `SdBinaryWriter` は置き換え |
+| カードなしの drops | 起動時にカードがなくても `log_drops` を数え続ける (console が警告色になる)。カードを挿さない運用は想定外なので、警告が出るのは意図どおり (2026-10-20 レビュー) |
+| 採取の呼び方 | tick は `SensorLogger::capture()` にレコードの作り方 (ラムダ) を渡すだけ。有効なときだけ組み立てる判断はロガーの中 (2026-10-20 レビュー) |
+
 ## 11. 未決事項
 
-なし (2026-10-11 時点)。
+なし (2026-10-20 時点)。

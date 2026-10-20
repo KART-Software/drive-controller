@@ -98,7 +98,7 @@ function toAppSensor(st: PbState): SensorData {
           loopMaxUs: st.sys.loopMaxUs,
           loopMeanUs: st.sys.loopMeanUs,
           sdMaxUs: st.sys.sdMaxUs,
-          safetyMaxUs: st.sys.safetyMaxUs,
+          tickMaxUs: st.sys.tickMaxUs,
           logDrops: st.sys.logDrops,
           loopMaxUsBoot: st.sys.loopMaxUsBoot,
         }
@@ -432,6 +432,11 @@ function buildCommand(
       return create(CommandSchema, {
         id,
         body: { case: "formatFs", value: {} },
+      });
+    case "format_sd":
+      return create(CommandSchema, {
+        id,
+        body: { case: "formatSd", value: {} },
       });
     case "revert":
       return create(CommandSchema, { id, body: { case: "revert", value: {} } });

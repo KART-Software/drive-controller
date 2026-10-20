@@ -267,7 +267,7 @@ function sensorTick() {
     loopMaxUs: 4000 + Math.round(Math.random() * 5000),
     loopMeanUs: 900 + Math.round(Math.random() * 200),
     sdMaxUs: 3500 + Math.round(Math.random() * 5000),
-    safetyMaxUs: 0,
+    tickMaxUs: 0,
     logDrops: 0,
     loopMaxUsBoot: 9000,
   });
@@ -322,6 +322,9 @@ function handleCommand(cmd: Command): void {
         );
         break;
       case "setRtc":
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
+      case "formatSd":
         emitResponse(create(ResponseSchema, { id, ok: true }));
         break;
       case "formatFs":
