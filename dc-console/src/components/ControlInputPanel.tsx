@@ -53,6 +53,18 @@ export function ControlInputPanel({ addLog }: Props) {
       ? "0x740 未受信"
       : `0x740 途絶 (${(c.controlRxAgeMs / 1000).toFixed(1)} s)`;
   const locked = c.controlLinkAlive;
+  // CAN バスの状態。active かつ TEC 0 ならバスは生きている (0x740 が来ないのは送り手の問題)、passive / bus-off はバス自体の問題
+  const can = d.can;
+  const busColor = !can || can.fault === "unknown" ? "var(--text-dim)" : can.fault === "active" ? "var(--ok)" : can.fault === "passive" ? "var(--warn)" : "var(--err)";
+  const busText = !can
+    ? "CAN バス: -"
+    : can.fault === "active"
+      ? `CAN バス: 正常 (受信 ${can.rxRate} フレーム/s, TEC ${can.txErrors})`
+      : can.fault === "passive"
+        ? `CAN バス: 警告 — error passive (TEC ${can.txErrors}, REC ${can.rxErrors})。こちらの送信に ACK が付いていない (相手ノードなし / 配線 / 終端 / ビットレート)`
+        : can.fault === "busoff"
+          ? "CAN バス: バスオフ (自動復帰を待っている)"
+          : "CAN バス: 不明";
   return (
     <section>
       <h2>Control Input</h2>
@@ -67,6 +79,7 @@ export function ControlInputPanel({ addLog }: Props) {
           {" / "}
           {c.shiftLinkAlive ? "0x741 受信中" : "0x741 なし"}
         </div>
+        <div style={{ color: busColor }}>{busText}</div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
         {MODES.map((m) => (

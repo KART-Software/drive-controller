@@ -232,6 +232,22 @@ message SysStats {
   uint32 loop_max_us_boot = 6;  // 起動以来の loop 1 周の最大
 }
 
+// CAN バスの状態 (docs/can_bus_spec.md §3 の CanState / CanStats)。SysStats と同じく 50 Hz の State に同梱
+message CanStatus {
+  enum Fault {
+    CAN_FAULT_UNSPECIFIED = 0;
+    CAN_FAULT_ACTIVE      = 1;  // 正常 (error active)
+    CAN_FAULT_PASSIVE     = 2;  // error passive (TEC / REC が 128 以上。こちらの送信に ACK が付かない等)
+    CAN_FAULT_BUS_OFF     = 3;  // バスオフ (自動復帰を待っている)
+  }
+  Fault  fault      = 1;
+  uint32 tx_errors  = 2;  // 送信エラーカウンタ (TEC)。0 なら誰かが ACK を返している = バスは生きている
+  uint32 rx_errors  = 3;  // 受信エラーカウンタ (REC)
+  uint32 rx_frames  = 4;  // 受け入れた (0x740 / 0x741) フレームの累計。console がレートにする
+  uint32 rx_overrun = 5;  // 読む前に次が来て失ったフレームの累計
+  uint32 tx_dropped = 6;  // 空きメールボックスがなく捨てた送信の累計
+}
+
 // 制御入力 (コックピットスイッチ) の受信状態。docs/control_input_spec.md
 message ControlStatus {
   enum Source {
@@ -256,6 +272,7 @@ message State {
   EtcState      etc     = 3;
   SysStats      sys     = 4;
   ControlStatus control = 5;
+  CanStatus     can     = 36;  // CAN バスの状態 (fault / エラーカウンタ / 累計)
 }
 
 message DebugMessage {

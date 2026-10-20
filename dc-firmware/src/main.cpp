@@ -333,26 +333,12 @@ void loop() {
     if (telemetry.due(now)) {
         SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.validLatched(),
                                        plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
-                                       loopStats.live(), controlInput, now);
+                                       loopStats.live(), controlInput, canController.busState(), canController.busStats(), now);
     }
 
     // SD ロギング: tick がリングへ積んだレコードをまとめて書く (4 KB 以上で最大 8 KB、2 s ごとに sync、100 MB でファイル切り替え)。
     // ここで loop が止まってもリング (≈2 s) が吸収する。所要は LoopStats (telemetry SysStats.sd_max_us / LogRecord sd_max_us)
     sensorLogger.service(now);
-
-#if defined(BENCH_DEBUG)
-    // CAN のベンチ用: 受信・送信・割り込みの回数とコントローラの状態を 1 s ごとに出す
-    static Every canDiag{1000};
-    if (canDiag.due(now)) {
-        const CanStats st = canBus.stats();
-        const CanState cs = canBus.state();
-        const CanRxData& rx = canController.rxData();
-        DebugLogger::log("CAN rx %lu (ctrl %lu shift %lu) overrun %lu txdrop %lu isr %lu | fault %u tec %u rec %u sync %u",
-                         (unsigned long)st.rxFrames, (unsigned long)rx.controlFrames, (unsigned long)rx.shiftFrames,
-                         (unsigned long)st.rxOverrun, (unsigned long)st.txDropped, (unsigned long)st.isrCount,
-                         (unsigned)cs.fault, (unsigned)cs.txErrors, (unsigned)cs.rxErrors, (unsigned)cs.synced);
-    }
-#endif
 
     // ISR (tick / CAN 受信) が積んだ debug を送る
     DebugLogger::service();

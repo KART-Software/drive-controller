@@ -178,7 +178,7 @@ Teensy 4.1 で FD ができるのは CAN3 だけで、このドライバはそ�
 | `can/can_bus.{hpp,cpp}` | 削除。役割は `interfaces/can/can_bus.hpp` (interface) と `can/flexcan3_bus.{hpp,cpp}` (実装) へ |
 | `can/can_controller.{hpp,cpp}` | `CanBus&` を受け取る (main が `Flexcan3Bus` を作って渡す)。`send()` は `CanTxData::toFrames()` → `bus.send()` を 5 回。`receive()` は `CanFrame` を受ける。`rxTotal` は `bus.stats().rxFrames` に |
 | `main.cpp` | `Flexcan3Bus canBus; CanController canController(canBus);`。`canRxISR(const CanFrame&)`。`begin()` にフィルタ {0x740, 0x741} と `CAN_RX_ISR_PRIORITY` |
-| bench 診断 (`-DBENCH_DEBUG`) | 1 s ごとの debug 行を `CanStats` + `CanState` で出す (受信数・あふれ・捨て・割り込み回数・fault・TEC / REC)。嵐の遮断器 (1 ms に 2000 回超で IRQ を止める) は `Flexcan3Bus` の bench 機能として残す |
+| telemetry / console | `Sensor.can` (`CanStatus`: fault、TEC / REC、受信・取りこぼし・捨ての累計) を 50 Hz の State に同梱。console は Control Input パネルに「CAN バス: 正常 (受信 n フレーム/s, TEC) / 警告 (passive) / バスオフ」、画面下の sys-stats 行に数値 (`CAN active rx n/s overrun txdrop TEC REC`)。fault と TEC で「バス自体の問題 (passive / bus-off)」と「バスは生きているが送り手が黙っている (active・TEC 0・受信 0)」を見分ける。bench 専用の debug 行と遮断器は削除 (2026-10-20 レビュー 6) |
 | `lib/FlexCAN_T4` | 検証が終わったら submodule を外す (`.gitmodules`、`lib/`)。`lib/kart-can` はそのまま |
 | ドキュメント | CLAUDE.md の CAN 節 (ドライバの構成、ISR の文脈、禁止事項)、本書の Status |
 
@@ -220,6 +220,7 @@ Teensy 4.1 で FD ができるのは CAN3 だけで、このドライバはそ�
 | 受信の文脈 | 割り込みの文脈でコールバック (今と同じ)。キュー / dispatch は作らない |
 | 受信の形 | Rx FIFO ではなくメールボックス受信 (ID ごとに 1 本)。CAN FD では FIFO が使えないため (§4.8、段階 1 の決定) |
 | CAN FD | 段階 1 (構造の準備: メールボックス受信、`CanFrame` 64 B、`CanConfig`、ストライド定数) まで入れる。有効化は FD の相手ができてから |
+| 状態の見せ方 | telemetry の `CanStatus` (fault / TEC / REC / 累計 3 つ)。割り込み回数と synced は載せない (人には不要、fault と TEC で分かる) |
 | 送信できないとき | 捨てて false (周期送信なので次で送る) |
 | エラー割り込み | 使わない。状態は `state()` で読む。バスオフは自動復帰 |
 | フィルタ | 受信メールボックスの ID と個別マスクで 0x740 / 0x741 だけ受ける (他の ID では割り込まない) |

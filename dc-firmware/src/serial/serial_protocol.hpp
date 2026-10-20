@@ -8,6 +8,7 @@
 #include "proto/drive_controller.pb.h"
 #include "sensor/sensor_hub.hpp"
 #include "control/control_input.hpp"
+#include "interfaces/can/can_bus.hpp"
 #include "util/loop_stats.hpp"
 
 #define SENSOR_SEND_INTERVAL 20  // ms (50Hz)
@@ -35,6 +36,8 @@ class SerialProtocol {
                                float duty,
                                const LoopStats::Snapshot& sys,
                                const ControlInput& control,
+                               const CanState& canState,
+                               const CanStats& canStats,
                                uint32_t nowMs);  // telemetry の timestamp (loop の時刻)
 
     // Debug log message. 直接呼ばず DebugLogger::log を使う (SerialDebugWriter がこれを呼ぶ)
