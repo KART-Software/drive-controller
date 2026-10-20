@@ -10,6 +10,8 @@ import {
   SysStatsSchema,
   ControlStatusSchema,
   ControlStatus_Source,
+  CanStatusSchema,
+  CanStatus_Fault,
   ConfigSchema,
   DebugMessageSchema,
   EtcMode,
@@ -134,6 +136,7 @@ function getFullConfig(): PbConfig {
 
 let mockFsTotal = 262144;
 let mockFsUsed = 250000; // 初期を満杯近くにして FS フルダイアログを mock で確認できるように
+let mockCanFrames = 0;
 
 function configRespValue() {
   return {
@@ -271,6 +274,16 @@ function sensorTick() {
     logDrops: 0,
     loopMaxUsBoot: 9000,
   });
+  // CAN バスのモック: 正常、0x740 / 0x741 相当を約 130 フレーム/s 受けている体
+  mockCanFrames += 3;
+  const can = create(CanStatusSchema, {
+    fault: CanStatus_Fault.CAN_FAULT_ACTIVE,
+    txErrors: 0,
+    rxErrors: 0,
+    rxFrames: mockCanFrames,
+    rxOverrun: 0,
+    txDropped: 0,
+  });
   const control = create(ControlStatusSchema, {
     source: ovActive ? ControlStatus_Source.CONTROL_SOURCE_OVERRIDE : ControlStatus_Source.CONTROL_SOURCE_WAITING_FOR_CAN,
     controlLinkAlive: false,
@@ -286,6 +299,7 @@ function sensorTick() {
     etc,
     sys,
     control,
+    can,
   });
   emitFrame(
     create(DeviceToHostSchema, { payload: { case: "sensor", value: state } }),

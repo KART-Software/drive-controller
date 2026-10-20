@@ -1,10 +1,9 @@
 #pragma once
 
-#include <FlexCAN_T4.h>
-
 #include <array>
 #include <optional>
 
+#include "interfaces/can/can_frame.hpp"
 #include "sensor/sensors.hpp"
 
 // Data to transmit over CAN at each 60Hz tick
@@ -18,7 +17,7 @@ struct CanTxData {
     // 0x602: ax(float32) ay(float32)
     // 0x603: az(float32)
     static constexpr uint8_t FRAME_COUNT = 4;
-    std::array<CAN_message_t, FRAME_COUNT> toFrames() const;
+    std::array<CanFrame, FRAME_COUNT> toFrames() const;
 };
 
 // このノードの状態 (0x60A DC_Status, 33 ms)。0x740 送信の後継 (kart-can 307e038)。
@@ -29,7 +28,7 @@ struct CanStatusData {
     bool autoShift;           // 適用中のオートシフト ON/OFF
     bool starterRelay;        // セルモーターリレー出力 (未実装、常に false)
     bool shutdownLoopClosed;  // Shutdown 回路 (AND) の出力 = SIG_IN
-    CAN_message_t toFrame() const;
+    CanFrame toFrame() const;
 };
 
 // 受信データ: 0x740 Control と 0x741 Shift (送り手は data_logger)。
@@ -49,9 +48,9 @@ struct CanRxData {
     uint32_t shiftFrames = 0;
     unsigned long lastShiftFrameMs = 0;
 
-    void mergeFrame(const CAN_message_t& msg, uint32_t nowMs);  // 受信割り込みから。nowMs を受信時刻として刻む
+    void mergeFrame(const CanFrame& frame, uint32_t nowMs);  // 受信割り込みから。nowMs を受信時刻として刻む
 };
 
 // 受信割り込みの中ですぐ処理すべきフレームか (シフトパドル 0x741。tick を待つと最大 1 ms 遅れる)。
 // それ以外 (0x740 など) は次の tickISR で反映すれば足りる
-bool needsImmediateHandling(const CAN_message_t& msg);
+bool needsImmediateHandling(const CanFrame& frame);

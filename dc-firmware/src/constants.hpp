@@ -172,6 +172,8 @@
 /// CAN Settings ///
 ////////////////////
 
+#define CAN3_RX_PIN 30  // CRX3 (GPIO_EMC_37)。Flexcan3Bus が設定するパッドと一致すること (static_assert)
+#define CAN3_TX_PIN 31  // CTX3 (GPIO_EMC_36)
 #define CAN_BITRATE 1000000       // 1 Mbps。kart-can can.yaml の baudrate と同じ値にする (生成ヘッダにはマクロが出ない)
 // CAN ID / メッセージ定義は kart-can (submodule: dc-firmware/lib/kart-can, 生成 kart_can.h) を単一ソースとする:
 //   TX: 0x600-0x603 (IMU + ギア) / 0x60A DC_Status。tickISR から送る。周期は kart-can の

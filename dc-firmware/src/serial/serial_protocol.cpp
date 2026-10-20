@@ -182,6 +182,8 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
                                     float duty,
                                     const LoopStats::Snapshot& sys,
                                     const ControlInput& control,
+                                    const CanState& canState,
+                                    const CanStats& canStats,
                                     uint32_t nowMs) {
     const std::optional<EtcTarget::Mode> canMode = control.canEtcMode();
     const Imu::Vec3 accel = hub.imu().accel();
@@ -255,6 +257,17 @@ void SerialProtocol::sendSensorData(const SensorHub& hub,
                 .can_etc_mode = canMode ? etcModeToProto(*canMode) : dc_EtcMode_ETC_MODE_UNSPECIFIED,
                 .can_auto_shift = control.canAutoShift(nowMs),
                 .auto_shift_on = control.autoShiftOn(nowMs),
+            },
+            .has_can = true,
+            .can = {
+                .fault = canState.fault == CanState::Fault::Active    ? dc_CanStatus_Fault_CAN_FAULT_ACTIVE
+                         : canState.fault == CanState::Fault::Passive ? dc_CanStatus_Fault_CAN_FAULT_PASSIVE
+                                                                      : dc_CanStatus_Fault_CAN_FAULT_BUS_OFF,
+                .tx_errors = canState.txErrors,
+                .rx_errors = canState.rxErrors,
+                .rx_frames = canStats.rxFrames,
+                .rx_overrun = canStats.rxOverrun,
+                .tx_dropped = canStats.txDropped,
             },
         }},
     };

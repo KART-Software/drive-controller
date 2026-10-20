@@ -6,6 +6,7 @@ import {
   ConfigSchema,
   EtcMode,
   ControlStatus_Source,
+  CanStatus_Fault,
 } from "./proto/drive_controller_pb";
 import type {
   Command,
@@ -91,6 +92,24 @@ function toAppSensor(st: PbState): SensorData {
           canEtcMode: modeToString(st.control.canEtcMode),
           canAutoShift: st.control.canAutoShift,
           autoShiftOn: st.control.autoShiftOn,
+        }
+      : undefined,
+    can: st.can
+      ? {
+          fault:
+            st.can.fault === CanStatus_Fault.CAN_FAULT_ACTIVE
+              ? "active"
+              : st.can.fault === CanStatus_Fault.CAN_FAULT_PASSIVE
+                ? "passive"
+                : st.can.fault === CanStatus_Fault.CAN_FAULT_BUS_OFF
+                  ? "busoff"
+                  : "unknown",
+          txErrors: st.can.txErrors,
+          rxErrors: st.can.rxErrors,
+          rxFrames: st.can.rxFrames,
+          rxRate: updateCanRate(st.can.rxFrames),
+          rxOverrun: st.can.rxOverrun,
+          txDropped: st.can.txDropped,
         }
       : undefined,
     sys: st.sys
@@ -297,6 +316,25 @@ function buildConfigFromObject(obj: unknown): PbConfig | undefined {
     starter: o.starter ?? undefined,
     rotation: o.rotation ?? undefined,
   });
+}
+
+// CAN の受信レート: 累計 (rx_frames) の差分を 1 s ごとに更新する。累計が減ったら (デバイスの再起動) やり直す
+const canRate = { t: 0, frames: 0, rate: 0 };
+function updateCanRate(frames: number): number {
+  const now = Date.now();
+  if (canRate.t === 0 || frames < canRate.frames) {
+    canRate.t = now;
+    canRate.frames = frames;
+    canRate.rate = 0;
+    return 0;
+  }
+  const dt = now - canRate.t;
+  if (dt >= 1000) {
+    canRate.rate = Math.round(((frames - canRate.frames) * 1000) / dt);
+    canRate.t = now;
+    canRate.frames = frames;
+  }
+  return canRate.rate;
 }
 
 function buildCommand(

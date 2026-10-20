@@ -20,6 +20,7 @@ export interface SensorData {
   duty: number; // モーター実印加 duty [%] (±100, ETC 停止中 0)
   sys?: SysStatsT; // loop 停止の計測 (直近 1 s 窓)
   control?: ControlStatusT; // 制御入力の受信状態 (CAN 0x740 / 0x741 / override)
+  can?: CanStatusT; // CAN バスの状態 (fault / エラーカウンタ / 累計)
   v: boolean;
   err: number;
   sps?: number;
@@ -52,6 +53,18 @@ export interface ControlStatusT {
   canEtcMode: string; // CAN 側の ETC モード ("" = 未受信)
   canAutoShift: boolean;
   autoShiftOn: boolean; // 適用中 (override 込み)
+}
+
+// CAN バスの状態 (CanStatus)。fault と TEC で「バス自体の問題」と「送り手が黙っている」を見分ける:
+// active かつ TEC 0 ならバスは生きている (誰かが ACK を返している)
+export interface CanStatusT {
+  fault: "active" | "passive" | "busoff" | "unknown";
+  txErrors: number; // TEC
+  rxErrors: number; // REC
+  rxFrames: number; // 受け入れた (0x740 / 0x741) フレームの累計
+  rxRate: number; // 直近 1 s の受信レート [frames/s] (console が累計の差分から計算)
+  rxOverrun: number; // 読む前に次が来て失った累計
+  txDropped: number; // 空きメールボックスがなく捨てた送信の累計
 }
 
 export interface SysStatsT {

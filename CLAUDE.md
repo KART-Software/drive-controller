@@ -27,7 +27,7 @@ pio run -d dc-firmware -e teensy41 -t upload
 pio device monitor -d dc-firmware
 ```
 
-初回 clone 後は `git submodule update --init --recursive` で `FlexCAN_T4` を取得すること。
+初回 clone 後は `git submodule update --init --recursive` で `lib/kart-can` (CAN 定義) を取得すること。
 
 `dc-firmware/pre_build.py` がビルド前に自動で動き、(1) clangd 用の `compile_commands.json` を再生成、(2) nanopb 経由で `spec/proto/` から `dc-firmware/src/proto/drive_controller.pb.{c,h}` を再生成する。**生成された `.pb.{c,h}` を手で編集しないこと。**
 
@@ -90,7 +90,8 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### CAN
 
-- `CanController` + `CanBus` (FlexCAN_T4 サブモジュール, **CAN3 = Teensy 4.1 の pin 30/31**。CAN1 の 22/23 はモーター PWM/DIR に割当済み)。CAN 定義の単一ソースは submodule `lib/kart-can` (`can.yaml` → 生成 `kart_can.h`、仕様は同リポジトリの `docs/can-spec.md`)。TX (`tickISR` から): IMU + ギア (`0x600-0x603`, 16 ms)、状態 `DC_Status (0x60A)` (33 ms: 適用中の ETC モード・オートシフト・Shutdown 回路)。**送信周期は kart-can が生成する `KART_CAN_*_CYCLE_TIME_MS` を使い、ファーム側で定数を持たない** (変えるときは kart-can の `can.yaml` を先に変える)。RX は受信割り込み (`canRxISR`)。RX: `Control (0x740)` (data_logger、33 ms: ETC モード / launch / auto-shift / starter) と `Shift (0x741)` (10 ms: シフトパドル上下)。
+- `CanController` (内容) + `CanBus` (interface、`interfaces/can/can_bus.hpp`) + `Flexcan3Bus` (自前の FlexCAN3 ドライバ、`can/flexcan3_bus.{hpp,cpp}`。仕様は `docs/can_bus_spec.md`)。**CAN3 = Teensy 4.1 の pin 30/31** (`CAN3_RX_PIN` / `CAN3_TX_PIN`。CAN1 の 22/23 はモーター PWM/DIR に割当済み)。フレームは `CanFrame { id, len, data[8] }` (kart-can の pack / unpack に合わせた素の構造体)。FlexCAN_T4 は 2026-10-20 に廃止 (ヘッダ内 static の翻訳単位問題で受信割り込みが無限に再入し loop・USB が止まった。仕様書 §1)。CAN 定義の単一ソースは submodule `lib/kart-can` (`can.yaml` → 生成 `kart_can.h`、仕様は同リポジトリの `docs/can-spec.md`)。TX (`tickISR` から): IMU + ギア (`0x600-0x603`, 16 ms)、状態 `DC_Status (0x60A)` (33 ms: 適用中の ETC モード・オートシフト・Shutdown 回路)。**送信周期は kart-can が生成する `KART_CAN_*_CYCLE_TIME_MS` を使い、ファーム側で定数を持たない** (変えるときは kart-can の `can.yaml` を先に変える)。RX は受信割り込み (`canRxISR`)。RX: `Control (0x740)` (data_logger、33 ms: ETC モード / launch / auto-shift / starter) と `Shift (0x741)` (10 ms: シフトパドル上下)。
+- **ドライバの要点**: 受信は ID ごとの受信メールボックス + 個別マスク (0x740 / 0x741 だけ。他のフレームでは割り込まない。Rx FIFO は CAN FD で使えないので使わない)。受信割り込み (優先度 64、tick と同じ) はメールボックスを読んでコールバック `canRxISR` を**割り込みの文脈**で呼び、末尾で ESR1 のフラグを消す。送信はメールボックス 8〜15 の空きに書き、空きがなければ捨てる (キュー・送信完了割り込みなし)。エラー割り込みは使わず、状態は `CanBus::state()` (active / passive / bus-off、TEC / REC)、回数は `stats()` で読む。バスオフは自動復帰。`begin()` は `CanConfig` (ビットレート、FD) を受け、対応していない設定には false を返す。CAN FD は構造だけ備えてある (`CanFrame` 64 B、メールボックス受信、ストライド定数。有効化は未対応、仕様書 §4.8)。状態は telemetry の `Sensor.can` (`CanStatus`: fault / TEC / REC / 受信・取りこぼし・捨ての累計) で console に出る (Control Input パネルと sys-stats 行)。fault が active で TEC が 0 ならバスは生きている (0x740 が来ないのは送り手の問題)。
 - 途絶時のフォールバックは `ControlInput::update()` が持つ (`CanRxData` は受信した値と時刻だけを持つ)。Control が 200 ms 途絶したら mode を NORMAL に、launch / auto-shift / starter を false にフォールバック。**`MOTOR_OFF` はラッチ状態であり、CAN 断で自動復帰させない。** 自動復帰パスを追加しないこと。Shift は 100 ms 途絶で両パドル 0。起動後に一度も受信していない間は途絶扱いにしない。
 - 制御フレームの byte0 で `UNSPECIFIED (0)` や未知値を受信した場合は **現在モードを維持** し、`lastControlFrameMs` のみ更新する (ハートビート扱い、意図的設計)。
 - **制御入力は `ControlInput` (`src/control/`) が唯一の入口** (docs/control_input_spec.md)。消費側 (main のモード反映・アーミング③、`AutoShifter`、`ExperimentRunner`、ログ、telemetry) は入力元を知らない。ETC モードは (1) console の上書き → (2) 0x740 を起動後に一度も受信していなければ **MOTOR_OFF で待つ** → (3) CAN の受信値、の順で決まる。console の上書き (`SetControlOverrideCmd`) はベンチ用で RAM のみ。**0x740 を受信している間は拒否し、受信が始まったら自動解除**する (車載時にドライバーのスイッチを上書きしないため)。GPIO のモードノブ / auto-shift スイッチ / シフトパドル入力は廃止した。
