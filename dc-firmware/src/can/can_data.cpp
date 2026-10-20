@@ -5,17 +5,17 @@ namespace {
 
 // kart-can の pack 関数でペイロードを詰めたフレームを返す
 template <typename Msg>
-CAN_message_t makeFrame(uint32_t id, uint8_t len, const Msg& m, int (*pack)(uint8_t*, const Msg*, size_t)) {
-    CAN_message_t f = {.id = id, .len = len};
-    pack(f.buf, &m, sizeof(f.buf));
+CanFrame makeFrame(uint32_t id, uint8_t len, const Msg& m, int (*pack)(uint8_t*, const Msg*, size_t)) {
+    CanFrame f = {.id = id, .len = len};
+    pack(f.data, &m, sizeof(f.data));
     return f;
 }
 
 // kart-can の unpack 関数でフレームを構造体にして返す (C の出力引数はここに閉じ込める)
 template <typename Msg>
-Msg unpackFrame(const CAN_message_t& f, int (*unpack)(Msg*, const uint8_t*, size_t)) {
+Msg unpackFrame(const CanFrame& f, int (*unpack)(Msg*, const uint8_t*, size_t)) {
     Msg m = {};
-    unpack(&m, f.buf, f.len);
+    unpack(&m, f.data, f.len);
     return m;
 }
 
@@ -57,7 +57,7 @@ CanEtcMode modeToCan(EtcTarget::Mode m) {
 
 }  // namespace
 
-std::array<CAN_message_t, CanTxData::FRAME_COUNT> CanTxData::toFrames() const {
+std::array<CanFrame, CanTxData::FRAME_COUNT> CanTxData::toFrames() const {
     return {
         // 0x600: gyro x/y (float32 LE)
         makeFrame(KART_CAN_DC_GYRO_XY_FRAME_ID, KART_CAN_DC_GYRO_XY_LENGTH,
@@ -75,7 +75,7 @@ std::array<CAN_message_t, CanTxData::FRAME_COUNT> CanTxData::toFrames() const {
     };
 }
 
-CAN_message_t CanStatusData::toFrame() const {
+CanFrame CanStatusData::toFrame() const {
     return makeFrame(KART_CAN_DC_STATUS_FRAME_ID, KART_CAN_DC_STATUS_LENGTH,
                      kart_can_dc_status_t{
                          .etc_mode = static_cast<uint8_t>(modeToCan(etcMode)),
@@ -87,7 +87,7 @@ CAN_message_t CanStatusData::toFrame() const {
                      kart_can_dc_status_pack);
 }
 
-void CanRxData::mergeFrame(const CAN_message_t& msg, uint32_t nowMs) {
+void CanRxData::mergeFrame(const CanFrame& msg, uint32_t nowMs) {
     // Control (0x740): byte0 etc_mode / byte1 launch / byte2 auto_shift / byte3 starter。
     // byte0-2 は旧 DLC 3 フレームと互換なので len >= 3 で受け、starter は len >= 4 のときだけ読む。
     if (msg.id == KART_CAN_CONTROL_FRAME_ID && msg.len >= 3) {
@@ -110,6 +110,6 @@ void CanRxData::mergeFrame(const CAN_message_t& msg, uint32_t nowMs) {
     }
 }
 
-bool needsImmediateHandling(const CAN_message_t& msg) {
+bool needsImmediateHandling(const CanFrame& msg) {
     return msg.id == KART_CAN_SHIFT_FRAME_ID && msg.len >= KART_CAN_SHIFT_LENGTH;
 }

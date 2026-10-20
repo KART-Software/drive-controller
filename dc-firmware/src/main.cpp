@@ -3,6 +3,7 @@
 #include <kart_can.h>
 
 #include "can/can_controller.hpp"
+#include "can/flexcan3_bus.hpp"
 #include "commands/command_controller.hpp"
 #include "commands/command_router.hpp"
 #include "configurator.hpp"
@@ -46,7 +47,8 @@ volatile uint32_t tickCount = 0;
 
 Flash flash;
 SensorHub sensorHub(sysClock);
-CanController canController(sensorHub);
+Flexcan3Bus canBus;  // CAN3 (pin 30 / 31) のドライバ (docs/can_bus_spec.md)
+CanController canController(sensorHub, canBus);
 // ドライバー指令の唯一の入口 (CAN 0x740 / 0x741 + console override)。docs/control_input_spec.md
 ControlInput controlInput(canController.rxData());
 
@@ -229,10 +231,10 @@ void tickISR() {
 
 // FlexCAN3 の受信割り込み (優先度 64 = tickISR と同じなので互いに割り込まない)。
 // 即時に処理すべき入力 (0x741 のシフトパドル) は受けたその場でシフターへ渡す (tick を待たない)
-void canRxISR(const CAN_message_t& msg) {
+void canRxISR(const CanFrame& frame) {
     const uint32_t now = sysClock.nowMs();  // 受信時刻
-    canController.receive(msg, now);
-    if (needsImmediateHandling(msg)) {
+    canController.receive(frame, now);
+    if (needsImmediateHandling(frame)) {
         const CanRxData& rx = canController.rxData();
         autoShifter.onPaddles(rx.shiftUp, rx.shiftDown, sysClock.nowUs());  // パルスの開始時刻 = 出力を立てた時刻
     }
@@ -279,7 +281,8 @@ void setup() {
     // かつ MOTOR_OFF でない場合に tickISR の ETC アーミングが startEtc() で ON にする。
 
     // CAN は受信割り込みがシフターを呼ぶので、シフターの初期化の後で始める
-    canController.begin(canRxISR, CAN_RX_ISR_PRIORITY);
+    if (!canController.begin(canRxISR, CAN_RX_ISR_PRIORITY))
+        DebugLogger::log("CAN: unsupported config (bitrate / FD)");
 
     // ADC は DMA 駆動。16kHz ISR は非ブロッキング (DMA 結果の反映 + 次 kick のみ) なので
     // USB を枯渇させない。IMU も同じ ISR から IMU_SAMPLING_DIVIDER 回に 1 回 (8 kHz) DMA で読む。
@@ -336,6 +339,20 @@ void loop() {
     // SD ロギング: tick がリングへ積んだレコードをまとめて書く (4 KB 以上で最大 8 KB、2 s ごとに sync、100 MB でファイル切り替え)。
     // ここで loop が止まってもリング (≈2 s) が吸収する。所要は LoopStats (telemetry SysStats.sd_max_us / LogRecord sd_max_us)
     sensorLogger.service(now);
+
+#if defined(BENCH_DEBUG)
+    // CAN のベンチ用: 受信・送信・割り込みの回数とコントローラの状態を 1 s ごとに出す
+    static Every canDiag{1000};
+    if (canDiag.due(now)) {
+        const CanStats st = canBus.stats();
+        const CanState cs = canBus.state();
+        const CanRxData& rx = canController.rxData();
+        DebugLogger::log("CAN rx %lu (ctrl %lu shift %lu) overrun %lu txdrop %lu isr %lu | fault %u tec %u rec %u sync %u",
+                         (unsigned long)st.rxFrames, (unsigned long)rx.controlFrames, (unsigned long)rx.shiftFrames,
+                         (unsigned long)st.rxOverrun, (unsigned long)st.txDropped, (unsigned long)st.isrCount,
+                         (unsigned)cs.fault, (unsigned)cs.txErrors, (unsigned)cs.rxErrors, (unsigned)cs.synced);
+    }
+#endif
 
     // ISR (tick / CAN 受信) が積んだ debug を送る
     DebugLogger::service();
