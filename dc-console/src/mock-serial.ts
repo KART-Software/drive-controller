@@ -324,6 +324,9 @@ function handleCommand(cmd: Command): void {
       case "setRtc":
         emitResponse(create(ResponseSchema, { id, ok: true }));
         break;
+      case "formatSd":
+        emitResponse(create(ResponseSchema, { id, ok: true }));
+        break;
       case "formatFs":
         mockFsUsed = 700; // フォーマットで空き容量回復、設定は保持
         configChanged = false;

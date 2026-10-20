@@ -99,6 +99,7 @@ CommandController commandController(configurator,
                                     sensorHub.mut.target(),
                                     experimentRunner,
                                     controlInput,
+                                    sensorLogger,
                                     sysClock);
 
 void sensorSamplingISR() {

@@ -237,6 +237,18 @@ void formatFs(void* ctx, const dc_Command& cmd) {
     sendConfigResponse(c, cmd.id, ok);     // 更新後の fs_used/fs_total を返す
 }
 
+// SD カードを exFAT でフォーマットし、新しいディレクトリでログを始め直す (docs/loop_nonblocking_spec.md §7.7)。
+// ETC が動いている間は拒否する (走行中に loop を数秒止めないための歯止め。安全の条件ではない)
+void formatSd(void* ctx, const dc_Command& cmd) {
+    auto* c = static_cast<CommandContainer*>(ctx);
+    if (c->motorController.isOn()) {
+        DebugLogger::log("format_sd: refused (ETC is on)");
+        SerialProtocol::sendResponse(cmd.id, false);
+        return;
+    }
+    SerialProtocol::sendResponse(cmd.id, c->sensorLogger.format());
+}
+
 void startEtcExperiment(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     etc::ExperimentRunner::Type t;
@@ -286,7 +298,7 @@ void setControlOverride(void* ctx, const dc_Command& cmd) {
 void debugStall(void* ctx, const dc_Command& cmd) {
     (void)ctx;
 #if defined(BENCH_DEBUG)
-    const uint32_t ms = min(cmd.body.debug_stall.ms, (uint32_t)2000);
+    const uint32_t ms = min(cmd.body.debug_stall.ms, (uint32_t)5000);
     const uint32_t ticks0 = tickCount;
     delay(ms);
     DebugLogger::log("stall %lu ms: tick ran %lu times", (unsigned long)ms, (unsigned long)(tickCount - ticks0));
@@ -303,8 +315,9 @@ CommandController::CommandController(Configurator& configurator,
                                      EtcTarget& target,
                                      etc::ExperimentRunner& experimentRunner,
                                      ControlInput& controlInput,
+                                     SensorLogger& sensorLogger,
                                      const Clock& clock)
-    : container{configurator, motorController, target, experimentRunner, controlInput, clock} {}
+    : container{configurator, motorController, target, experimentRunner, controlInput, sensorLogger, clock} {}
 
 void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_etc_motor_off_tag, etcMotorOff, &container);
@@ -331,6 +344,7 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_set_clutch_max_tag, setClutchMax, &container);
     router.on(dc_Command_set_transmission_type_tag, setTransmissionType, &container);
     router.on(dc_Command_format_fs_tag, formatFs, &container);
+    router.on(dc_Command_format_sd_tag, formatSd, &container);
     router.on(dc_Command_start_etc_experiment_tag, startEtcExperiment, &container);
     router.on(dc_Command_stop_etc_experiment_tag, stopEtcExperiment, &container);
     router.on(dc_Command_set_control_override_tag, setControlOverride, &container);

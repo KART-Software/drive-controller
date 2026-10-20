@@ -433,6 +433,11 @@ function buildCommand(
         id,
         body: { case: "formatFs", value: {} },
       });
+    case "format_sd":
+      return create(CommandSchema, {
+        id,
+        body: { case: "formatSd", value: {} },
+      });
     case "revert":
       return create(CommandSchema, { id, body: { case: "revert", value: {} } });
     case "set_gps_gear":
