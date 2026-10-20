@@ -1,6 +1,6 @@
 #include "log_record_builder.hpp"
 
-LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::Snapshot& sys) {
+LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, const LoopStats::Snapshot& sys) {
     const auto& [hub, plausibility, control, shifter, motor, experiment, starter] = src;
     const Adc& adc = hub.adc();
     const Imu::Vec3 accel = hub.imu().accel();
@@ -14,17 +14,17 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         f |= LOG_FLAG_SHUTDOWN_SIG;
     if (plausibility.currentlyValid())
         f |= LOG_FLAG_VALID;
-    if (control.autoShiftOn(t_ms))  // 適用中のオートシフト (CAN 0x740 または console override)
+    if (control.autoShiftOn(nowMs))  // 適用中のオートシフト (CAN 0x740 または console override)
         f |= LOG_FLAG_AUTOSHIFT;
-    if (control.launchOn(t_ms))  // launch は凍結 (消費側なし)
+    if (control.launchOn(nowMs))  // launch は凍結 (消費側なし)
         f |= LOG_FLAG_LAUNCH;
     if (starter.relayOn())
         f |= LOG_FLAG_STARTER_RELAY;
-    if (control.starterPressed(t_ms))
+    if (control.starterPressed(nowMs))
         f |= LOG_FLAG_STARTER_SWITCH;
 
     const LogRecord rec = {
-        .t_ms = t_ms,
+        .t_us = tUs,
         .adc = {adc.value[0], adc.value[1], adc.value[2], adc.value[3],
                 adc.value[4], adc.value[5], adc.value[6], adc.value[7]},
         .apps1 = (float)hub.apps1().convertedValue(),
@@ -33,16 +33,17 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         .tps1 = (float)hub.tps1().convertedValue(),
         .tps2 = (float)hub.tps2().convertedValue(),
         .bps = (float)hub.bps().convertedValue(),
+        .clutch = (float)hub.clutch().convertedValue(),
         .accel = {accel[0], accel[1], accel[2]},
         .gyro = {gyro[0], gyro[1], gyro[2]},
-        .wheel = {hub.pulseWheelFL().hz(), hub.pulseWheelFR().hz(),
-                  hub.pulseWheelRL().hz(), hub.pulseWheelRR().hz()},
-        .rpm = hub.pulseEngine().hz(),
-        .clutch_rpm = hub.pulseClutchRpm().hz(),
-        .target_tp = (float)hub.target().getTarget(),
-        .clutch = (float)hub.clutch().convertedValue(),
+        .wheel_hz = {hub.pulseWheelFL().hz(), hub.pulseWheelFR().hz(),
+                     hub.pulseWheelRL().hz(), hub.pulseWheelRR().hz()},
+        .engine_hz = hub.pulseEngine().hz(),
+        .clutch_hz = hub.pulseClutchRpm().hz(),
         .wheel_count = {hub.pulseWheelFL().count(), hub.pulseWheelFR().count(),
                         hub.pulseWheelRL().count(), hub.pulseWheelRR().count()},
+        .target_tp = (float)hub.target().getTarget(),
+        .duty = motor.lastOutput(),  // 停止中は 0 (setMotorOff でクリア = 常に実印加値)
         .errors = plausibility.errorBits(),
         .flags = f,
         .gear = hub.gps().getGear(),
@@ -51,11 +52,9 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         .exp_type = experiment.logType(),
         .exp_index = experiment.logIndex(),
         .exp_phase = experiment.logPhase(),
-        .duty = motor.lastOutput(),  // 停止中は 0 (setMotorOff でクリア = 常に実印加値)
-        .vbat = 0.0f,                // CAN 受信予定 (MoTeC 0x5F1, 別 PR)
         .loop_max_us = sys.loopMaxUs,
         .sd_max_us = sys.sdMaxUs,
-        .safety_max_us = (uint16_t)min(sys.tickMaxUs, (uint32_t)65535),
+        .tick_max_us = (uint16_t)min(sys.tickMaxUs, (uint32_t)65535),
         .log_drops = (uint16_t)min(sys.logDrops, (uint32_t)65535),  // 飽和 (折り返すと「減った」ように見える)
     };
     return rec;

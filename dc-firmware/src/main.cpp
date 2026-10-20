@@ -20,7 +20,8 @@
 #include "serial/serial_protocol.hpp"
 #include "util/flash.hpp"
 #include "util/log/debug_logger.hpp"
-#include "util/log/sd_binary_writer.hpp"
+#include "util/log/log_ring.hpp"
+#include "util/log/sd_log_store.hpp"
 #include "util/log/sensor_logger.hpp"
 #include "util/every.hpp"
 #include "util/flash_write_gate.hpp"
@@ -69,9 +70,12 @@ shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
                                sensorHub.apps1());
 // セルモーターリレー (docs/starter_spec.md)。tickISR がセルスイッチとエンジン回転で駆動する
 starter::StarterController starterController(sensorHub.pulseEngine());
-SdBinaryWriter sdWriter;
+// SD ログ (docs/loop_nonblocking_spec.md §7): tick がリングへ積み、loop がまとめて書く。リング本体 (303 KB) は RAM2
+DMAMEM LogRecord logRingBuf[LogRing::kCapacity];
+LogRing logRing(logRingBuf);
+SdLogStore sdStore;
 LoopStats loopStats(sysClock);  // loop/SD/tickISR の所要時間 (1 s 窓)。telemetry + SD ログへ
-SensorLogger sensorLogger(sdWriter, loopStats, sysClock);
+SensorLogger sensorLogger(sdStore, logRing, loopStats, sysClock);
 // ETC 同定実験モード (ベンチ専用, docs/etc_experiment_mode_spec.md)。目標注入は
 // manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
 // 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
@@ -151,6 +155,17 @@ void armEtc(EtcTarget::Mode ctrlMode, uint32_t now) {
     }
 }
 
+// SD ログの入力 (buildLogRecord が読む相手)。参照は起動時に一度だけ束ねる
+const LogSources logSources = {
+    .hub = sensorHub,
+    .plausibility = plausibilityValidator,
+    .control = controlInput,
+    .shifter = autoShifter,
+    .motor = motorController,
+    .experiment = experimentRunner,
+    .starter = starterController,
+};
+
 // 1 ms ごと (GPT2、優先度 64)。時間の決まった処理はすべてここ (docs/loop_nonblocking_spec.md §6.2)。
 // ISR から Serial / SD / flash / delay を呼ばないこと (debug は DebugLogger::log でよい。USB への出力は
 // SerialDebugWriter がキューにためて loop で送る)。
@@ -204,7 +219,10 @@ void tickISR() {
         });
     }
 
-    // 12 自身の所要時間 (telemetry SysStats.tick_max_us / LogRecord safety_max_us)
+    // 11 ログ 1 レコード採取 → リング (loop が SD へ書く)。無効 (カードなし / 停止) なら SensorLogger が数えるだけ
+    sensorLogger.capture([&] { return buildLogRecord(nowUs64, now, logSources, loopStats.live()); });
+
+    // 12 自身の所要時間 (telemetry SysStats.tick_max_us / LogRecord tick_max_us)
     loopStats.noteTickUs(elapsed.elapsedUs());
 }
 
@@ -224,18 +242,6 @@ void canRxISR(const CAN_message_t& msg) {
 Every statsWindow{1000};                        // 計測窓 (LoopStats) の確定。起点は setup() 末尾
 Every launchTick{LAUNCH_UPDATE_INTERVAL_MS};    // Launch FSM (凍結中は未使用)
 Every telemetry{SENSOR_SEND_INTERVAL};          // テレメトリ送信
-Every sdLog{1000 / SENSOR_LOG_HZ};              // SD ログ 1 レコード
-
-// SD ログの入力 (buildLogRecord が読む相手)。参照は起動時に一度だけ束ねる
-const LogSources logSources = {
-    .hub = sensorHub,
-    .plausibility = plausibilityValidator,
-    .control = controlInput,
-    .shifter = autoShifter,
-    .motor = motorController,
-    .experiment = experimentRunner,
-    .starter = starterController,
-};
 
 void setup() {
     DebugLogger::initialize(sysClock);
@@ -285,7 +291,7 @@ void setup() {
 
     commandController.registerCommands(commandRouter);
 
-    // SD ロギング: カード挿入時のみ有効。RTC 日時 (未設定なら LOGNNNN) で新ファイルを作る。
+    // SD ロギング: カード挿入時のみ有効 (exFAT でなければフォーマット)。起動ごとに dc_NNNN[_日時]/ を作る (docs/loop_nonblocking_spec.md §7)
     sensorLogger.begin();
 
     // 計測窓の起点 (setup() の所要は計測しない。最初の窓は最初の loop から 1 s)
@@ -306,7 +312,7 @@ void loop() {
     // 計測窓の確定 (1 s)。tick 直後に置くので、直前の周 (= tick が計上した周) とその周の SD 所要が
     // 同じ窓に入る (末尾に置くと SD 所要だけ 1 窓先行して組み合わせがずれる)
     if (statsWindow.due(now)) {
-        loopStats.rollover(0 /* log_drops: Phase 3 */);
+        loopStats.rollover(sensorLogger.drops());
     }
 
 #if defined(LAUNCH_CONTROL_ENABLED)
@@ -326,14 +332,8 @@ void loop() {
                                        loopStats.live(), controlInput, now);
     }
 
-    // SD ロギング (1kHz, カード挿入時のみ)。SD 書き込みストール中はその間 loop が
-    // 止まりサンプルが空く (レアな小ギャップ)。完全ギャップレスが要れば ISR 収集化する。
-    // SD の所要時間は LoopStats が計測している (telemetry SysStats.sd_max_us / LogRecord v4 sd_max_us)。
-    // 毎秒の flush で数 ms、カード遅延で数十 ms の停止がある。解消は Phase 3 (リングバッファ + ISR 採取,
-    // docs/loop_nonblocking_spec.md §7)。
-    if (sensorLogger.active() && sdLog.due(now)) {
-        sensorLogger.log(buildLogRecord(now, logSources, loopStats.live()));
-    }
+    // SD ロギング: tick がリングへ積んだレコードをまとめて書く (4 KB 以上で最大 8 KB、2 s ごとに sync、100 MB でファイル切り替え)。
+    // ここで loop が止まってもリング (≈2 s) が吸収する。所要は LoopStats (telemetry SysStats.sd_max_us / LogRecord sd_max_us)
     sensorLogger.service(now);
 
     // ISR (tick / CAN 受信) が積んだ debug を送る
