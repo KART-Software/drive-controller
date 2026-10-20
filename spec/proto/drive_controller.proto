@@ -227,7 +227,7 @@ message SysStats {
   uint32 loop_max_us      = 1;  // loop 1 周の最大 [µs]
   uint32 loop_mean_us     = 2;  // 平均
   uint32 sd_max_us        = 3;  // SD write/flush 1 回の最大
-  uint32 safety_max_us    = 4;  // tickISR 1 回の最大 (安全層・モーター制御などを含む)
+  uint32 tick_max_us      = 4;  // tickISR 1 回の最大 (安全層・モーター制御・ログ採取などを含む)
   uint32 log_drops        = 5;  // リング溢れ累積 (Phase 3 以降、それまで 0)
   uint32 loop_max_us_boot = 6;  // 起動以来の loop 1 周の最大
 }

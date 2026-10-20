@@ -98,7 +98,7 @@ function toAppSensor(st: PbState): SensorData {
           loopMaxUs: st.sys.loopMaxUs,
           loopMeanUs: st.sys.loopMeanUs,
           sdMaxUs: st.sys.sdMaxUs,
-          safetyMaxUs: st.sys.safetyMaxUs,
+          tickMaxUs: st.sys.tickMaxUs,
           logDrops: st.sys.logDrops,
           loopMaxUsBoot: st.sys.loopMaxUsBoot,
         }

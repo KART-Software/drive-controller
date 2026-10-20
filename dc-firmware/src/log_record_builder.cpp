@@ -55,7 +55,7 @@ LogRecord buildLogRecord(uint32_t t_ms, const LogSources& src, const LoopStats::
         .vbat = 0.0f,                // CAN 受信予定 (MoTeC 0x5F1, 別 PR)
         .loop_max_us = sys.loopMaxUs,
         .sd_max_us = sys.sdMaxUs,
-        .safety_max_us = (uint16_t)min(sys.safetyMaxUs, (uint32_t)65535),
+        .safety_max_us = (uint16_t)min(sys.tickMaxUs, (uint32_t)65535),
         .log_drops = (uint16_t)min(sys.logDrops, (uint32_t)65535),  // 飽和 (折り返すと「減った」ように見える)
     };
     return rec;

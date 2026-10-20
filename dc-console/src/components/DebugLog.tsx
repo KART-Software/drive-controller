@@ -41,7 +41,7 @@ function SysStatsLine() {
       if (p.drops >= 0 && s.logDrops > p.drops) p.dropAt = Date.now();
       p.drops = s.logDrops;
       const warn = s.loopMaxUs >= 20000 || Date.now() - p.dropAt < 10000;
-      const key = `${s.loopMaxUs},${s.loopMeanUs},${s.loopMaxUsBoot},${s.sdMaxUs},${s.safetyMaxUs},${s.logDrops},${warn}`;
+      const key = `${s.loopMaxUs},${s.loopMeanUs},${s.loopMaxUsBoot},${s.sdMaxUs},${s.tickMaxUs},${s.logDrops},${warn}`;
       if (key !== p.key) {
         p.key = key;
         setView({ sys: s, warn });
@@ -55,7 +55,7 @@ function SysStatsLine() {
   return (
     <div class="sys-stats" style={{ color: warn ? "var(--warn)" : "var(--text-dim)", fontSize: "0.8em" }}>
       loop max {ms(sys.loopMaxUs)} ms (mean {ms(sys.loopMeanUs)}, boot max {ms(sys.loopMaxUsBoot)}) | SD max{" "}
-      {ms(sys.sdMaxUs)} ms | safety ISR max {ms(sys.safetyMaxUs)} ms | log drops {sys.logDrops}
+      {ms(sys.sdMaxUs)} ms | tick max {ms(sys.tickMaxUs)} ms | log drops {sys.logDrops}
     </div>
   );
 }

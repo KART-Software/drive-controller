@@ -155,7 +155,7 @@ void armEtc(EtcTarget::Mode ctrlMode, uint32_t now) {
 // ISR から Serial / SD / flash / delay を呼ばないこと (debug は DebugLogger::log でよい。USB への出力は
 // SerialDebugWriter がキューにためて loop で送る)。
 void tickISR() {
-    const StopWatch elapsed(sysClock);  // この tick の所要 (LoopStats.safety_max_us)
+    const StopWatch elapsed(sysClock);  // この tick の所要 (LoopStats tick_max_us)
     const uint64_t nowUs64 = sysClock.nowUs64();  // 時刻はこの tick の間ずっとこの値を使う (millis() / micros() は使わない)
     const uint32_t nowUs = (uint32_t)nowUs64;
     const uint32_t now = (uint32_t)(nowUs64 / 1000);
@@ -204,8 +204,8 @@ void tickISR() {
         });
     }
 
-    // 12 自身の所要時間 (telemetry SysStats.safety_max_us / LogRecord safety_max_us)
-    loopStats.noteSafetyUs(elapsed.elapsedUs());
+    // 12 自身の所要時間 (telemetry SysStats.tick_max_us / LogRecord safety_max_us)
+    loopStats.noteTickUs(elapsed.elapsedUs());
 }
 
 // FlexCAN3 の受信割り込み (優先度 64 = tickISR と同じなので互いに割り込まない)。

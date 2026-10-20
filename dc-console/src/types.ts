@@ -58,7 +58,7 @@ export interface SysStatsT {
   loopMaxUs: number;
   loopMeanUs: number;
   sdMaxUs: number;
-  safetyMaxUs: number;
+  tickMaxUs: number;
   logDrops: number;
   loopMaxUsBoot: number;
 }
