@@ -58,10 +58,10 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 `dc-firmware/src/main.cpp` は 4 つの並行コンテキストで動く (docs/loop_nonblocking_spec.md §3.1)。共有状態を触る前に自分のコードがどれに属するか把握すること。**時間の決まった処理はすべて割り込み、`loop()` には遅れてよい処理だけ**を置く:
 
-1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `safety_max_us` (約 10 µs)。
+1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) → **SD ログ 1 レコードの採取** (`buildLogRecord()` → リング) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `tick_max_us` (約 20 µs)。
 2. **`canRxISR`** — FlexCAN3 の受信 (FIFO) 割り込み, 優先度 **64**。`CanRxData` に取り込み、0x741 のシフト入力はその場で `autoShifter.onPaddles()` に渡す。tick と同じ優先度なので互いに割り込まず、シフター・`CanRxData`・`ControlInput` はこの 2 つの間で排他不要。FlexCAN の `events()` は呼ばない (呼ぶとコールバックがキュー経由になる)。
 3. **センサーサンプリング ISR** — `IntervalTimer` (PIT のチャネル 2。0 / 1 は時刻の Lifetime Timer), 周期 62.5 µs, 優先度 **208** (USB より下)。ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleDmaIsr()`)。IMU (IAM-20680HP、SPI1 = LPSPI3) も同じ ISR の `IMU_SAMPLING_DIVIDER` (= 2) 回に 1 回 (8 kHz) で DMA (CS はハードウェア PCS0 = pin 0、120 bit の 1 フレーム)、移動平均 8 サンプル (1 ms)。**SPI1 は IMU 専用** (トランザクションを開いたまま CS をハードウェアにするので、ほかのデバイスはつなげない)。値は `Imu::accel()` / `gyro()` (`interfaces/sensor/imu.hpp`) で移動平均から読む。ブロッキングで読むのは setup の初期化だけ (DMA なしの経路は廃止した)。
-4. **`loop()`** — 非 ISR: telemetry (50 Hz)、コマンドディスパッチ、SD ロギング (1kHz, カード挿入時)、ISR が積んだ debug の送信、launch FSM tick (凍結時はビルドから除外)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。50 Hz telemetry は TX バッファ 1 本分 (2 KB) を残して先に捨てるので、コマンド応答と debug は最後まで届く。
+4. **`loop()`** — 非 ISR: telemetry (50 Hz)、コマンドディスパッチ、SD ログの書き出し (リングからまとめて。カード挿入時)、ISR が積んだ debug の送信、launch FSM tick (凍結時はビルドから除外)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。50 Hz telemetry は TX バッファ 1 本分 (2 KB) を残して先に捨てるので、コマンド応答と debug は最後まで届く。
 
 **時刻は `Clock` で、`millis()` / `micros()` は使わない。** `Clock` はインターフェース (`interfaces/util/clock.hpp`)、実装は `SystemClock` (`util/system_clock.hpp`)。時刻源は PIT の Lifetime Timer (64 bit、24 MHz。ソフトリセットでも 0 に戻る。DWT はソフトリセットで戻らないので使わない)。`SystemClock` は状態を持たず、コンストラクタで PIT を動かす (その時点が時刻の 0。static 初期化なので `IntervalTimer` より前)。`Clock` は読んだ瞬間の時刻 (`nowUs64()` / `nowUs()` / `nowMs()`) だけを返す。tick は先頭で 1 回読んで部品に配る。実体 `sysClock` は `main.cpp` だけが持ち (extern しない)、部品へは時刻を引数で渡すか `Clock` の参照を渡す (`DebugLogger::initialize()`、`StopWatch` を使う部品のコンストラクタ)。区間の計測やタイムアウトは `StopWatch` (`util/stop_watch.hpp`)。時刻はクラスのメンバーにしまわず、使う関数まで引数で渡す (`nowMs_` を持つと、別の文脈が刻んだ時刻のほうが新しくなって差が負になる)。別の文脈 (CAN 受信割り込みなど) が刻んだ時刻との差は符号付きで扱い、新しいものは経過 0 とみなす。`src/interfaces/` はインターフェースを置く場所で、中は `src/` と同じ構成にする。
 
@@ -135,14 +135,18 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### SD ロギング
 
-`SensorLogger` (`dc-firmware/src/util/log/`) が Teensy 4.1 内蔵 SD (SDIO, `BUILTIN_SDCARD`) へセンサーデータを **1kHz・固定長バイナリ**で記録する。**Config の flash (LittleFS) とは別系統**。
+`SensorLogger` (`dc-firmware/src/util/log/`) が Teensy 4.1 内蔵 SD (SDIO、FIFO モード) へセンサーデータを **1 kHz・固定長バイナリ**で記録する (`docs/loop_nonblocking_spec.md` §7 が一次ソース)。**Config の flash (LittleFS) とは別系統**。
 
-- 構造はテキスト用ロガーのバイナリ版で対になっている: `BinaryWriter` (interface) ↔ `LogWriter` (interface、`interfaces/util/log/`)、`SdBinaryWriter` (SD I/O) ↔ `SerialDebugWriter`、`SensorLogger` (facade) ↔ `DebugLogger`。フォーマット (`LogHeader` / `LogRecord`, v4 = 148B/レコード) は `util/log/log_record.hpp`。
-- **カード挿入時のみ有効**・**電源投入毎に新ファイル**: `dc_log_YYYYMMDD_HHMMSS.bin` (RTC 設定時) / `dc_log_NNNN.bin` (未設定時)。RTC は `setSyncProvider(Teensy3Clock.get)` で起動時反映、`set_rtc` で更新。
-- レコード生成は**純粋関数** `buildLogRecord()` (`src/log_record_builder.{hpp,cpp}`) に集約 — 全入力を const 参照で受け、`SensorHub` 等の public const getter から読むだけで副作用なし。`SensorHub` はログ形式に依存しない。plausibility の valid/errors は `PlausibilityValidator::currentlyValid()` / `errorBits()` (副作用なし const) で読む。
-- 収集・書き込みは `loop()` (1kHz tick + 毎ループ `service()` で定期 flush)。SD 書き込みストール中は loop が止まりその間サンプルが空く (レアな小ギャップ)。ISR (tick/CAN 受信/sampling) は影響を受けない。停止時間は `LoopStats` で計測し telemetry (`SysStats`) と LogRecord v4 に載る。完全ギャップレス化 (リングバッファ + ISR 採取) は `docs/loop_nonblocking_spec.md` §7 (Phase 3)。
-- フォーマット変更時は `SENSOR_LOG_VERSION` を上げ、デコーダ `tools/decode_log.py` (.bin → CSV) を合わせること。
+- 構成: `LogRing` (tick → loop の SPSC リング、2048 レコード ≈ 2 s、本体は `DMAMEM`) / `LogStore` (interface、`interfaces/util/log/`: 媒体とファイルの操作) ← `SdLogStore` (SdFat `SdFs` / `FsFile`) / `SensorLogger` (facade)。テキスト用の `LogWriter` ← `SerialDebugWriter` / `DebugLogger` と対になる。フォーマット (`LogHeader` 32 B / `LogRecord` 148 B) は `util/log/log_record.hpp`。
+- **採取は `tickISR` の最後** (`SensorLogger::capture()` に `buildLogRecord()` を呼ぶラムダを渡す → 有効なら組み立ててリングへ)。1 ms の等間隔で、loop が SD で止まっても欠けない。SD ログが無効 (カードなし / 失敗で停止 / フォーマット中) の間は組み立てずに数えるだけ。`log_drops` は「記録されなかったレコードの数」(無効な間 + リングの溢れ) で、telemetry の `SysStats` と LogRecord に載る。カードなしの運転は想定外なので、drops が増え続けて console が警告色になるのは意図どおり。
+- **書き出しは `loop()` の `service()`**: 4 KB 以上たまったら最大 8 KB をまとめて書き、2 s ごとに `sync()`。loop が止まってもリングが吸収する (3 s 止まると約 1 s 分が drops)。失敗したらその起動では止める (通知しない)。
+- **カード**: 起動時に挿さっているときだけ。**exFAT でなければ (マウントできないものも) 起動時にフォーマットする** (カードはログ専用)。起動ごとに `dc_NNNN[_YYYYMMDD_HHMMSS]/` を作り、中に `0000.bin`, `0001.bin`, … を **100 MB ずつ事前確保**して順に書く (≈ 11.3 分/ファイル)。満杯なら一番古いファイル (最小の `NNNN` の最小の番号。空になったディレクトリも) を消す。ルートで見るのは `dc_` + 4 桁のディレクトリだけ。
+- 時刻は `t_us` (64 bit、`Clock`)。絶対時刻はヘッダの `rtc_epoch` + `rtc_t_us` (起動時に 1 回) から。RTC は `setSyncProvider(Teensy3Clock.get)` で起動時反映、`set_rtc` で更新。
+- `format_sd` (console の Format SD、確認ダイアログ): ETC 動作中 (`motorController.isOn()`) は拒否 (走行中に loop を止めないための歯止め)。ログを止めて exFAT にフォーマットし、新しいディレクトリで再開 (約 0.1 s)。
+- レコード生成は**純粋関数** `buildLogRecord()` (`src/log_record_builder.{hpp,cpp}`) に集約 — 全入力を const 参照で受け、`SensorHub` 等の public const getter から読むだけで副作用なし。`SensorHub` はログ形式に依存しない。plausibility の valid/errors は `PlausibilityValidator::currentlyValid()` / `errorBits()` (副作用なし const) で読む。レコードの `loop_max_us` 等は loop が集計する値を tick が読む (診断用なので途中の値でもよい)。
+- フォーマット変更時は `tools/decode_log.py` (ディレクトリ → CSV。ファイルをつなぎ、ゼロのレコードか `t_us` の飛びで止める) を合わせること。開発中は `SENSOR_LOG_VERSION` を 0 のまま上げない (固まったら上げる)。
 - ホスト向けテレメトリの proto (`dc_Sensor`) とは別物: proto = 自己記述・可変長・50–60Hz、SD ログ = 高レート固定バイナリ (memcpy のみ)。
+- ベンチ: `-DSENSOR_LOG_FILE_BYTES=1000000` でファイルを 1 MB にして切り替えを試せる。`teensy41_bench` の `debug_stall` (最大 5 s) で loop を止めて drops を確かめる。カードの中身は `local/sd-reader` (MTP ファーム) で取り出す。
 
 ### コマンドルーティング
 
