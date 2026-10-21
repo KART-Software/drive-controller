@@ -57,7 +57,7 @@ CanEtcMode modeToCan(EtcTarget::Mode m) {
 
 }  // namespace
 
-std::array<CanFrame, CanTxData::FRAME_COUNT> CanTxData::toFrames() const {
+std::array<CanFrame, CanImuData::FRAME_COUNT> CanImuData::toFrames() const {
     return {
         // 0x600: gyro x/y (float32 LE)
         makeFrame(KART_CAN_DC_GYRO_XY_FRAME_ID, KART_CAN_DC_GYRO_XY_LENGTH,
@@ -72,6 +72,58 @@ std::array<CanFrame, CanTxData::FRAME_COUNT> CanTxData::toFrames() const {
         // 0x603: accel z (float32 LE)
         makeFrame(KART_CAN_DC_ACCEL_Z_FRAME_ID, KART_CAN_DC_ACCEL_Z_LENGTH,
                   kart_can_dc_accel_z_t{.accel_z = accel[2]}, kart_can_dc_accel_z_pack),
+    };
+}
+
+namespace {
+
+// 物理値 → kart-can の uint16 (scale 付き)。範囲外は端に丸める (cantools の encode は丸めも飽和もしない)
+uint16_t scaled(float value, float scale) {
+    const float v = value / scale + 0.5f;
+    if (!(v > 0.0f))  // 負と NaN
+        return 0;
+    return v >= 65535.0f ? 65535 : (uint16_t)v;
+}
+
+}  // namespace
+
+std::array<CanFrame, CanSensorData::FRAME_COUNT> CanSensorData::toFrames() const {
+    return {
+        // 0x604: ペダル・スロットル・クラッチ (0.01 %)、後ろブレーキ圧 (0.1 psi)
+        makeFrame(KART_CAN_DC_PEDALS_FRAME_ID, KART_CAN_DC_PEDALS_LENGTH,
+                  kart_can_dc_pedals_t{
+                      .apps = scaled(appsPercent, 0.01f),
+                      .tps = scaled(tpsPercent, 0.01f),
+                      .clutch = scaled(clutchPercent, 0.01f),
+                      .brake_press_rear = scaled(brakeRearPsi, 0.1f),
+                  },
+                  kart_can_dc_pedals_pack),
+        // 0x605: APPS / TPS の生値 (カウントそのまま。受け側が 7.8125e-5 V/count で換算)
+        makeFrame(KART_CAN_DC_ETC_RAW_FRAME_ID, KART_CAN_DC_ETC_RAW_LENGTH,
+                  kart_can_dc_etc_raw_t{.apps_1 = appsRaw[0], .apps_2 = appsRaw[1], .tps_1 = tpsRaw[0], .tps_2 = tpsRaw[1]},
+                  kart_can_dc_etc_raw_pack),
+        // 0x607: 車輪速 (0.01 km/h)
+        makeFrame(KART_CAN_DC_WHEEL_SPEED_FRAME_ID, KART_CAN_DC_WHEEL_SPEED_LENGTH,
+                  kart_can_dc_wheel_speed_t{
+                      .wheel_fl = scaled(wheelKmh[0], 0.01f),
+                      .wheel_fr = scaled(wheelKmh[1], 0.01f),
+                      .wheel_rl = scaled(wheelKmh[2], 0.01f),
+                      .wheel_rr = scaled(wheelKmh[3], 0.01f),
+                  },
+                  kart_can_dc_wheel_speed_pack),
+        // 0x608: 車輪速パルスの累計 (uint16 でラップ)
+        makeFrame(KART_CAN_DC_WHEEL_PULSE_FRAME_ID, KART_CAN_DC_WHEEL_PULSE_LENGTH,
+                  kart_can_dc_wheel_pulse_t{
+                      .pulse_fl = (uint16_t)wheelPulses[0],
+                      .pulse_fr = (uint16_t)wheelPulses[1],
+                      .pulse_rl = (uint16_t)wheelPulses[2],
+                      .pulse_rr = (uint16_t)wheelPulses[3],
+                  },
+                  kart_can_dc_wheel_pulse_pack),
+        // 0x609: エンジン / クラッチ後の回転数 (rpm、整数)
+        makeFrame(KART_CAN_DC_ENGINE_FRAME_ID, KART_CAN_DC_ENGINE_LENGTH,
+                  kart_can_dc_engine_t{.engine_rpm = scaled(engineRpm, 1.0f), .clutch_rpm = scaled(clutchRpm, 1.0f)},
+                  kart_can_dc_engine_pack),
     };
 }
 

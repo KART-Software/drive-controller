@@ -99,7 +99,7 @@ Teensy 4.1 の CAN3 (pin 30 = CRX3、pin 31 = CTX3)。単一インスタンス (
 | 0x30 | IFLAG1 | 割り込みフラグ (w1c。bit n = メールボックス n。送信完了のフラグは割り込みにしない) |
 | 0x34 | CTRL2 | EACEN (マスクの bit 31 / 30 で RTR / IDE も比較) |
 | 0x10 / 0x48 | RXMGMASK / RXFGMASK | (IRMQ = 1 なので RXIMR を使う。同じ値を入れておく) |
-| 0x80 + 16n | MB n: CS / ID / WORD0 / WORD1 | n = 0〜7: 受信 (フィルタの数だけ)、8〜15: 送信。16 B は classic の値 (§4.8) |
+| 0x80 + 16n | MB n: CS / ID / WORD0 / WORD1 | n = 0〜7: 受信 (フィルタの数だけ)、8〜23: 送信 (16 本)。16 B は classic の値 (§4.8) |
 | 0x880 + 4n | RXIMR n | 受信メールボックス n のマスク |
 
 ### 4.1 クロックとピン
@@ -124,14 +124,16 @@ PSEG1 = 4 (5 Tq)、PSEG2 = 2 (3 Tq)、RJW = 1 (2 Tq)。合計 1 + 3 + 5 + 3 = 12
 6. メールボックス: IMASK1 = 0 にして MB 0〜15 の CS / ID / WORD と RXIMR を 0 に。IFLAG1 を全部消す (読んで書き戻す)。
    (Rx FIFO を使う場合は、RFEN を立てる前にこのクリアを行うこと。立てた後に FIFO の予約領域 0x90〜0xDC へ書くと CPU が止まる。)
 7. 受信メールボックス n (フィルタの ID ごと): ID = id << 18、RXIMR n = 0xDFFC0000 (bit 31 RTR、30 IDE、28〜18 ID を全部比較)、
-   CS = RX_EMPTY (0b0100)。送信メールボックス 8〜15: CS = TX_INACTIVE (0b1000)。
+   CS = RX_EMPTY (0b0100)。送信メールボックス 8〜23: CS = TX_INACTIVE (0b1000)。
 8. IMASK1 = 受信メールボックスのビットだけ (送信完了の割り込みは使わない)。
 9. `attachInterruptVector(IRQ_CAN3, isr)`、`NVIC_SET_PRIORITY(IRQ_CAN3, irqPriority)`、`NVIC_ENABLE_IRQ`。
 10. MCR の HALT (と FRZ) を下ろして freeze を抜け、FRZ_ACK が下りるのを待つ。以後 FlexCAN は 11 bit の recessive を待って同期する。
 
 ### 4.4 送信 (`send`、tickISR から)
 classic で扱えないフレーム (`fd` または `len > 8`) は黙って丸めずに `txDropped++` して false。
-MB 8〜15 を順に見て CS の CODE が TX_INACTIVE (0b1000) のものを使う。なければ `txDropped++` して false。
+MB 8〜23 を順に見て CS の CODE が TX_INACTIVE (0b1000) のものを使う。なければ `txDropped++` して false。
+送信メールボックスは 16 本: 1 tick に書く最大は 5 + 1 フレーム (0x604 系 5 本と 0x60A が重なる tick)、1 Mbit/s の classic 8 B は 1 フレーム約 130 µs なので
+普段は次の tick までに全部出るが、他ノードの送信で待たされても 2 tick 分は溜められる (2026-10-21、0x604〜0x609 の追加で 8 → 16)。
 書く順: IFLAG1 の該当ビットを消す (前回の完了フラグ) → CS = INACTIVE → ID = id << 18 → WORD0 / WORD1 (データをビッグエンディアンで詰める)
 → CS = (len << 16) | CODE TX_ONCE (0b1100)。完了すると CODE は INACTIVE に戻り IFLAG1 のビットが立つ (割り込みは出さない。
 次の `send` が消す)。
@@ -176,8 +178,9 @@ Teensy 4.1 で FD ができるのは CAN3 だけで、このドライバはそ�
 |---|---|
 | `can_data.{hpp,cpp}` | `CAN_message_t` → `CanFrame`。`toFrames()` / `toFrame()` / `mergeFrame()` / `needsImmediateHandling()` の型を変える。`<FlexCAN_T4.h>` の include を消す (これで `control_input.hpp` 以下がライブラリから切れる) |
 | `can/can_bus.{hpp,cpp}` | 削除。役割は `interfaces/can/can_bus.hpp` (interface) と `can/flexcan3_bus.{hpp,cpp}` (実装) へ |
-| `can/can_controller.{hpp,cpp}` | `CanBus&` を受け取る (main が `Flexcan3Bus` を作って渡す)。`send()` は `CanTxData::toFrames()` → `bus.send()` を 5 回。`receive()` は `CanFrame` を受ける。`rxTotal` は `bus.stats().rxFrames` に |
+| `can/can_controller.{hpp,cpp}` | `CanBus&` を受け取る (main が `Flexcan3Bus` を作って渡す)。`send()` は `CanImuData::toFrames()` → `bus.send()` を 5 回。`receive()` は `CanFrame` を受ける。`rxTotal` は `bus.stats().rxFrames` に |
 | `main.cpp` | `Flexcan3Bus canBus; CanController canController(canBus);`。`canRxISR(const CanFrame&)`。`begin()` にフィルタ {0x740, 0x741} と `CAN_RX_ISR_PRIORITY` |
+| センサーの送信 (2026-10-21) | `CanSensorData` (`can_data`) + `CanController::sendSensors()`: 0x604 DC_Pedals (APPS1 / TPS1 / クラッチ %、後ろブレーキ psi)、0x605 DC_EtcRaw (APPS / TPS 各 2 系統の ADS8688 カウント)、0x607 DC_WheelSpeed (km/h は車輪センサー `WheelSpeedSensor::kmh()` から。タイヤ直径はセンサーが持ち、未設定なら 0 km/h)、0x608 DC_WheelPulse (累計パルス数 `RotationSensor::pulses()` を uint16 でラップ)、0x609 DC_Engine (エンジン / クラッチ後 rpm)。16 ms 周期で 0x600 系と半周期ずらす (`n % 16 == 8`)。0x606 DC_StrokeRear は 2 台目の ADC が未接続なので送らない。物理値 → uint16 は `scaled()` で丸めて飽和 (負と NaN は 0) |
 | telemetry / console | `Sensor.can` (`CanStatus`: fault、TEC / REC、受信・取りこぼし・捨ての累計) を 50 Hz の State に同梱。console は Control Input パネルに「CAN バス: 正常 (受信 n フレーム/s, TEC) / 警告 (passive) / バスオフ」、画面下の sys-stats 行に数値 (`CAN active rx n/s overrun txdrop TEC REC`)。fault と TEC で「バス自体の問題 (passive / bus-off)」と「バスは生きているが送り手が黙っている (active・TEC 0・受信 0)」を見分ける。bench 専用の debug 行と遮断器は削除 (2026-10-20 レビュー 6) |
 | `lib/FlexCAN_T4` | 検証が終わったら submodule を外す (`.gitmodules`、`lib/`)。`lib/kart-can` はそのまま |
 | ドキュメント | CLAUDE.md の CAN 節 (ドライバの構成、ISR の文脈、禁止事項)、本書の Status |

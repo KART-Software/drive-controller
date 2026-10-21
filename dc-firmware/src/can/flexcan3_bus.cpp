@@ -45,7 +45,7 @@ constexpr uint32_t CODE_TX_INACTIVE = 0x8, CODE_TX_ONCE = 0xC;
 constexpr uint32_t ID_STD_SHIFT = 18;         // MB の ID ワード (bit 28〜18)
 constexpr uint32_t RX_MASK_STD = 0xDFFC0000;  // RTR (31) / IDE (30) / 標準 ID (28〜18) を全部比較する
 
-constexpr uint8_t kFirstTxMb = 8, kLastTxMb = 15;  // MB 0〜7 は受信 (フィルタの数だけ使う)、8〜15 は送信
+constexpr uint8_t kFirstTxMb = 8, kLastTxMb = 23;  // MB 0〜7 は受信 (フィルタの数だけ使う)、8〜23 は送信 (16 本。1 tick に最大 6 + 1 フレーム)
 static_assert(kFirstTxMb == CanRxFilters::kMax, "受信メールボックスの数 = フィルタの最大数");
 constexpr int kBusyRetries = 100;  // 受信メールボックスの BUSY (書き込み中、数十クロック) を待つ上限
 constexpr uint32_t kPadCtl = IOMUXC_PAD_PKE | IOMUXC_PAD_SPEED(2) | IOMUXC_PAD_DSE(6);  // 0x10B0
@@ -98,11 +98,11 @@ bool Flexcan3Bus::begin(const CanConfig& config, const CanRxFilters& filters, Rx
     while (!(reg(MCR) & MCR_FRZACK)) {
     }
 
-    // MCR: 自己受信なし、個別マスク、警告フラグ、FIFO / DMA / FD なし、MB 0〜15
+    // MCR: 自己受信なし、個別マスク、警告フラグ、FIFO / DMA / FD なし、MB 0〜23
     uint32_t mcr = reg(MCR);
     mcr |= MCR_SRXDIS | MCR_IRMQ | MCR_WRNEN;
     mcr &= ~(MCR_RFEN | MCR_DMA | MCR_FDEN | MCR_IDAM_MASK | MCR_MAXMB_MASK);
-    mcr |= kLastTxMb;  // MAXMB = 15
+    mcr |= kLastTxMb;  // MAXMB = 23
     reg(MCR) = mcr;
     reg(CTRL1) = kCtrl1Timing1M;
     reg(CTRL2) |= CTRL2_EACEN;

@@ -7,7 +7,7 @@
 #include "sensor/sensors.hpp"
 
 // Data to transmit over CAN at each 60Hz tick
-struct CanTxData {
+struct CanImuData {
     int8_t gear;
     float gyro[3];   // gx, gy, gz (dps)
     float accel[3];  // ax, ay, az (m/s²)
@@ -17,6 +17,25 @@ struct CanTxData {
     // 0x602: ax(float32) ay(float32)
     // 0x603: az(float32)
     static constexpr uint8_t FRAME_COUNT = 4;
+    std::array<CanFrame, FRAME_COUNT> toFrames() const;
+};
+
+// センサーの物理値と生値 (0x604 DC_Pedals / 0x605 DC_EtcRaw / 0x607 DC_WheelSpeed / 0x608 DC_WheelPulse / 0x609 DC_Engine、16 ms)。
+// 0x606 DC_StrokeRear (後ろサスのストローク) は 2 台目の ADC が未接続なので送らない。
+// 値はドメインの単位で受け取り、kart-can のスケール (uint16) への変換は toFrames() の中で行う
+struct CanSensorData {
+    float appsPercent;      // 採用したアクセルペダル開度 (ETC が使う APPS1) [%]
+    float tpsPercent;       // スロットル開度 (ETC が使う TPS1) [%]
+    float clutchPercent;    // クラッチ位置 [%]
+    float brakeRearPsi;     // 後ろブレーキ圧 [psi]
+    uint16_t appsRaw[2];    // APPS 1 / 2 の生値 (ADS8688 カウント、0〜65535 = 0〜5.12 V)
+    uint16_t tpsRaw[2];     // TPS 1 / 2 の生値
+    float wheelKmh[4];      // FL, FR, RL, RR [km/h]
+    uint32_t wheelPulses[4];  // FL, FR, RL, RR の累計パルス数 (uint16 でラップして送る)
+    float engineRpm;
+    float clutchRpm;        // クラッチ後 (出力軸)
+
+    static constexpr uint8_t FRAME_COUNT = 5;
     std::array<CanFrame, FRAME_COUNT> toFrames() const;
 };
 
