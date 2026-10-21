@@ -2,12 +2,12 @@
 
 #include "can_data.hpp"
 #include "interfaces/can/can_bus.hpp"
-#include "sensor/sensor_hub.hpp"
+#include "sensor/sensor_view.hpp"
 
 // CAN の送受信の内容を決める層。バスは CanBus (interface) で受け取り、ハードウェアは知らない。
 class CanController {
    public:
-    CanController(const SensorHub& sensorHub, CanBus& bus);
+    CanController(const SensorView& sensorHub, CanBus& bus);
     // 受けるのは 0x740 / 0x741 だけ (ハードウェアのフィルタ)。onRx は受信割り込みから 1 フレームごとに呼ばれる。
     // 中で receive() を呼ぶこと。false = バスがこの設定 (CAN_BITRATE、classic) に対応していない
     bool begin(CanBus::RxCallback onRx, uint8_t priority);
@@ -20,7 +20,7 @@ class CanController {
     CanStats busStats() const { return bus_.stats(); }
 
    private:
-    const SensorHub& sensorHub_;
+    const SensorView& sensorHub_;
     CanBus& bus_;
     CanRxData rxData_;
 };

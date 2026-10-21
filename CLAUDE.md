@@ -73,7 +73,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### センサー / ターゲットの所有
 
-- `SensorHub` がすべてのセンサーと `EtcTarget` を所有する。多くのコードは `SensorHub&` を `const` で受け取り、`Configurator` だけが `SensorHub::mut` 経由で mutable アクセサに到達する (意図的な friend-by-API)。
+- `SensorHub` がすべてのセンサーと `EtcTarget` を所有する。**見るだけの部品には `SensorView` (`sensor/sensor_view.hpp`、`sensorHub.view()`) を渡す**: 各センサーへの const 参照の束で、書き換えるメソッドを持たない (型で保証。const の付け忘れでは抜けられない)。`SensorHub&` (書き換え可の getter: 校正の適用、モード反映、回転センサーの設定) を持つのは `main.cpp` と `Configurator` だけ。`EtcTarget` を書き換える部品 (`ExperimentRunner`、`CommandController`) には `sensorHub.target()` を `EtcTarget&` として明示的に渡す。旧 `SensorHub::Mut` (`mut`) は 2026-10-21 に廃止。
 - `EtcTarget` がターゲットスロットル開度を決める: APPS と ITTR (IST コントローラからの CAN コマンド) の切り替え、モード (Normal / Restricted / Calibration / MotorOff)、アイドリングおよびモード別キャップ、オプションの多項式ターゲットカーブ。
 
 ### 回転計測 (車輪速 / エンジン / クラッチ後)

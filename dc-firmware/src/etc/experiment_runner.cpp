@@ -40,7 +40,7 @@ double stepToTp(uint16_t k) {
 
 }  // namespace
 
-ExperimentRunner::ExperimentRunner(const SensorHub& hub,
+ExperimentRunner::ExperimentRunner(const SensorView& hub,
                                    const ControlInput& control,
                                    EtcTarget& target,
                                    const MotorController& motor,

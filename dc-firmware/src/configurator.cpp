@@ -10,20 +10,20 @@ Configurator::Configurator(Flash& flash,
                            shift::AutoShifter& autoShifter,
                            starter::StarterController& starterController)
     : flash(flash),
-      apps1(hub.mut.apps1()),
-      apps2(hub.mut.apps2()),
-      tps1(hub.mut.tps1()),
-      tps2(hub.mut.tps2()),
-      ittr(hub.mut.ittr()),
-      target(hub.mut.target()),
-      gps(hub.mut.gps()),
-      clutch(hub.mut.clutch()),
+      apps1(hub.apps1()),
+      apps2(hub.apps2()),
+      tps1(hub.tps1()),
+      tps2(hub.tps2()),
+      ittr(hub.ittr()),
+      target(hub.target()),
+      gps(hub.gps()),
+      clutch(hub.clutch()),
       motorController(motorController),
       plausibilityValidator(plausibilityValidator),
       launchController(launchController),
       autoShifter(autoShifter),
       starterController(starterController),
-      hub(hub.mut) {}
+      hub(hub) {}
 
 namespace {
 

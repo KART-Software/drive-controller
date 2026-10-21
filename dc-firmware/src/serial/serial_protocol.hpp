@@ -6,7 +6,7 @@
 
 #include "etc/error_handler.hpp"
 #include "proto/drive_controller.pb.h"
-#include "sensor/sensor_hub.hpp"
+#include "sensor/sensor_view.hpp"
 #include "control/control_input.hpp"
 #include "interfaces/can/can_bus.hpp"
 #include "util/loop_stats.hpp"
@@ -30,7 +30,7 @@ EtcTarget::Mode etcModeFromProto(dc_EtcMode m);  // 未指定・未知値は Mot
 class SerialProtocol {
    public:
     // Sensor data (50 Hz).
-    static void sendSensorData(const SensorHub& hub,
+    static void sendSensorData(const SensorView& hub,
                                bool isValid,
                                const etc::ErrorHandler& errorHandler,
                                float duty,

@@ -6,7 +6,7 @@
 #include "interfaces/util/clock.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
-#include "sensor/sensor_hub.hpp"
+#include "sensor/sensor_view.hpp"
 #include "util/log/sensor_logger.hpp"
 
 namespace etc {
@@ -28,7 +28,7 @@ class ExperimentRunner {
     enum class Type : uint8_t { None = 0, PointDwell = 1, Release = 2, Step = 3 };
     enum class Phase : uint8_t { Idle = 0, Settling = 1, Holding = 2, Coasting = 3 };
 
-    ExperimentRunner(const SensorHub& hub,
+    ExperimentRunner(const SensorView& hub,
                      const ControlInput& control,
                      EtcTarget& target,
                      const MotorController& motor,
@@ -71,7 +71,7 @@ class ExperimentRunner {
     void enterPhase(Phase phase, unsigned long now);
     bool stationaryOrTimeout(unsigned long now);  // 静止判定 + タイムアウト (共通部品)
 
-    const SensorHub& hub_;
+    const SensorView& hub_;
     const ControlInput& control_;
     EtcTarget& target_;
     const MotorController& motor_;

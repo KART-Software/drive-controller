@@ -4,7 +4,7 @@
 
 #include "constants.hpp"
 
-CanController::CanController(const SensorHub& sensorHub, CanBus& bus) : sensorHub_(sensorHub), bus_(bus) {}
+CanController::CanController(const SensorView& sensorHub, CanBus& bus) : sensorHub_(sensorHub), bus_(bus) {}
 
 bool CanController::begin(CanBus::RxCallback onRx, uint8_t priority) {
     const CanConfig config = {.bitrate = CAN_BITRATE, .fd = false, .dataBitrate = 0};
