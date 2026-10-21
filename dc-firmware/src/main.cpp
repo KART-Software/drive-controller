@@ -48,30 +48,30 @@ volatile uint32_t tickCount = 0;
 Flash flash;
 SensorHub sensorHub(sysClock);
 Flexcan3Bus canBus;  // CAN3 (pin 30 / 31) のドライバ (docs/can_bus_spec.md)
-CanController canController(sensorHub, canBus);
+CanController canController(sensorHub.view(), canBus);
 // ドライバー指令の唯一の入口 (CAN 0x740 / 0x741 + console override)。docs/control_input_spec.md
 ControlInput controlInput(canController.rxData());
 
-etc::PlausibilityValidator plausibilityValidator(sensorHub.apps1(),
-                                                 sensorHub.apps2(),
+etc::PlausibilityValidator plausibilityValidator(sensorHub.view().apps1(),
+                                                 sensorHub.view().apps2(),
                                                  sensorHub.ittr(),
-                                                 sensorHub.tps1(),
-                                                 sensorHub.tps2(),
+                                                 sensorHub.view().tps1(),
+                                                 sensorHub.view().tps2(),
                                                  sensorHub.target(),
                                                  sensorHub.bps());
-etc::MotorController motorController(sensorHub.target(), sensorHub.tps1());
-launch::LaunchController launchController(sensorHub.pulseEngine(),
-                                          sensorHub.pulseWheelRL(),
-                                          sensorHub.pulseWheelRR(),
-                                          sensorHub.clutch(),
+etc::MotorController motorController(sensorHub.target(), sensorHub.view().tps1());
+launch::LaunchController launchController(sensorHub.view().pulseEngine(),
+                                          sensorHub.view().pulseWheelRL(),
+                                          sensorHub.view().pulseWheelRR(),
+                                          sensorHub.view().clutch(),
                                           flash);
-shift::AutoShifter autoShifter(sensorHub.pulseEngine(),
-                               sensorHub.pulseWheelFL(),
-                               sensorHub.pulseWheelFR(),
-                               sensorHub.gps(),
-                               sensorHub.apps1());
+shift::AutoShifter autoShifter(sensorHub.view().pulseEngine(),
+                               sensorHub.view().pulseWheelFL(),
+                               sensorHub.view().pulseWheelFR(),
+                               sensorHub.view().gps(),
+                               sensorHub.view().apps1());
 // セルモーターリレー (docs/starter_spec.md)。tickISR がセルスイッチとエンジン回転で駆動する
-starter::StarterController starterController(sensorHub.pulseEngine());
+starter::StarterController starterController(sensorHub.view().pulseEngine());
 // SD ログ (docs/loop_nonblocking_spec.md §7): tick がリングへ積み、loop がまとめて書く。リング本体 (303 KB) は RAM2
 DMAMEM LogRecord logRingBuf[LogRing::kCapacity];
 LogRing logRing(logRingBuf);
@@ -81,9 +81,9 @@ SensorLogger sensorLogger(sdStore, logRing, loopStats, sysClock);
 // ETC 同定実験モード (ベンチ専用, docs/etc_experiment_mode_spec.md)。目標注入は
 // manual target 経由、コーストは下の ETC アーミング層が wantsCoast() を見て行う。
 // 開始/停止は console コマンド (前提条件は start() が検証、SD 必須なので logger 参照)。
-etc::ExperimentRunner experimentRunner(sensorHub,
+etc::ExperimentRunner experimentRunner(sensorHub.view(),
                                        controlInput,
-                                       sensorHub.mut.target(),
+                                       sensorHub.target(),
                                        motorController,
                                        plausibilityValidator,
                                        sensorLogger,
@@ -98,7 +98,7 @@ Configurator configurator(flash,
 CommandRouter commandRouter;
 CommandController commandController(configurator,
                                     motorController,
-                                    sensorHub.mut.target(),
+                                    sensorHub.target(),
                                     experimentRunner,
                                     controlInput,
                                     sensorLogger,
@@ -144,7 +144,7 @@ void armEtc(EtcTarget::Mode ctrlMode, uint32_t now) {
     if (!plausibilityValidator.isValid(now)) {
         digitalWrite(SHUTDOWN_RELAY_PIN, LOW);  // ① 点火系を遮断 (恒久)
         stopEtc();
-    } else if (!sensorHub.shutdownSig().isOn() || ctrlMode == EtcTarget::Mode::MotorOff) {
+    } else if (!sensorHub.view().shutdownSig().isOn() || ctrlMode == EtcTarget::Mode::MotorOff) {
         stopEtc();  // ② SIG_IN=LOW または ③ MOTOR_OFF → ETC 停止 (RELAY は HIGH のまま)
     } else if (experimentRunner.wantsCoast()) {
         stopEtc();  // ④ (①②③が常に優先)
@@ -160,7 +160,7 @@ void armEtc(EtcTarget::Mode ctrlMode, uint32_t now) {
 
 // SD ログの入力 (buildLogRecord が読む相手)。参照は起動時に一度だけ束ねる
 const LogSources logSources = {
-    .hub = sensorHub,
+    .hub = sensorHub.view(),
     .plausibility = plausibilityValidator,
     .control = controlInput,
     .shifter = autoShifter,
@@ -184,7 +184,7 @@ void tickISR() {
     sensorHub.readShutdownSig(now);
     controlInput.update(now);  // 新しい 0x740 の取り込み、途絶時のフォールバック、上書きの自動解除
     const EtcTarget::Mode ctrlMode = controlInput.etcMode();
-    sensorHub.mut.target().setMode(ctrlMode);  // MotorOff の実際の停止はアーミングで行う
+    sensorHub.target().setMode(ctrlMode);  // MotorOff の実際の停止はアーミングで行う
 
     // 4〜5 プラウシビリティとアーミング → 6 モーター制御
     armEtc(ctrlMode, now);
@@ -214,11 +214,11 @@ void tickISR() {
         canController.send();
     if (n % KART_CAN_DC_STATUS_CYCLE_TIME_MS == 0) {  // 0x60A DC_Status
         canController.sendStatus({
-            .etcMode = sensorHub.target().getMode(),
+            .etcMode = sensorHub.view().target().getMode(),
             .launchActive = false,
             .autoShift = controlInput.autoShiftOn(now),
             .starterRelay = starterController.relayOn(),
-            .shutdownLoopClosed = sensorHub.shutdownSig().isOn(),
+            .shutdownLoopClosed = sensorHub.view().shutdownSig().isOn(),
         });
     }
 
@@ -275,7 +275,7 @@ void setup() {
 
     // 起動直後の既定モード。0x740 受信前は ControlInput が MOTOR_OFF を返すので、最初の tick で
     // MotorOff に切り替わり、アーミング③が ETC を止めたまま待つ
-    sensorHub.mut.target().setMode(EtcTarget::Mode::MotorOff);
+    sensorHub.target().setMode(EtcTarget::Mode::MotorOff);
     motorController.initialize();
     // モーターは起動時に回さない。SIG_IN=HIGH かつプラウシビリティ違反ラッチなし
     // かつ MOTOR_OFF でない場合に tickISR の ETC アーミングが startEtc() で ON にする。
@@ -331,7 +331,7 @@ void loop() {
 
     // Send sensor data via serial protocol (50Hz)
     if (telemetry.due(now)) {
-        SerialProtocol::sendSensorData(sensorHub, plausibilityValidator.validLatched(),
+        SerialProtocol::sendSensorData(sensorHub.view(), plausibilityValidator.validLatched(),
                                        plausibilityValidator.getErrorHandler(), motorController.lastOutput(),
                                        loopStats.live(), controlInput, canController.busState(), canController.busStats(), now);
     }

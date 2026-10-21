@@ -7,6 +7,7 @@
 #include "freqmeasure_edge_source.hpp"
 #include "interfaces/sensor/rotation_sensor.hpp"
 #include "quadtimer_edge_source.hpp"
+#include "sensor_view.hpp"
 #include "sensors.hpp"
 #include "util/toggle_switch.hpp"
 
@@ -24,50 +25,26 @@ class SensorHub {
     uint32_t imuDmaCount() const { return imu_.dmaCount(); }
     uint32_t imuDmaMissed() const { return imu_.dmaMissed(); }
 
-    // ── const getters (read-only) ──
-    const Apps& apps1() const { return apps1_; }
-    const Apps& apps2() const { return apps2_; }
-    const Tps& tps1() const { return tps1_; }
-    const Tps& tps2() const { return tps2_; }
-    const Ittr& ittr() const { return ittr_; }
-    const Bps& bps() const { return bps_; }
-    const EtcTarget& target() const { return target_; }
-    const GearPositionSensor& gps() const { return gps_; }
-    const ClutchSensor& clutch() const { return clutch_; }
-    const Imu& imu() const { return imu_; }
-    const Adc& adc() const { return adc_; }
-    const RotationSensor& pulseEngine() const { return pulseEngine_; }
-    const RotationSensor& pulseClutchRpm() const { return pulseClutchRpm_; }
-    const RotationSensor& pulseWheelFL() const { return pulseWheelFL_; }
-    const RotationSensor& pulseWheelFR() const { return pulseWheelFR_; }
-    const RotationSensor& pulseWheelRL() const { return pulseWheelRL_; }
-    const RotationSensor& pulseWheelRR() const { return pulseWheelRR_; }
+    // 見るだけの口 (const 参照の束。見るだけの部品にはこれを渡す)
+    const SensorView& view() const { return view_; }
 
-    // SHUTDOWN 回路出力 (点火系 AND の結果)。tickISR が readShutdownSig() で毎 ms 更新。
-    // isOn()==true で ETC 許可。他センサー同様 const 参照で返す。
-    const ToggleSwitch& shutdownSig() const { return shutdownSig_; }
-
-
-    // ── mut: Configurator-only mutable access ──
-    struct Mut {
-        SensorHub& hub;
-        Apps& apps1() { return hub.apps1_; }
-        Apps& apps2() { return hub.apps2_; }
-        Tps& tps1() { return hub.tps1_; }
-        Tps& tps2() { return hub.tps2_; }
-        Ittr& ittr() { return hub.ittr_; }
-        Bps& bps() { return hub.bps_; }
-        EtcTarget& target() { return hub.target_; }
-        GearPositionSensor& gps() { return hub.gps_; }
-        ClutchSensor& clutch() { return hub.clutch_; }
-        // 回転センサーの設定 (config RotationConfig の適用)
-        EdgeRotationSensor& pulseEngine() { return hub.pulseEngine_; }
-        EdgeRotationSensor& pulseClutchRpm() { return hub.pulseClutchRpm_; }
-        EdgeRotationSensor& pulseWheelFL() { return hub.pulseWheelFL_; }
-        EdgeRotationSensor& pulseWheelFR() { return hub.pulseWheelFR_; }
-        EdgeRotationSensor& pulseWheelRL() { return hub.pulseWheelRL_; }
-        EdgeRotationSensor& pulseWheelRR() { return hub.pulseWheelRR_; }
-    } mut{*this};
+    // ── 書き換え可の参照 (SensorHub を持つ main.cpp と Configurator だけが使う: 校正の適用、モード反映、設定) ──
+    Apps& apps1() { return apps1_; }
+    Apps& apps2() { return apps2_; }
+    Tps& tps1() { return tps1_; }
+    Tps& tps2() { return tps2_; }
+    Ittr& ittr() { return ittr_; }
+    Bps& bps() { return bps_; }
+    EtcTarget& target() { return target_; }
+    GearPositionSensor& gps() { return gps_; }
+    ClutchSensor& clutch() { return clutch_; }
+    // 回転センサーの設定 (config RotationConfig の適用)
+    EdgeRotationSensor& pulseEngine() { return pulseEngine_; }
+    EdgeRotationSensor& pulseClutchRpm() { return pulseClutchRpm_; }
+    EdgeRotationSensor& pulseWheelFL() { return pulseWheelFL_; }
+    EdgeRotationSensor& pulseWheelFR() { return pulseWheelFR_; }
+    EdgeRotationSensor& pulseWheelRL() { return pulseWheelRL_; }
+    EdgeRotationSensor& pulseWheelRR() { return pulseWheelRR_; }
 
    private:
     Adc adc_;
@@ -101,5 +78,27 @@ class SensorHub {
 
     // SHUTDOWN 回路出力。アクティブHIGH + 外部 PULLDOWN (素の INPUT)。
     ToggleSwitch shutdownSig_{SHUTDOWN_SIG_IN_PIN, HIGH, ToggleSwitch::InputMode::External};
+
+    // 見るだけの口。メンバの最後 (参照先の全センサーより後) に置く
+    SensorView view_{SensorView::Refs{
+        .apps1 = apps1_,
+        .apps2 = apps2_,
+        .tps1 = tps1_,
+        .tps2 = tps2_,
+        .ittr = ittr_,
+        .bps = bps_,
+        .target = target_,
+        .gps = gps_,
+        .clutch = clutch_,
+        .imu = imu_,
+        .adc = adc_,
+        .pulseEngine = pulseEngine_,
+        .pulseClutchRpm = pulseClutchRpm_,
+        .pulseWheelFL = pulseWheelFL_,
+        .pulseWheelFR = pulseWheelFR_,
+        .pulseWheelRL = pulseWheelRL_,
+        .pulseWheelRR = pulseWheelRR_,
+        .shutdownSig = shutdownSig_,
+    }};
 
 };

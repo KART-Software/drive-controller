@@ -6,7 +6,7 @@
 #include "etc/experiment_runner.hpp"
 #include "etc/motor_controller.hpp"
 #include "etc/plausibility_validator.hpp"
-#include "sensor/sensor_hub.hpp"
+#include "sensor/sensor_view.hpp"
 #include "shift/auto_shifter.hpp"
 #include "starter/starter_controller.hpp"
 #include "util/loop_stats.hpp"
@@ -18,7 +18,7 @@
 // (plausibility の valid は PlausibilityValidator が直近評価をキャッシュした値を読む)。
 // buildLogRecord が読む相手 (すべて const 参照、副作用なし)
 struct LogSources {
-    const SensorHub& hub;
+    const SensorView& hub;
     const etc::PlausibilityValidator& plausibility;
     const ControlInput& control;
     const shift::AutoShifter& shifter;

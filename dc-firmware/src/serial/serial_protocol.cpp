@@ -176,7 +176,7 @@ EtcTarget::Mode etcModeFromProto(dc_EtcMode m) {
     }
 }
 
-void SerialProtocol::sendSensorData(const SensorHub& hub,
+void SerialProtocol::sendSensorData(const SensorView& hub,
                                     bool isValid,
                                     const etc::ErrorHandler& errorHandler,
                                     float duty,
