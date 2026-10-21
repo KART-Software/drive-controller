@@ -121,6 +121,8 @@ void Configurator::calibrate() {
         hub.pulseWheelFR().setDiameterMm(rc.wheel_front.tire_diameter_mm);
         hub.pulseWheelRL().setDiameterMm(rc.wheel_rear.tire_diameter_mm);
         hub.pulseWheelRR().setDiameterMm(rc.wheel_rear.tire_diameter_mm);
+        if (rc.wheel_front.tire_diameter_mm <= 0.0f || rc.wheel_rear.tire_diameter_mm <= 0.0f)
+            DebugLogger::log("config: tire_diameter_mm が 0 (車輪の km/h は 0、auto-shift は常に停車扱い)");
     }
 }
 

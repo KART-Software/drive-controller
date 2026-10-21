@@ -12,7 +12,7 @@ interface Props {
 const FIELDS: { key: keyof AutoShiftConfigT; label: string; step: number }[] = [
   { key: "upshiftRpm", label: "Upshift RPM", step: 100 },
   { key: "downshiftRpm", label: "Downshift RPM", step: 100 },
-  { key: "minWheelHz", label: "Min Wheel Hz", step: 0.5 },
+  { key: "minWheelKmh", label: "Min Wheel km/h", step: 0.5 },
   { key: "throttleOnPct", label: "Throttle On %", step: 1 },
   { key: "cooldownMs", label: "Min interval ms (≥500)", step: 10 },
   { key: "istPulseMs", label: "IST Pulse ms", step: 1 },

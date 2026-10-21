@@ -90,7 +90,7 @@ inline constexpr dc_Config DEFAULT_CONFIG = {
             // RPM しきい値はエンジン特性依存。要実機調整。
             .upshift_rpm = 11000.0f,
             .downshift_rpm = 6000.0f,
-            .min_wheel_hz = 5.0f,  // 停止/走行 境界。実機の wheel teeth に合わせて要調整
+            .min_wheel_kmh = 5.0f,  // 停止/走行 境界 [km/h] (歩く速さ程度)。タイヤ直径 (rotation.wheel_*.tire_diameter_mm) が未設定だと常に停車扱い
             .cooldown_ms = 250,
             .ist_pulse_ms = 15,
             .normal_drive_pulse_ms = 100,

@@ -94,7 +94,7 @@ export type Message = SensorData | DebugMessage | ResponseMessage;
 export interface AutoShiftConfigT {
   upshiftRpm: number;
   downshiftRpm: number;
-  minWheelHz: number;
+  minWheelKmh: number;
   cooldownMs: number;
   istPulseMs: number;
   normalDrivePulseMs: number;

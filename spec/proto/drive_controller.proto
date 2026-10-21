@@ -111,7 +111,7 @@ message TractionConfig {
 message AutoShiftConfig {
   float  upshift_rpm             = 1;  // UP しきい値 (RPM)
   float  downshift_rpm           = 2;  // DOWN しきい値 (RPM)
-  float  min_wheel_hz            = 3;  // 停止/走行 境界 (兼 ON 時の停車抑止しきい)
+  float  min_wheel_kmh           = 3;  // 停止/走行 境界 [km/h] (兼 ON 時の停車抑止しきい)。旧 min_wheel_hz (2026-10-21 に km/h へ)。タイヤ直径 (RotationConfig) が未設定だと常に停車扱い
   uint32 cooldown_ms             = 4;  // シフト間の最短間隔 [ms] (パルス開始→次の開始、両モード)。500 未満は 500
   uint32 ist_pulse_ms            = 5;  // IST: 全シフト共通パルス幅 (ms)
   uint32 normal_drive_pulse_ms   = 6;  // NORMAL 走行中/通常: N スキップ (ms)

@@ -25,7 +25,7 @@ void AutoShifter::begin() {
 void AutoShifter::setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx) {
     upshiftRpm_ = cfg.upshift_rpm;
     downshiftRpm_ = cfg.downshift_rpm;
-    minWheelHz_ = cfg.min_wheel_hz;
+    minWheelKmh_ = cfg.min_wheel_kmh;
     minIntervalMs_ = max(cfg.cooldown_ms, (uint32_t)SHIFT_MIN_INTERVAL_MS);
     istPulseMs_ = cfg.ist_pulse_ms;
     normalDrivePulseMs_ = cfg.normal_drive_pulse_ms;
@@ -46,12 +46,12 @@ float AutoShifter::engineRpm() const {
     return engine_.rpm();
 }
 
-float AutoShifter::wheelHz() const {
-    return (wheelFL_.hz() + wheelFR_.hz()) * 0.5f;
+float AutoShifter::wheelKmh() const {
+    return (wheelFL_.kmh() + wheelFR_.kmh()) * 0.5f;
 }
 
 bool AutoShifter::moving() const {
-    return wheelHz() >= minWheelHz_;
+    return wheelKmh() >= minWheelKmh_;
 }
 
 // ── ① 判断ロジック (純粋判断, 副作用なし。将来の拡張点) ────────────────────

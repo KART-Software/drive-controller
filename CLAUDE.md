@@ -105,7 +105,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - ON/OFF とシフトパドルは `ControlInput` から `tick({.autoOn, .upPressed, .downPressed}, nowUs)` で渡される (入手元は CAN 0x740 byte2 / 0x741、または console の上書き)。0x741 は受信割り込みから `onPaddles()` で**即時**に渡され、その場でパルスを始める (開始時刻は受信した瞬間の `sysClock.nowUs()`、チャタリング除去は送信側の責務)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。パドルは押下状態で渡され、立ち上がり検出は `AutoShifter` が行う。
 - 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。パルスの開始から次の開始までは最短 0.5 s (`SHIFT_MIN_INTERVAL_MS`、config `cooldown_ms` が長ければそちら)。その間の要求は捨てる。
 - パルス幅は transmission/ギア/方向/停車状態で決まる (config 化): IST=単一幅、NORMAL=走行中100ms (N スキップ)・停車中1速UP/2速DOWN 25ms (N 入れ)。
-- ON 走行ロジックは RPM + 車輪速 + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
+- ON 走行ロジックは RPM + 車輪速 (km/h、`min_wheel_kmh`。タイヤ直径が未設定だと常に停車扱い) + ギア + **APPS スロットルゲート** (アクセルオンで UP / オフで DOWN → ハンチング根治)。ダウンは速度ゲートなし。
 - 4 層構成: 判断ロジック (`evaluate`, 将来の拡張点) / 調停 / 出力整形 / I/O。
 - `SensorHub` 全体ではなく必要センサー (engine/wheelFL/wheelFR/gps/apps1) だけを const 参照で受け取る (車輪は `const WheelSpeedSensor&`。エンジンと車輪を取り違えると型で弾かれる)。`tick()` は `tickISR` から毎 ms 呼ばれ、オートシフトの ON/OFF だけで判定する (ETC プラウシビリティには非依存。auto-shift の安全フォールバックは CAN 断→manual)。
 - シフト機構制御 (クラッチ/点火カット/ブリッピング/オーバーレブ保護) は IST コントローラ責務。
