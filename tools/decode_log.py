@@ -13,15 +13,16 @@
   Header (32 B, little-endian, packed):
     char magic[8]="KARTLOG1"; u16 version; u16 record_size; u16 log_hz; u16 dir_number; u16 file_index;
     u16 reserved; u32 rtc_epoch (0=RTC 未設定); u64 rtc_t_us (rtc_epoch を読んだ瞬間の t_us)
-  Record (148 B):
+  Record (152 B):
     u64 t_us; u16 adc[8]; f32 apps1 apps2 ittr tps1 tps2 bps clutch; f32 accel[3]; f32 gyro[3];
     f32 wheel_hz[4]; f32 engine_hz; f32 clutch_hz; u32 wheel_count[4]; f32 target_tp; f32 duty;
     u32 errors; u16 flags; i8 gear; u8 mode; u8 autoshift_state; u8 exp_type exp_index exp_phase;
-    u32 loop_max_us; u32 sd_max_us; u16 tick_max_us; u16 log_drops
+    u32 loop_max_us; u32 sd_max_us; u16 tick_max_us; u16 log_drops; u8 can_fault can_tec can_rec reserved
   t_us は起動からの µs (PIT Lifetime Timer、割り込みが止まっても進む)。絶対時刻 = rtc_epoch + (t_us - rtc_t_us) / 1e6。
   ADC は生値 (キャリブレーションは別途 config で換算)。IMU は mg / dps (平均後)。回転はパルスの Hz (rpm は歯数で換算)。
   mode: EtcTarget::Mode。exp_type: 0=none 1=dwell 2=release 3=step。exp_phase: 0=idle 1=settling 2=holding 3=coasting。
   loop_max_us / sd_max_us / tick_max_us / log_drops は直前の 1 s 窓と現在の窓のここまでの大きい方 (§5)。
+  can_fault: 0=active 1=passive 2=bus-off。can_tec / can_rec はその tick のエラーカウンタ。
 
 終端: ファイルは 100 MB を事前確保しているので、書かれた分より後ろはゼロ (exFAT の有効な長さ)。全バイトがゼロのレコード、
 ファイルの半端、t_us の後退 (減る) で止める。t_us の飛び (欠け) は止めずに stderr へ出す (リングの溢れ、flash 保存の約 150 ms、
@@ -36,8 +37,8 @@ MAGIC = b"KARTLOG1"
 VERSION = 0
 HEADER_FMT = "<8sHHHHHHIQ"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 32
-RECORD_FMT = "<Q8H7f3f3f4fff4IffIHbBBBBBIIHH"
-RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 148
+RECORD_FMT = "<Q8H7f3f3f4fff4IffIHbBBBBBIIHHBBBB"
+RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 152
 GAP_WARN_US = 1_500  # これより飛んだら欠けとして報告する (止めない)
 
 # flags ビット (firmware: log_record.hpp LOG_FLAG_*)
@@ -60,6 +61,7 @@ COLUMNS = (
     + ["gear", "mode", "autoshift_state"]
     + ["exp_type", "exp_index", "exp_phase"]
     + ["loop_max_us", "sd_max_us", "tick_max_us", "log_drops"]
+    + ["can_fault", "can_tec", "can_rec"]
 )
 
 
@@ -151,11 +153,12 @@ def main(argv):
                     errors, flags, gear, mode, ashift = v[34], v[35], v[36], v[37], v[38]
                     exp_type, exp_index, exp_phase = v[39], v[40], v[41]
                     sysv = v[42:46]
+                    canv = v[46:49]  # can_fault can_tec can_rec (v[49] は reserved)
                     flagbits = [(flags >> b) & 1 for _, b in FLAG_BITS]
                     w.writerow(
                         [t_us, t_us / 1e6, abs_time, *adc, *conv, *acc, *gyr, *wheel, engine_hz, clutch_hz,
                          *wc, target_tp, duty, errors, flags, *flagbits, gear, mode, ashift,
-                         exp_type, exp_index, exp_phase, *sysv]
+                         exp_type, exp_index, exp_phase, *sysv, *canv]
                     )
                     n += 1
                 total += n

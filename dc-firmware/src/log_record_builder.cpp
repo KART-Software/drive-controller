@@ -1,7 +1,7 @@
 #include "log_record_builder.hpp"
 
 LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, const LoopStats::Snapshot& sys) {
-    const auto& [hub, plausibility, control, shifter, motor, experiment, starter] = src;
+    const auto& [hub, plausibility, control, shifter, motor, experiment, starter, canBus] = src;
     const Adc& adc = hub.adc();
     const Imu::Vec3 accel = hub.imu().accel();
     const Imu::Vec3 gyro = hub.imu().gyro();
@@ -22,6 +22,8 @@ LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, co
         f |= LOG_FLAG_STARTER_RELAY;
     if (control.starterPressed(nowMs))
         f |= LOG_FLAG_STARTER_SWITCH;
+
+    const CanState can = canBus.busState();  // ESR1 / ECR のレジスタ読み (組の揃いは問わない)
 
     const LogRecord rec = {
         .t_us = tUs,
@@ -56,6 +58,10 @@ LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, co
         .sd_max_us = sys.sdMaxUs,
         .tick_max_us = (uint16_t)min(sys.tickMaxUs, (uint32_t)65535),
         .log_drops = (uint16_t)min(sys.logDrops, (uint32_t)65535),  // 飽和 (折り返すと「減った」ように見える)
+        .can_fault = (uint8_t)can.fault,
+        .can_tec = can.txErrors,
+        .can_rec = can.rxErrors,
+        .reserved = 0,
     };
     return rec;
 }

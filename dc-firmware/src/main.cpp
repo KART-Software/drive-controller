@@ -167,6 +167,7 @@ const LogSources logSources = {
     .motor = motorController,
     .experiment = experimentRunner,
     .starter = starterController,
+    .can = canController,
 };
 
 // 1 ms ごと (GPT2、優先度 64)。時間の決まった処理はすべてここ (docs/loop_nonblocking_spec.md §6.2)。
