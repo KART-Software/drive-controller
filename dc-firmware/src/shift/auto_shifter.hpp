@@ -5,6 +5,7 @@
 #include "constants.hpp"
 #include "proto/drive_controller.pb.h"
 #include "interfaces/sensor/rotation_sensor.hpp"
+#include "interfaces/sensor/wheel_speed_sensor.hpp"
 #include "sensor/sensors.hpp"
 
 namespace shift {
@@ -30,8 +31,8 @@ namespace shift {
 class AutoShifter {
    public:
     AutoShifter(const RotationSensor& engine,
-                const RotationSensor& wheelFL,
-                const RotationSensor& wheelFR,
+                const WheelSpeedSensor& wheelFL,
+                const WheelSpeedSensor& wheelFR,
                 const GearPositionSensor& gps,
                 const Apps& apps);
 
@@ -67,8 +68,8 @@ class AutoShifter {
 
     // -- 入力 (SensorHub 全体ではなく必要分だけ const 参照) --
     const RotationSensor& engine_;
-    const RotationSensor& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
-    const RotationSensor& wheelFR_;
+    const WheelSpeedSensor& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
+    const WheelSpeedSensor& wheelFR_;
     const GearPositionSensor& gps_;
     const Apps& apps_;  // ドライバーのアクセル開度 (スロットルゲート)
 

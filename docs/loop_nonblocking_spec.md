@@ -307,6 +307,10 @@ flash への書き込みは割り込み禁止で約 150 ms かかり、その間
     - `RotationSensor` (`interfaces/sensor/rotation_sensor.hpp`): 使う側に見せる口。`sample()` で
       `RotationSample { hz, rpm, timeUs (窓の中心、Clock の時間軸), windowUs, edges }` を返す。`hz()` / `rpm()` / `count()`。
       tick が書き loop が読むので、2 面のバッファと番号 (seqlock) で組を揃える (割り込みは止めない)。
+      車輪は `WheelSpeedSensor` (`interfaces/sensor/wheel_speed_sensor.hpp`、`RotationSensor` + `mps()` / `kmh()`)。タイヤ直径はセンサーが持ち、
+      使う側は換算しない (2026-10-21、CAN 0x607 で追加)。
+    - 実体: `EdgeRotationSensor` (エンジン / クラッチ後) と `EdgeWheelSpeedSensor` (車輪。中に `EdgeRotationSensor` を持つ合成 + 直径
+      `setDiameterMm()`。継承でなく合成なのは `RotationSensor` のダイヤモンドを避けるため)。
     - `EdgeRateEstimator`: ハードウェアに依存しない計算。tick ごとに (エッジ番号, 時刻) を履歴に入れ、回転を出す。
     - `EdgeSource` (`interfaces/sensor/edge_source.hpp`): ハードウェア。tick ごとに累計エッジ数と、1 つのエッジの (番号, 時刻) を返す。
       - `QuadTimerEdgeSource` (エンジン pin 14 = QuadTimer3 ch2、クラッチ後 pin 15 = ch3): ch2 / ch3 でエッジを数え、空いている ch0 / ch1 を

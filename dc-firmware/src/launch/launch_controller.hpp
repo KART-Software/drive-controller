@@ -7,6 +7,7 @@
 #include "clutch_motor.hpp"
 #include "proto/drive_controller.pb.h"
 #include "interfaces/sensor/rotation_sensor.hpp"
+#include "interfaces/sensor/wheel_speed_sensor.hpp"
 #include "sensor/sensors.hpp"
 #include "util/pid.hpp"
 
@@ -22,8 +23,8 @@ namespace launch {
 class LaunchController {
    public:
     LaunchController(const RotationSensor& engine,
-                     const RotationSensor& wheelRL,
-                     const RotationSensor& wheelRR,
+                     const WheelSpeedSensor& wheelRL,
+                     const WheelSpeedSensor& wheelRR,
                      const ClutchSensor& clutch,
                      Flash& flash);
 
@@ -40,8 +41,8 @@ class LaunchController {
    private:
     // -- sensors & actuator --
     const RotationSensor& engine_;
-    const RotationSensor& wheelRL_;
-    const RotationSensor& wheelRR_;
+    const WheelSpeedSensor& wheelRL_;
+    const WheelSpeedSensor& wheelRR_;
     const ClutchSensor& clutch_;
     ClutchMotor motor_;
     BitePointFile bitePointFile_;

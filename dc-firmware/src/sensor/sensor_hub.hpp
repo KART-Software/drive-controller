@@ -4,6 +4,7 @@
 #include "constants.hpp"
 #include "iam20680hp.hpp"
 #include "edge_rotation_sensor.hpp"
+#include "edge_wheel_speed_sensor.hpp"
 #include "freqmeasure_edge_source.hpp"
 #include "interfaces/sensor/rotation_sensor.hpp"
 #include "quadtimer_edge_source.hpp"
@@ -41,10 +42,10 @@ class SensorHub {
     // 回転センサーの設定 (config RotationConfig の適用)
     EdgeRotationSensor& pulseEngine() { return pulseEngine_; }
     EdgeRotationSensor& pulseClutchRpm() { return pulseClutchRpm_; }
-    EdgeRotationSensor& pulseWheelFL() { return pulseWheelFL_; }
-    EdgeRotationSensor& pulseWheelFR() { return pulseWheelFR_; }
-    EdgeRotationSensor& pulseWheelRL() { return pulseWheelRL_; }
-    EdgeRotationSensor& pulseWheelRR() { return pulseWheelRR_; }
+    EdgeWheelSpeedSensor& pulseWheelFL() { return pulseWheelFL_; }
+    EdgeWheelSpeedSensor& pulseWheelFR() { return pulseWheelFR_; }
+    EdgeWheelSpeedSensor& pulseWheelRL() { return pulseWheelRL_; }
+    EdgeWheelSpeedSensor& pulseWheelRR() { return pulseWheelRR_; }
 
    private:
     Adc adc_;
@@ -61,7 +62,7 @@ class SensorHub {
     Iam20680hp imu_{IMU_CS_PIN};
     uint8_t imuDivCount_ = 0;  // サンプリング ISR の IMU_SAMPLING_DIVIDER 回に 1 回 IMU
 
-    // 回転センサー: ハードウェア (EdgeSource) + 計算 (EdgeRotationSensor)。
+    // 回転センサー: ハードウェア (EdgeSource) + 計算 (EdgeRotationSensor)。車輪はタイヤ直径を持つ EdgeWheelSpeedSensor (車速も出す)。
     // 車輪速は FlexPWM (FreqMeasureMulti)、エンジン / クラッチ後は QuadTimer3 (エッジ数 + キャプチャ)
     FreqMeasureEdgeSource wheelFLSource_{PULSE_WHEEL_FL_PIN};
     FreqMeasureEdgeSource wheelFRSource_{PULSE_WHEEL_FR_PIN};
@@ -69,10 +70,10 @@ class SensorHub {
     FreqMeasureEdgeSource wheelRRSource_{PULSE_WHEEL_RR_PIN};
     QuadTimerEdgeSource engineSource_{PULSE_ENGINE_PIN};
     QuadTimerEdgeSource clutchSource_{PULSE_CLUTCH_RPM_PIN};
-    EdgeRotationSensor pulseWheelFL_{wheelFLSource_};
-    EdgeRotationSensor pulseWheelFR_{wheelFRSource_};
-    EdgeRotationSensor pulseWheelRL_{wheelRLSource_};
-    EdgeRotationSensor pulseWheelRR_{wheelRRSource_};
+    EdgeWheelSpeedSensor pulseWheelFL_{wheelFLSource_};
+    EdgeWheelSpeedSensor pulseWheelFR_{wheelFRSource_};
+    EdgeWheelSpeedSensor pulseWheelRL_{wheelRLSource_};
+    EdgeWheelSpeedSensor pulseWheelRR_{wheelRRSource_};
     EdgeRotationSensor pulseEngine_{engineSource_};
     EdgeRotationSensor pulseClutchRpm_{clutchSource_};
 

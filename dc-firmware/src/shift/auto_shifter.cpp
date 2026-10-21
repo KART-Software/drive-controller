@@ -5,8 +5,8 @@
 namespace shift {
 
 AutoShifter::AutoShifter(const RotationSensor& engine,
-                         const RotationSensor& wheelFL,
-                         const RotationSensor& wheelFR,
+                         const WheelSpeedSensor& wheelFL,
+                         const WheelSpeedSensor& wheelFR,
                          const GearPositionSensor& gps,
                          const Apps& apps)
     : engine_(engine), wheelFL_(wheelFL), wheelFR_(wheelFR), gps_(gps), apps_(apps) {}

@@ -22,7 +22,8 @@ class RotationSensor {
     virtual ~RotationSensor() = default;
 
     virtual RotationSample sample() const = 0;
-    virtual uint32_t count() const = 0;  // 累計のエッジ数 (両エッジなら立ち上がり + 立ち下がり)
+    virtual uint32_t count() const = 0;   // 累計のエッジ数 (両エッジなら立ち上がり + 立ち下がり)
+    virtual uint32_t pulses() const = 0;  // 累計のパルス数 (両エッジ設定なら count() / 2。パルスで数える相手向け)
 
     float hz() const { return sample().hz; }
     float rpm() const { return sample().rpm; }
