@@ -76,7 +76,7 @@ class AutoShifter {
     // -- config --
     float upshiftRpm_ = 0.0f;
     float downshiftRpm_ = 0.0f;
-    float minWheelHz_ = 0.0f;
+    float minWheelKmh_ = 0.0f;
     float throttleOnPct_ = 50.0f;
     uint32_t minIntervalMs_ = SHIFT_MIN_INTERVAL_MS;  // パルス開始→次の開始の最短 (config cooldown_ms、下限 0.5 s)
     uint32_t istPulseMs_ = 15;
@@ -100,7 +100,7 @@ class AutoShifter {
     // -- helpers --
     void writeOutputs(bool up, bool down);
     float engineRpm() const;
-    float wheelHz() const;
+    float wheelKmh() const;
     bool moving() const;
     Dir evaluate() const;  // ① 判断ロジック (純粋判断, 副作用なし)
     uint32_t pulseWidthFor(int8_t gear, Dir dir) const;

@@ -155,6 +155,7 @@ MB 8〜23 を順に見て CS の CODE が TX_INACTIVE (0b1000) のものを使�
 
 ### 4.6 状態 (`state`、どの文脈からでも)
 ESR1 の FLTCONF (bits 5:4: 00 = active、01 = passive、1x = bus-off)、SYNCH (bit 18)、ECR の TEC (bits 7:0) / REC (bits 15:8) を読んで返す。
+bus-off の間、TEC には復帰の進み (11 bit の recessive を見た回数 0〜127) が入る (ベンチで観測、§6.1)。
 
 ### 4.7 作らないもの
 送信キュー、送信完了割り込み、Rx FIFO、拡張 ID、リモートフレーム、DMA、リッスンオンリー、ループバック、タイムスタンプ、
@@ -214,6 +215,7 @@ Teensy 4.1 で FD ができるのは CAN3 だけで、このドライバはそ�
 | 翻訳単位 | `FlexCAN_T4.h` を include するファイル 0。submodule を削除 |
 | 初期化でのはまり | (Rx FIFO 版で) RFEN を立てた後にメールボックス 0〜15 を 0 で埋めると、FIFO エンジンの予約領域 (0x90〜0xDC) への書き込みで CPU が止まる (USB も tick も止まる)。クリアは RFEN の前に行う。メールボックス版では FIFO を使わない |
 | RX を抜く | 抜いている間に TEC が上がり error passive (fault 1、TEC 128) まで進んだ。その間も Teensy は止まらず telemetry 49 Hz。挿し直すと 1 s 以内に active (TEC 0) に戻り送受信再開。バスオフまでは進まなかった (RX が浮いて dominant に見えると送信自体をしないため)。バスオフからの自動復帰は未確認 (CANH / CANL の短絡が要る) |
+| バスオフ (2026-10-21) | モジュールをバスから外す → ACK が付かず TEC 128 で error passive に止まり (passive では ACK エラーで増えない)、送信の捨てが約 590/s。CANH–CANL を短絡 → dominant が recessive に見えてビットエラー → **bus-off**。短絡中は FlexCAN の自動復帰 (128 × 11 bit の recessive ≈ 1.4 ms) → 送り直し → active → passive → bus-off を**約 2 ms 周期で繰り返す** (1 kHz の SD ログ: bus-off 75 % / passive 24 % / active 1 %。bus-off 中の TEC は復帰の進み 0〜127 を示す)。短絡を外す → passive 128 で安定、バスに戻す → ACK で TEC が 1 ずつ減り 1 s 以内に active / TEC 0、送受信が再開。Teensy は全期間 telemetry 50 Hz のまま |
 
 ## 7. 決定事項
 

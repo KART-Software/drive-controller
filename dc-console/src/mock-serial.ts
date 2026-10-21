@@ -76,7 +76,7 @@ const gpsRawValues = [32768, 32768, 32768, 32768, 32768]; // IST: N,1,2,3,4
 const autoShift = {
   upshiftRpm: 11000,
   downshiftRpm: 6000,
-  minWheelHz: 5,
+  minWheelKmh: 5,
   cooldownMs: 250,
   istPulseMs: 15,
   normalDrivePulseMs: 100,

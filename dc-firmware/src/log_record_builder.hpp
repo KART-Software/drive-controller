@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "can/can_controller.hpp"
 #include "control/control_input.hpp"
 #include "etc/experiment_runner.hpp"
 #include "etc/motor_controller.hpp"
@@ -25,6 +26,7 @@ struct LogSources {
     const etc::MotorController& motor;
     const etc::ExperimentRunner& experiment;
     const starter::StarterController& starter;
+    const CanController& can;  // バスの状態 (fault / TEC / REC)
 };
 
 // tUs: この tick の時刻 (Clock の µs)、nowMs: 同じ時刻の ms (ControlInput の途絶判定に渡す)、

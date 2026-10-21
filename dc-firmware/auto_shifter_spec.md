@@ -105,7 +105,9 @@ pulseWidthFor(gear, dir, moving):
         return normal_drive_pulse_ms        // N をスキップ/通常 (config)
 ```
 
-- `moving = vWheelHz >= min_wheel_hz`（§7 の停止判定と同一しきい値）。
+- `moving = vWheelKmh >= min_wheel_kmh`（§7 の停止判定と同一しきい値）。
+  車速の単位は km/h (2026-10-21 に Hz から変更。既定 5 km/h)。タイヤ直径 (`RotationConfig.wheel_*.tire_diameter_mm`) が未設定 (0) だと
+  車速は常に 0 = 停車扱いになる (UP しない、停車時の manual フォールバック)。
 - **IST**（パターン N-1-2-3-4、N は最下段）: N が隣接ギア間に挟まらないので、全シフト
   共通の `ist_pulse_ms` でよい。
 - **NORMAL**（パターン 1-N-2-3-4-5-6、N が 1 と 2 の間）:
@@ -144,7 +146,7 @@ else:                                       // auto
         requestDir = evaluate()
 ```
 
-> `stopped = vWheelHz < min_wheel_hz`。`gear <= 2` は **不明(-1) / N(0) / 1速 / 2速** を含む。
+> `stopped = vWheelKmh < min_wheel_kmh`。`gear <= 2` は **不明(-1) / N(0) / 1速 / 2速** を含む。
 > 停車中のこの帯は **auto を停止してドライバーに渡す**。理由は 2 つ:
 > - §4 で「停車中 2速DOWN = N(25ms)」と決めているため、ここで auto が 2→1 ダウンシフト
 >   すると意図と競合する。N の出入りはこの帯でドライバーが管理する。
@@ -181,14 +183,14 @@ auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or
 ### ON (auto)
 
 - 通常はドライバー入力を**読まない / 無視**し、`evaluate()`（§7）に従う。
-- **例外（manual フォールバック）**: **停車中（`vWheelHz < min_wheel_hz`）かつ gear <= 2
+- **例外（manual フォールバック）**: **停車中（`vWheelKmh < min_wheel_kmh`）かつ gear <= 2
   （不明 -1 / N / 1速 / 2速）** のときは auto を停止し、ドライバーのエッジを受理する。
   この帯では 1速 / N / 2速 を手動でナビゲートでき、ギア不明時も手動シフトが殺されない:
   - N → 1速（N 脱出。NORMAL は DOWN、IST は UP）
   - 1速 → N（NORMAL は UP=25ms、IST は DOWN=`ist_pulse_ms`）
   - 2速 → N（NORMAL は DOWN=25ms。IST は N が隣接しないので 2→1→N と 2 タップ）
   - gear が 3 速以上に上がる / 走行を再開すると通常の auto に戻る。
-- **減速して停車する場合の底**: 走行中（min_wheel_hz 以上）は auto がダウンシフトを
+- **減速して停車する場合の底**: 走行中（min_wheel_kmh 以上）は auto がダウンシフトを
   続けるので、通常はスムーズに減速すれば停車時に 1速へ到達している。急停止で 2速の
   まま停車した場合は上記 manual 帯に入り、auto は 2→1 を行わない（ドライバーが
   2→N→1 等で操作）。3速以上で停車した場合は auto が 2速まで落としてから manual 帯へ。
@@ -218,7 +220,7 @@ auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or
 
 - ギア不明（`getGear() == -1`）/ ニュートラル（gear == 0）— 自動で N を出入りしない
 - UP: `gear < 1` / `gear >= maxGear`（最上段で UP しない。maxGear は IST=4 / NORMAL=6）
-  / `vWheelHz < min_wheel_hz`（停車・極低速で UP しない）/ `apps < throttle_on_pct`（アクセルオフ中は UP しない）
+  / `vWheelKmh < min_wheel_kmh`（停車・極低速で UP しない）/ `apps < throttle_on_pct`（アクセルオフ中は UP しない）
 - DOWN: `gear < 2`（1速・N・不明で DOWN しない）/ `apps >= throttle_on_pct`（アクセルオン中は DOWN しない）。
   **速度ゲートは適用しない**
 
@@ -236,11 +238,11 @@ auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or
 ```
 gear     = gps.getGear()
 rpm      = engine.rpm()                                // RotationSensor が歯数で換算 (config RotationConfig)
-vWheelHz = (wheelFL.hz() + wheelFR.hz()) / 2
+vWheelKmh = (wheelFL.kmh() + wheelFR.kmh()) / 2   // 車速 [km/h]。タイヤ直径は車輪センサー (WheelSpeedSensor) が持つ
 apps     = apps1.convertedValue()                        // ドライバーのアクセル開度 (0-100%)
 
 §6 抑止条件のいずれか成立 → None
-UP   条件: rpm >= upshift_rpm   かつ 1 <= gear < maxGear かつ vWheelHz >= min_wheel_hz
+UP   条件: rpm >= upshift_rpm   かつ 1 <= gear < maxGear かつ vWheelKmh >= min_wheel_kmh
                                 かつ apps >= throttle_on_pct   (アクセルオン)
 DOWN 条件: rpm <= downshift_rpm かつ gear >= 2 かつ apps < throttle_on_pct  (アクセルオフ)
 UP と DOWN が同時成立した場合は UP 優先
@@ -303,7 +305,7 @@ unsigned long lastAutoShiftFrameMs = 0;
 message AutoShiftConfig {
   float  upshift_rpm             = 1;  // UP しきい値 (RPM)
   float  downshift_rpm           = 2;  // DOWN しきい値 (RPM)
-  float  min_wheel_hz            = 3;  // 停止/走行 境界 (兼 ON 時の停車抑止しきい)
+  float  min_wheel_kmh            = 3;  // 停止/走行 境界 (兼 ON 時の停車抑止しきい)
   uint32 cooldown_ms             = 4;  // シフト間の最短間隔 [ms] (パルス開始→次の開始、両モード)。500 未満は 500
   uint32 ist_pulse_ms            = 5;  // IST: 全シフト共通パルス幅
   uint32 normal_drive_pulse_ms   = 6;  // NORMAL 走行中/通常: N スキップ
@@ -398,7 +400,7 @@ class AutoShifter {
     const Apps& apps_;                     // ドライバーのアクセル開度 (スロットルゲート)
 
     // -- config --
-    float upshiftRpm_, downshiftRpm_, minWheelHz_, throttleOnPct_;
+    float upshiftRpm_, downshiftRpm_, minWheelKmh_, throttleOnPct_;
     uint32_t cooldownMs_;
     uint32_t istPulseMs_, normalDrivePulseMs_, normalNeutralPulseMs_;
     dc_TransmissionType tx_;
@@ -418,7 +420,7 @@ class AutoShifter {
     bool readDownIn() const;
     Dir pollDriverEdge();                  // 立ち上がり検出 (OFF)
     Dir evaluate() const;                  // 自動判断 (ON)
-    bool moving() const;                   // vWheelHz >= minWheelHz_
+    bool moving() const;                   // vWheelKmh >= minWheelKmh_
     uint32_t pulseWidthFor(int8_t gear, Dir dir) const;
     void startPulse(Dir dir);
     void writeOutputs(bool up, bool down);

@@ -384,7 +384,7 @@ v3 / v4 の継ぎ足しも含めて並べ直し、`version` は 0 から始め�
 |---|---|---|---|
 | 0 | `char[8]` | `magic` | `"KARTLOG1"` |
 | 8 | `uint16` | `version` | フォーマットの版。開発中は 0 (固まったら上げる) |
-| 10 | `uint16` | `record_size` | `sizeof(LogRecord)` = 148 (デコーダの検査用) |
+| 10 | `uint16` | `record_size` | `sizeof(LogRecord)` = 152 (デコーダの検査用) |
 | 12 | `uint16` | `log_hz` | 1000 |
 | 14 | `uint16` | `dir_number` | 起動ごとの通し番号 `NNNN` |
 | 16 | `uint16` | `file_index` | ディレクトリ内の連番 (`0000.bin` = 0) |
@@ -392,7 +392,7 @@ v3 / v4 の継ぎ足しも含めて並べ直し、`version` は 0 から始め�
 | 20 | `uint32` | `rtc_epoch` | Unix 時刻。0 = RTC 未設定 |
 | 24 | `uint64` | `rtc_t_us` | `rtc_epoch` を読んだ瞬間の `t_us` |
 
-- `LogRecord` (148 B、packed。4 B の項目は 4 の倍数のオフセットに置く):
+- `LogRecord` (152 B、packed。4 B の項目は 4 の倍数のオフセットに置く。148 B に CAN の状態 4 B を足した):
 
 | オフセット | 型 | 名前 | 内容 |
 |---|---|---|---|
@@ -417,6 +417,10 @@ v3 / v4 の継ぎ足しも含めて並べ直し、`version` は 0 から始め�
 | 140 | `uint32` | `sd_max_us` | SD の write / sync 1 回の最大 [µs] |
 | 144 | `uint16` | `tick_max_us` | tick 1 回の最大 [µs] (旧 `safety_max_us`) |
 | 146 | `uint16` | `log_drops` | 記録されなかったレコードの累計 (65535 で飽和) |
+| 148 | `uint8` | `can_fault` | CAN バスの状態 0 = active / 1 = passive / 2 = bus-off (`CanBus::state()`、2026-10-21 追加) |
+| 149 | `uint8` | `can_tec` | CAN 送信エラーカウンタ |
+| 150 | `uint8` | `can_rec` | CAN 受信エラーカウンタ |
+| 151 | `uint8` | `reserved` | 0 |
 
 - ファイル構成: `[LogHeader] [LogRecord] [LogRecord] …`。レコードはファイルをまたがない。
 

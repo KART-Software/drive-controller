@@ -243,7 +243,7 @@ function toDeviceConfig(cfg: PbConfig | undefined): DeviceConfig {
     autoShift: {
       upshiftRpm: as?.upshiftRpm ?? 0,
       downshiftRpm: as?.downshiftRpm ?? 0,
-      minWheelHz: as?.minWheelHz ?? 0,
+      minWheelKmh: as?.minWheelKmh ?? 0,
       cooldownMs: as?.cooldownMs ?? 0,
       istPulseMs: as?.istPulseMs ?? 0,
       normalDrivePulseMs: as?.normalDrivePulseMs ?? 0,
@@ -559,7 +559,7 @@ function buildCommand(
               autoShift: {
                 upshiftRpm: params.upshiftRpm,
                 downshiftRpm: params.downshiftRpm,
-                minWheelHz: params.minWheelHz,
+                minWheelKmh: params.minWheelKmh,
                 cooldownMs: params.cooldownMs,
                 istPulseMs: params.istPulseMs,
                 normalDrivePulseMs: params.normalDrivePulseMs,
