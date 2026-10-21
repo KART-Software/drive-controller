@@ -131,7 +131,7 @@ message RotationSensorConfig {
 // 車輪 (左右共通)
 message WheelConfig {
   RotationSensorConfig sensor           = 1;
-  float                tire_diameter_mm = 2;  // 速度 (km/h) への換算用 (0x607 DC_WheelSpeed で使う予定)
+  float                tire_diameter_mm = 2;  // 速度 (km/h) への換算用 (CAN 0x607 DC_WheelSpeed)。0 なら 0 km/h
 }
 
 message RotationConfig {

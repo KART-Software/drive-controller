@@ -203,7 +203,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 | 7 | 同定実験の進行 (`experimentRunner.tick()`) | 毎回 | loop |
 | 8 | シフターの時間管理 (パルス終端・最短間隔・自動判断) (`autoShifter.tick()`) | 毎回 | loop (`update`) |
 | 9 | 回転計測の更新 (`sensorHub.updatePulse()`。車輪速・エンジン・クラッチ後、§6.7) | **毎回** | loop (100 ms) |
-| 10 | CAN 送信 0x600〜0x603 / 0x60A (DC_Status)。周期は kart-can の `KART_CAN_*_CYCLE_TIME_MS` をそのまま使う | 16 ms / 33 ms | loop |
+| 10 | CAN 送信 0x600〜0x603 (IMU・ギア) / 0x604・0x605・0x607〜0x609 (センサー。0x600 系と半周期ずらす) / 0x60A (DC_Status)。周期は kart-can の `KART_CAN_*_CYCLE_TIME_MS` をそのまま使う | 16 ms / 16 ms / 33 ms | loop |
 | 11 | ログ 1 レコード採取 → リング (Phase 3、§7.1。SD ログが無効なら `log_drops` を数えるだけ) | 毎回 | loop |
 | 12 | 自身の所要時間を計測 (`LoopStats` の ISR 枠) | 毎回 | — |
 
@@ -307,6 +307,10 @@ flash への書き込みは割り込み禁止で約 150 ms かかり、その間
     - `RotationSensor` (`interfaces/sensor/rotation_sensor.hpp`): 使う側に見せる口。`sample()` で
       `RotationSample { hz, rpm, timeUs (窓の中心、Clock の時間軸), windowUs, edges }` を返す。`hz()` / `rpm()` / `count()`。
       tick が書き loop が読むので、2 面のバッファと番号 (seqlock) で組を揃える (割り込みは止めない)。
+      車輪は `WheelSpeedSensor` (`interfaces/sensor/wheel_speed_sensor.hpp`、`RotationSensor` + `mps()` / `kmh()`)。タイヤ直径はセンサーが持ち、
+      使う側は換算しない (2026-10-21、CAN 0x607 で追加)。
+    - 実体: `EdgeRotationSensor` (エンジン / クラッチ後) と `EdgeWheelSpeedSensor` (車輪。中に `EdgeRotationSensor` を持つ合成 + 直径
+      `setDiameterMm()`。継承でなく合成なのは `RotationSensor` のダイヤモンドを避けるため)。
     - `EdgeRateEstimator`: ハードウェアに依存しない計算。tick ごとに (エッジ番号, 時刻) を履歴に入れ、回転を出す。
     - `EdgeSource` (`interfaces/sensor/edge_source.hpp`): ハードウェア。tick ごとに累計エッジ数と、1 つのエッジの (番号, 時刻) を返す。
       - `QuadTimerEdgeSource` (エンジン pin 14 = QuadTimer3 ch2、クラッチ後 pin 15 = ch3): ch2 / ch3 でエッジを数え、空いている ch0 / ch1 を
@@ -599,7 +603,7 @@ Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え�
 | 基盤 | ベアメタル (Arduino / Teensy コア) のまま。RTOS (Zephyr 等) は見送り |
 | 方針 | 時間の決まった処理はすべて割り込み。loop には遅れてよい処理 (console 送信・コマンド・SD 書き出し) だけ |
 | IMU | 割り込み + DMA で 8 kHz、移動平均 |
-| CAN | 受信は割り込み (即時)。送信は等間隔で、周期は kart-can の定義 (`can.yaml` の `cycle_ms` → `KART_CAN_*_CYCLE_TIME_MS`) をそのまま使う: 0x600〜0x603 は 16 ms、0x60A は 33 ms、0x604〜0x609 (未実装) は 20 ms。周期を変えるときは kart-can を先に変える (当初の「30 Hz」は kart-can の設計を確認する前の決定で、取り消し) |
+| CAN | 受信は割り込み (即時)。送信は等間隔で、周期は kart-can の定義 (`can.yaml` の `cycle_ms` → `KART_CAN_*_CYCLE_TIME_MS`) をそのまま使う: 0x600〜0x603 と 0x604〜0x609 (0x606 は送らない) は 16 ms、0x60A は 33 ms。周期を変えるときは kart-can を先に変える (当初の「30 Hz」は kart-can の設計を確認する前の決定で、取り消し) |
 | パルスカウンタ | 等間隔 (100 ms) で割り込みから更新 |
 | シフター | 入力は CAN 0x741 の受信で即時処理。チャタリング除去は送信側。パルス出力の最短間隔 0.5 s |
 | ログの時刻 | µs で記録。一周はデコーダで補正。時刻源は PIT の Lifetime Timer (64 bit。旧 Q-G。`micros()` は割り込みが長く止まると時間を失い、DWT はソフトリセットで 0 に戻らないため) |

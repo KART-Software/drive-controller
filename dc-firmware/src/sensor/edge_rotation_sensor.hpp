@@ -23,6 +23,7 @@ class EdgeRotationSensor final : public RotationSensor {
 
     RotationSample sample() const override;
     uint32_t count() const override { return count_; }
+    uint32_t pulses() const override { return estimator_.params().bothEdges ? count_ / 2 : count_; }
 
    private:
     EdgeSource& source_;

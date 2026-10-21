@@ -211,7 +211,11 @@ void tickISR() {
 
     // 10 CAN 送信。周期は kart-can の定義 (can.yaml の cycle_ms) どおり
     if (n % KART_CAN_DC_GYRO_XY_CYCLE_TIME_MS == 0)  // 0x600-0x603 (4 フレームとも同じ周期)
-        canController.send();
+        canController.sendImu();
+    // 0x604/0x605/0x607/0x608/0x609 (同じ 16 ms 周期)。0x600 系と半周期ずらして、1 回に書くフレーム数とバスの負荷をならす
+    static_assert(KART_CAN_DC_PEDALS_CYCLE_TIME_MS == KART_CAN_DC_GYRO_XY_CYCLE_TIME_MS, "半周期ずらしは同じ周期が前提");
+    if (n % KART_CAN_DC_PEDALS_CYCLE_TIME_MS == KART_CAN_DC_PEDALS_CYCLE_TIME_MS / 2)
+        canController.sendSensors();
     if (n % KART_CAN_DC_STATUS_CYCLE_TIME_MS == 0) {  // 0x60A DC_Status
         canController.sendStatus({
             .etcMode = sensorHub.view().target().getMode(),

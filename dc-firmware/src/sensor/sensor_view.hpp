@@ -3,6 +3,7 @@
 #include "adc.hpp"
 #include "interfaces/sensor/imu.hpp"
 #include "interfaces/sensor/rotation_sensor.hpp"
+#include "interfaces/sensor/wheel_speed_sensor.hpp"
 #include "sensors.hpp"
 #include "util/toggle_switch.hpp"
 
@@ -25,10 +26,10 @@ class SensorView {
         const Adc& adc;
         const RotationSensor& pulseEngine;
         const RotationSensor& pulseClutchRpm;
-        const RotationSensor& pulseWheelFL;
-        const RotationSensor& pulseWheelFR;
-        const RotationSensor& pulseWheelRL;
-        const RotationSensor& pulseWheelRR;
+        const WheelSpeedSensor& pulseWheelFL;
+        const WheelSpeedSensor& pulseWheelFR;
+        const WheelSpeedSensor& pulseWheelRL;
+        const WheelSpeedSensor& pulseWheelRR;
         const ToggleSwitch& shutdownSig;
     };
     explicit SensorView(const Refs& refs) : r_(refs) {}
@@ -46,10 +47,10 @@ class SensorView {
     const Adc& adc() const { return r_.adc; }
     const RotationSensor& pulseEngine() const { return r_.pulseEngine; }
     const RotationSensor& pulseClutchRpm() const { return r_.pulseClutchRpm; }
-    const RotationSensor& pulseWheelFL() const { return r_.pulseWheelFL; }
-    const RotationSensor& pulseWheelFR() const { return r_.pulseWheelFR; }
-    const RotationSensor& pulseWheelRL() const { return r_.pulseWheelRL; }
-    const RotationSensor& pulseWheelRR() const { return r_.pulseWheelRR; }
+    const WheelSpeedSensor& pulseWheelFL() const { return r_.pulseWheelFL; }
+    const WheelSpeedSensor& pulseWheelFR() const { return r_.pulseWheelFR; }
+    const WheelSpeedSensor& pulseWheelRL() const { return r_.pulseWheelRL; }
+    const WheelSpeedSensor& pulseWheelRR() const { return r_.pulseWheelRR; }
     // SHUTDOWN 回路出力 (点火系 AND の結果)。isOn()==true で ETC 許可
     const ToggleSwitch& shutdownSig() const { return r_.shutdownSig; }
 

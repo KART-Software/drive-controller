@@ -11,7 +11,8 @@ class CanController {
     // 受けるのは 0x740 / 0x741 だけ (ハードウェアのフィルタ)。onRx は受信割り込みから 1 フレームごとに呼ばれる。
     // 中で receive() を呼ぶこと。false = バスがこの設定 (CAN_BITRATE、classic) に対応していない
     bool begin(CanBus::RxCallback onRx, uint8_t priority);
-    void send();                                   // 0x600-0x603 (tickISR, KART_CAN_DC_GYRO_XY_CYCLE_TIME_MS)
+    void sendImu();                                // 0x600-0x603 (tickISR, KART_CAN_DC_GYRO_XY_CYCLE_TIME_MS)
+    void sendSensors();                            // 0x604/0x605/0x607/0x608/0x609 (tickISR, KART_CAN_DC_PEDALS_CYCLE_TIME_MS)
     void sendStatus(const CanStatusData& status);  // 0x60A (tickISR, KART_CAN_DC_STATUS_CYCLE_TIME_MS)
     // 受信フレームを rxData_ に取り込む (canRxISR)。nowMs = 受信時刻 (sysClock の ms)
     void receive(const CanFrame& frame, uint32_t nowMs) { rxData_.mergeFrame(frame, nowMs); }

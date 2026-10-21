@@ -117,6 +117,10 @@ void Configurator::calibrate() {
         hub.pulseWheelFR().setParams(toRotationParams(rc.wheel_front.sensor));
         hub.pulseWheelRL().setParams(toRotationParams(rc.wheel_rear.sensor));
         hub.pulseWheelRR().setParams(toRotationParams(rc.wheel_rear.sensor));
+        hub.pulseWheelFL().setDiameterMm(rc.wheel_front.tire_diameter_mm);
+        hub.pulseWheelFR().setDiameterMm(rc.wheel_front.tire_diameter_mm);
+        hub.pulseWheelRL().setDiameterMm(rc.wheel_rear.tire_diameter_mm);
+        hub.pulseWheelRR().setDiameterMm(rc.wheel_rear.tire_diameter_mm);
     }
 }
 
