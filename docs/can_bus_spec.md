@@ -1,7 +1,7 @@
 # CAN バス: インターフェースと FlexCAN3 ドライバ 仕様書
 
 Status: **実装済み・ベンチ確認済み (2026-10-20)。ブランチ feature/can-driver (feature/loop-phase3 の上)。**
-関連: CLAUDE.md「CAN」節、`dc-firmware/lib/kart-can` (フレームの定義)、[loop_nonblocking_spec.md](loop_nonblocking_spec.md) §6.3 (受信割り込み)、
+関連: CLAUDE.md「CAN」節、`dc-firmware/dc-main/lib/kart-can` (フレームの定義)、[loop_nonblocking_spec.md](loop_nonblocking_spec.md) §6.3 (受信割り込み)、
 参考資料 `local/IMXRT1060RM_rev3.pdf` Chapter 45 (CANFD/FlexCAN3。Teensy 4.1 の CAN3 はこのモジュール)。
 
 ## 1. 目的と背景

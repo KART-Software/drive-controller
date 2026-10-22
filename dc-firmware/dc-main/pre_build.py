@@ -36,7 +36,7 @@ subprocess.run(
 # ---------------------------------------------------------------------
 # 1) Generate nanopb C sources from spec/proto/*.proto
 # ---------------------------------------------------------------------
-proto_src_dir = os.path.normpath(os.path.join(project_dir, "..", "spec", "proto"))
+proto_src_dir = os.path.normpath(os.path.join(project_dir, "..", "..", "spec", "proto"))
 proto_out_dir = os.path.join(project_dir, "src", "proto")
 nanopb_dir = os.path.join(libdeps_dir, pioenv, "Nanopb")
 nanopb_generator = os.path.join(nanopb_dir, "generator", "nanopb_generator.py")

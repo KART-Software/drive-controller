@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""2 つ以上の Intel HEX を 1 つにまとめる (drive-controller A + dc-sd-reader B を 1 回で書くため)。
+"""2 つ以上の Intel HEX を 1 つにまとめる (dc-boot + dc-main + dc-sd-reader を 1 回で書くため)。
 
 使い方:
-    python3 tools/merge_hex.py dc-firmware/.pio/build/teensy41/firmware.hex dc-sd-reader/.pio/build/teensy41/firmware.hex out.hex
+    python3 tools/merge_hex.py dc-firmware/dc-main/.pio/build/teensy41/firmware.hex dc-firmware/dc-sd-reader/.pio/build/teensy41/firmware.hex out.hex
 
 teensy_loader_cli は hex に無いブロックを飛ばすが、先頭 1 KB (アドレス 0) だけは必ず書く (無ければ 0xFF で = A の FCB が消える)。
 だから B だけを書くと A が起動しなくなる。A と B を 1 つの hex にして書くか、B → A の順で書くこと。

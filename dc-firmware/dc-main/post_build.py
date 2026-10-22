@@ -5,11 +5,11 @@ import sys
 Import("env")
 
 # firmware.hex に dc-boot (起動の選択をする薄いファーム、flash の先頭) を合成する (docs/loop_nonblocking_spec.md §7.11)。
-# teensy_loader_cli は先頭 1 KB (アドレス 0) を必ず書く (hex に無ければ 0xFF) ので、dc-firmware (0x60010000〜) だけの hex を書くと
+# teensy_loader_cli は先頭 1 KB (アドレス 0) を必ず書く (hex に無ければ 0xFF) ので、dc-main (0x60010000〜) だけの hex を書くと
 # 先頭の dc-boot が消えて起動しなくなる。合成しておけば `pio run -t upload` がそのまま使える (dc-sd-reader は別。python3 tools/flash_all.py)。
 project_dir = env.subst("$PROJECT_DIR")
 boot_dir = os.path.normpath(os.path.join(project_dir, "..", "dc-boot"))
-tools_dir = os.path.normpath(os.path.join(project_dir, "..", "tools"))
+tools_dir = os.path.normpath(os.path.join(project_dir, "..", "..", "tools"))
 
 
 def merge_boot(source, target, env):
@@ -23,7 +23,7 @@ def merge_boot(source, target, env):
     boot_img = merge_hex.parse(boot_hex)
     for a in boot_img:
         if a in main_img:
-            raise SystemExit("[post_build] dc-boot と dc-firmware が重なっています ({:#x})".format(a))
+            raise SystemExit("[post_build] dc-boot と dc-main が重なっています ({:#x})".format(a))
     merge_hex.emit({**boot_img, **main_img}, hex_path)
     print("[post_build] firmware.hex に dc-boot を合成 (boot {} B + main {} B)".format(len(boot_img), len(main_img)))
 
