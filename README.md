@@ -10,7 +10,7 @@
   PID でスロットルモーターを制御。モード (Normal / Restricted / Calibration / MotorOff) は
   CAN `MODE_SELECT` で選択。
 - **オートシフター** — クイックシフター/シーケンシャルの UP/DOWN を制御。CAN `AUTO_SHIFT`
-  で ON(自動)/OFF(手動) 切替。設計は [`dc-firmware/auto_shifter_spec.md`](./dc-firmware/auto_shifter_spec.md)。
+  で ON(自動)/OFF(手動) 切替。設計は [`dc-firmware/dc-main/auto_shifter_spec.md`](./dc-firmware/dc-main/auto_shifter_spec.md)。
 - **Launch Control** — 現在ビルドフラグ (`-DLAUNCH_CONTROL_ENABLED`) で **凍結中**。
 
 ## 使い方
@@ -39,11 +39,13 @@
 
 ### リポジトリ構成
 
-2 つの連携サブプロジェクトが `spec/proto/` の Protobuf スキーマを共有する:
+ファームウェアと console が `spec/proto/` の Protobuf スキーマを共有する:
 
 | ディレクトリ | 内容 |
 |---|---|
-| `dc-firmware/` | Teensy 4.1 ファームウェア (PlatformIO + Arduino)。ETC、オートシフター、Launch Control (凍結中)、センサーサンプリング、CAN、シリアルプロトコル |
+| `dc-firmware/dc-main/` | Teensy 4.1 ファームウェア本体 (PlatformIO + Arduino)。ETC、オートシフター、Launch Control (凍結中)、センサーサンプリング、CAN、シリアルプロトコル |
+| `dc-firmware/dc-boot/` | 起動の選択だけをする薄いファーム (flash の先頭)。`dc-main` か `dc-sd-reader` へジャンプ。`dc-main` のビルド時に自動で合成される |
+| `dc-firmware/dc-sd-reader/` | SD リーダー (別イメージ)。console の「SD Reader」で再起動すると SD カードを USB の MTP で PC に見せる。USB を抜くか Reboot で戻る |
 | `dc-console/` | Preact + Vite の Web アプリ。Web Serial API で USB シリアル通信し、ライブモニタ・キャリブレーション |
 | `spec/proto/drive_controller.proto` | ホスト ↔ デバイス間ワイヤフォーマットと永続化 `Config` の単一ソース |
 
@@ -56,9 +58,10 @@
 ファームウェア (PlatformIO):
 
 ```bash
-git submodule update --init --recursive      # FlexCAN_T4 取得 (初回)
-pio run -d dc-firmware -e teensy41            # ビルド
-pio run -d dc-firmware -e teensy41 -t upload  # アップロード
+git submodule update --init --recursive              # kart-can (CAN 定義) 取得 (初回)
+pio run -d dc-firmware/dc-main -e teensy41            # ビルド (dc-boot も一緒に合成される)
+pio run -d dc-firmware/dc-main -e teensy41 -t upload  # アップロード (dc-sd-reader は残る)
+uv run tools/flash_all.py                             # dc-sd-reader も含めて 3 つ書く (初回 / dc-sd-reader 更新時)
 ```
 
 コンソール (Vite + Preact):

@@ -107,7 +107,7 @@ message LaunchConfig {
 message TractionConfig {
 }
 
-// オートシフター設定。詳細は dc-firmware/auto_shifter_spec.md。
+// オートシフター設定。詳細は dc-firmware/dc-main/auto_shifter_spec.md。
 message AutoShiftConfig {
   float  upshift_rpm             = 1;  // UP しきい値 (RPM)
   float  downshift_rpm           = 2;  // DOWN しきい値 (RPM)
