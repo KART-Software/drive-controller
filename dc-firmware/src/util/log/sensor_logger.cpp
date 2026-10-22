@@ -92,6 +92,28 @@ void SensorLogger::stop(const char* why) {
     DebugLogger::log("SD log: stopped (%s failed)", why);
 }
 
+void SensorLogger::close() {
+    if (!active_)
+        return;
+    active_ = false;
+    // 残りを全部書く (ファイルの残りに収まる分だけ。切り替えが要るほどの量はリングに入らない)
+    for (;;) {
+        const LogRing::Span span = ring_.peek();
+        uint32_t n = span.count;
+        if (n == 0)
+            break;
+        if (n > fileRemaining_)
+            n = fileRemaining_;
+        if (n == 0 || !store_.write(span.data, (size_t)n * sizeof(LogRecord)))
+            break;
+        ring_.pop(n);
+        fileRemaining_ -= n;
+    }
+    store_.closeFile();  // sync して閉じる
+    ring_.clear();
+    DebugLogger::log("SD log: closed");
+}
+
 bool SensorLogger::format() {
     active_ = false;
     store_.closeFile();

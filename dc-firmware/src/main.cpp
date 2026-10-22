@@ -19,8 +19,10 @@
 #include "starter/starter_controller.hpp"
 #include "serial/serial_debug_writer.hpp"
 #include "serial/serial_protocol.hpp"
+#include "util/boot_mode.hpp"
 #include "util/flash.hpp"
 #include "util/log/debug_logger.hpp"
+#include "util/log/debug_print.hpp"
 #include "util/log/log_ring.hpp"
 #include "util/log/sd_log_store.hpp"
 #include "util/log/sensor_logger.hpp"
@@ -256,6 +258,16 @@ void setup() {
 
     static SerialDebugWriter serialDebugWriter;
     DebugLogger::addWriter(&serialDebugWriter);
+
+    // 直前の起動がクラッシュ (fault) で終わっていたら、Teensy コアの CrashReport (RAM に残る) を debug に出す
+    if (CrashReport) {
+        DebugPrint p;
+        CrashReport.printTo(p);
+        p.flush();
+    }
+
+    // 前回の再起動の理由とリセットの理由を debug に。SD リーダーへの分岐は startup_early_hook (util/boot_mode.cpp) で済んでいる
+    boot_mode::logAndClear();
 
     // RTC を TimeLib に供給 (VBAT 保持されていれば起動時から日時が使える。set_rtc で更新)。
     // Teensy3Clock.get は unsigned long (32bit) 返しだが TimeLib の time_t は 64bit なので、

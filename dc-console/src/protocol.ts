@@ -1,5 +1,6 @@
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import {
+  RebootCmd_Mode,
   CommandSchema,
   HostToDeviceSchema,
   DeviceToHostSchema,
@@ -459,8 +460,11 @@ function buildCommand(
         },
       });
     }
-    case "reboot":
-      return create(CommandSchema, { id, body: { case: "reboot", value: {} } });
+    case "reboot":  // params.sdReader: SD リーダーモードで再起動 (MTP で SD が読める。USB を抜くと通常に戻る)
+      return create(CommandSchema, {
+        id,
+        body: { case: "reboot", value: { mode: params.sdReader ? RebootCmd_Mode.SD_READER : RebootCmd_Mode.NORMAL } },
+      });
     case "set_rtc":
       return create(CommandSchema, {
         id,

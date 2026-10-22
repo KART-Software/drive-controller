@@ -380,7 +380,12 @@ message SetIdlingCmd {}
 
 message GetConfigCmd {}
 
-message RebootCmd {}
+message RebootCmd {
+  // SD_READER: SD リーダーモードで再起動する (SD カードを USB の MTP で PC に見せる。ETC / CAN / ログは動かない、点火リレー OFF)。
+  // USB を抜くと通常モードに戻る。ETC 動作中は拒否。NORMAL (既定) は普通の再起動
+  enum Mode { NORMAL = 0; SD_READER = 1; }
+  Mode mode = 1;
+}
 
 message RevertCmd {}
 

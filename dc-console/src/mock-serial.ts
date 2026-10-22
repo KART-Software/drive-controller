@@ -683,10 +683,15 @@ const decoder = new FrameDecoder((payload) => {
 });
 
 export const mockSerial: Transport = {
+  deviceInfo() {
+    return { usbVendorId: 0x16c0, usbProductId: 0x0483 };  // drive-controller として振る舞う
+  },
+  setOnDeviceAttached() {},
   async connect() {
     connected = true;
     t0 = Date.now();
     timer = setInterval(sensorTick, SENSOR_INTERVAL);
+    return true;
   },
   async disconnect() {
     connected = false;

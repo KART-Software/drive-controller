@@ -544,6 +544,66 @@ v3 / v4 の継ぎ足しも含めて並べ直し、`version` は 0 から始め�
 - 未確認: `format_sd` の拒否 (ETC 動作中)。ベンチでは 0x740 を受けないので ETC が動かず試せない。100 MB の実ファイルでの長時間 (30 分以上) の連続と、`t_us` の 71.6 分 (旧 32 bit の一周に相当する時間) 越え
   (64 bit なので問題はないはず)。
 
+### 7.11 SD リーダーと起動の選択 (3 つのファーム、2026-10-22)
+
+ファームを書き換えずに SD カードの中身を PC から読む (ログの回収・削除)。**絶対に同時に動かさない機能を同じコードに同居させない**ため、
+SD リーダーは別のファームにし、起動の選択も別の薄いファームにする。drive-controller 本体は SD リーダーのことを知らない
+(フラグを書いてリセットするだけ)。eFuse (OCOTP) には一切触らない。
+
+| | 位置 (`dc-firmware/src/util/boot_layout.hpp`) | 役割 |
+|---|---|---|
+| **dc-boot** | 0x60000000、64 KB (実体 21 KB) | ROM が飛んでくる唯一のイメージ。`startup_early_hook()` で `SRC_GPR10` のフラグを見て、どちらかの IVT の entry へジャンプするだけ。どちらも無ければ `setup()` まで落ちて LED を 3 回点滅 (USB は "KART Boot") |
+| **dc-firmware** | 0x60010000、448 KB (実体 177 KB) | drive-controller 本体。USB は `USB_SERIAL` (PID 0x0483、製品名 "KART Drive Controller") |
+| **dc-sd-reader** | 0x60080000、512 KB (実体 137 KB) | SD を USB の MTP で見せる。`USB_MTPDISK_SERIAL` (PID 0x04D5、"KART SD Reader") |
+
+各プロジェクトのリンカスクリプト (`imxrt1062_t41_{boot,main,512k}.ld` = コアの `imxrt1062_t41.ld` の FLASH の ORIGIN / LENGTH だけ変えたもの) と
+`boot_layout.hpp` を一致させる。はみ出すとリンクで落ちる。コアのファイルのコピーなので Teensy コア (PlatformIO の framework) の更新で乖離しうる。
+dc-firmware の `post_build.py` がビルドのたびに 3 つをコアの `imxrt1062_t41.ld` と FLASH 行以外で比べ、違えば警告する (差分を取り込むこと)。LittleFS (`/config.pb`、末尾の 256 KB) と EEPROM 領域は無関係。全部 1 MB 以内なのは
+PlatformIO 同梱の `teensy_loader_cli` 2.2 が 1 MB より先のアドレスを parse error にするため。Teensy コアは起動アドレスを決め打ちしていない
+(LittleFS / EEPROM は末尾基準、FCB / IVT / コピー元はリンカシンボル) ので、0x60010000 にリンクした dc-firmware はそのまま動く。
+
+- **入り方**: console の「SD Reader」(確認ダイアログ) → `RebootCmd { mode: SD_READER }`。ETC 動作中は拒否 (`format_sd` と同じ歯止め)。
+  ハンドラは `SensorLogger::close()` (リングの残りを書いて sync、閉じる) → フラグ → ソフトリセット (`util/boot_mode`) → ROM → dc-boot。
+- **フラグ**: `SRC_GPR10` の下位 28 bit (`"SDR"` = 0x00534452)。POR でしか消えず、ソフトリセットをまたぐ (Teensy コアも `SRC_GPR5` を
+  CrashReport の印に使う)。**上位 4 bit は ROM の persist ビット** (Table 9-8: bit 30 PERSIST_SECONDARY_BOOT、[27:26] REDUNDANT_BOOT。
+  bit 30 を立てると ROM が fuse `0x6E0[23:16]` のオフセットに 2 つ目のイメージを探しに行き、Teensy (fuse 0) では起動しない。ベンチで止まり、
+  USB の抜き差し (POR) で復帰)。読み書きとも触らない。SNVS の `LPGPR0` はソフトリセットで残らなかったので使わない。
+- **dc-boot の分岐** (`dc-boot/src/main.cpp`): Teensy コアの `ResetHandler` が FlexRAM と SP を設定した直後、RAM の初期化前に呼ぶ弱シンボル
+  `startup_early_hook()`。FLASHMEM に置き、グローバル変数は使わない。フラグが "SDR" なら消して dc-sd-reader、でなければ dc-firmware。
+  望んだ方の IVT (先頭 + 0x1000、tag 0xD1 / length 0x20) と entry の範囲を確かめて飛び、無ければもう一方、どちらも無ければ LED。
+  飛び先の `ResetHandler` は FlexRAM / SP / RAM の初期化を自分でやり直すので、途中から飛んでよい。"SDR" 以外の値 (dc-firmware の再起動理由
+  `004e4dNN`) は dc-boot は触らず、dc-firmware が debug に出して消す。
+- **dc-sd-reader の中身**: 出力を安全側に固定 (点火リレー LOW = エンジンは掛からない、モーター SLP / PWM / DIR / リレー / セル / シフト出力 LOW。
+  ピンは dc-firmware の `constants.hpp` を共有)、`MTP.begin()` + `SD.begin(BUILTIN_SDCARD)` + `addFilesystem(SD, "SD Card")`、LED 250 ms 点滅。
+  `wire.cpp` が dc-firmware と同じワイヤフォーマット (COBS + CRC16 + nanopb、`serial/cobs.cpp` と `crc16.hpp` を共有) で `RebootCmd` だけ受け、
+  ほかのコマンドには ok=false。MTP の URL は `mtp://Teensyduino_KART_SD_Reader_<serial>/`。
+- **戻り方**: **USB を抜くと dc-firmware に戻る** (ホストがいる間は SOF で `USB1_FRINDEX` が進む。3 s 進まなければソフトリセット →
+  フラグ無し = dc-firmware)。つないだままなら console の **Reboot** (console は `port.getInfo()` の PID で相手を見分け、dc-sd-reader (0x04D5) に
+  つないだときは「通常モードで再起動」ボタンだけを出す)。電源の入れ直しでも dc-firmware。`MTP.loop()` はファイル転送中に数秒戻ってこないので、
+  時刻は転送の後に読む (前に読んだ時刻で判定すると転送後に「3 s 不在」と誤判定する。同居版のベンチで実際に起きた)。
+- **書き込み**: `teensy_loader_cli` は先頭 1 KB (アドレス 0) を必ず書く (hex に無ければ 0xFF) ので、dc-firmware (0x60010000〜) だけの hex を書くと
+  dc-boot の FCB が消えて起動しなくなる (復旧はボタン押しで書き直し。MKL02 は別チップなので文鎮にはならない)。そこで **dc-firmware の
+  `post_build.py` が dc-boot をビルドして `firmware.hex` に合成**する (`tools/merge_hex.py`。0x60000000 を引いたオフセットで出す。ローダ 2.2 は
+  拡張アドレスがちょうど 0x60000000 のときしか引かない)。dc-firmware だけなら `pio run -t upload` のまま (dc-sd-reader は残る。ローダは hex に
+  あるブロックだけ書く)。**dc-sd-reader を書くときは `python3 tools/flash_all.py`** (3 つを合成)。dc-sd-reader の hex だけを書かないこと。
+- **診断**: dc-firmware の起動時の debug `boot: SRC_GPR10=… SRSR=…` (SRSR = リセットの理由: 1 電源投入、2 ソフトリセット、ほかウォッチドッグ等。
+  `SRC_GPR10` の `004e4dNN` は dc-firmware への再起動の理由 NN。`boot_layout.hpp` の `kReason*`):
+
+  | NN | 意味 | 誰が置く |
+  |---|---|---|
+  | 01 | USB ホストがいなくなった (SOF が 3 s 止まった) | dc-sd-reader |
+  | 02 | `RebootCmd` (console の Reboot / 通常モードで再起動) | dc-firmware / dc-sd-reader |
+  | FE | dc-sd-reader が要求されたがイメージが無く、dc-firmware を起動した | dc-boot |
+  | (無し、`00000000`) | 電源投入 (SRSR の bit0) か、理由の無いリセット | — |
+直前の起動がクラッシュなら Teensy コアの `CrashReport` を debug に出す
+  (`util/log/debug_print`)。
+- **ベンチ (2026-10-22)**: 3 つを書いて dc-firmware 起動 → `RebootCmd` で 7 s 以内に dc-sd-reader (MTP に "SD Card") → **99 MB のコピー 7.7 s =
+  12.8 MB/s** → Reboot で dc-firmware (SRSR=2) → dc-sd-reader で USB ポートを無効化 (ホスト不在の模擬) → 3 s で dc-firmware → dc-firmware
+  (boot 込みの hex) だけ書き直しても dc-sd-reader は残り、再び入れる。dc-firmware の通常動作は変化なし (telemetry 50 Hz、tick 19〜20 µs)。
+  Linux の autosuspend は gvfs 等が 2 s ごとに起こすのでホスト不在の模擬には使えない。dc-firmware に MTP を同居させる案は動いたが、
+  同居させない方針で廃止。`local/sd-reader` (旧専用ファーム) も不要。
+- **予定**: `dc-firmware` を `dc-main` に改名し、`dc-firmware/` の下に `dc-boot` / `dc-main` / `dc-sd-reader` を入れる (別作業)。
+
 ## 8. 検証用デバッグコマンド (ベンチ専用)
 
 「ストール注入」= SD や USB の停止を人工的に再現する**ベンチ専用コマンド**。
