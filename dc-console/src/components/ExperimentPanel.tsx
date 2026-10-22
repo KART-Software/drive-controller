@@ -1,5 +1,6 @@
 import { useMemo, useState } from "preact/hooks";
 import { protocol } from "../protocol";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type { LogEntry } from "./DebugLog";
 
 // ETC 同定実験モード (docs/etc_experiment_mode_spec.md §10)。
@@ -92,37 +93,14 @@ export function ExperimentPanel({ addLog, logs }: Props) {
         </div>
       </div>
 
-      {confirm && (
-        <div
-          style={{
-            position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-          onClick={() => setConfirm(null)}
-        >
-          <div
-            style={{
-              background: "var(--surface)", color: "var(--text)",
-              border: "1px solid var(--border)", borderRadius: "10px",
-              padding: "20px 22px", maxWidth: "440px", margin: "16px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0 }}>{confirm.label} を開始しますか?</h2>
-            <p style={{ color: "var(--text-dim)" }}>{confirm.desc}</p>
-            <p>
-              スロットルが自動で動きます。エンジン停止・車両静止・SD カード挿入を
-              確認してください。実行中は console の「停止」でいつでも中断できます。
-            </p>
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "18px" }}>
-              <button onClick={() => setConfirm(null)}>キャンセル</button>
-              <button class="danger" onClick={() => start(confirm)}>開始</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog open={confirm !== null} title={`${confirm?.label ?? ""} を開始しますか?`} confirmLabel="開始" danger
+        onConfirm={() => confirm && start(confirm)} onCancel={() => setConfirm(null)}>
+        <p>{confirm?.desc}</p>
+        <p>
+          スロットルが自動で動きます。エンジン停止・車両静止・SD カード挿入を
+          確認してください。実行中は console の「停止」でいつでも中断できます。
+        </p>
+      </ConfirmDialog>
     </section>
   );
 }

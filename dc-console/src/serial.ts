@@ -9,8 +9,37 @@ let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
 let onBytes: ((chunk: Uint8Array) => void) | null = null;
 let onDisconnect: (() => void) | null = null;
 
-async function connect(): Promise<void> {
-  port = await navigator.serial.requestPort();
+// 対象は Teensy (PJRC の VID 0x16C0) の drive-controller (PID 0x0483) と SD リーダー (0x04D5) だけ。
+// ポート選択ダイアログにも CANable などの別の COM は出ない
+const KART_PORTS = [
+  { usbVendorId: 0x16c0, usbProductId: 0x0483 },
+  { usbVendorId: 0x16c0, usbProductId: 0x04d5 },
+];
+
+function isKartPort(p: SerialPort): boolean {
+  try {
+    const info = p.getInfo();
+    return KART_PORTS.some((f) => f.usbVendorId === info.usbVendorId && f.usbProductId === info.usbProductId);
+  } catch {
+    return false;
+  }
+}
+
+// 許可済み (過去にダイアログで選んだ。Chrome がデバイス単位で覚える) の KART デバイスがちょうど 1 台つながっていれば
+// ダイアログなしでそれに接続。0 台か 2 台以上ならダイアログで選ぶ (許可していないデバイスはページから見えないので数えられない)。
+// chooser=true なら必ずダイアログ (Connect ▾ の「ポートを選び直して接続」)。auto=true はページを開いたとき / USB を挿したときの
+// 自動接続用で、ダイアログを出せない (ユーザー操作が無い) ので許可済みが 1 台でなければ何もせず false
+async function connect(options?: { chooser?: boolean; auto?: boolean }): Promise<boolean> {
+  let chosen: SerialPort | null = null;
+  if (!options?.chooser) {
+    const granted = (await navigator.serial.getPorts()).filter(isKartPort);
+    if (granted.length === 1) chosen = granted[0];
+  }
+  if (!chosen) {
+    if (options?.auto) return false;
+    chosen = await navigator.serial.requestPort({ filters: KART_PORTS });
+  }
+  port = chosen;
   await port.open({ baudRate: BAUD_RATE });
   // DTR を明示的に立てる (Web Serial の既定挙動に依存しない)。ファームは起動時に Serial (=DTR) を最大 3 s
   // 待つ。RTS は使わないので触らない (RTS でリセットがかかる機器があるため)。閉じる側は OS が DTR を落とす。
@@ -29,6 +58,16 @@ async function connect(): Promise<void> {
     cleanup();
     onDisconnect?.();
   });
+  return true;
+}
+
+// 許可済みのデバイスが挿された (再列挙された) とき。SD リーダーや Reboot の後の自動再接続に使う
+function setOnDeviceAttached(fn: () => void): void {
+  try {
+    navigator.serial.addEventListener("connect", () => fn());
+  } catch {
+    // Web Serial 非対応
+  }
 }
 
 async function readBytes(): Promise<void> {
@@ -77,6 +116,14 @@ async function cleanup(): Promise<void> {
   } catch {}
 }
 
+function deviceInfo(): { usbVendorId?: number; usbProductId?: number } | null {
+  try {
+    return port ? port.getInfo() : null;
+  } catch {
+    return null;
+  }
+}
+
 function isConnected(): boolean {
   return port !== null;
 }
@@ -92,4 +139,6 @@ export const serial: Transport = {
   setOnDisconnect(fn) {
     onDisconnect = fn;
   },
+  deviceInfo,
+  setOnDeviceAttached,
 };

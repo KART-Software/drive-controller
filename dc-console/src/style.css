@@ -731,3 +731,34 @@ button.danger:hover:not(:disabled) { background: var(--err); color: white; }
 .tx-label { font-size: 0.8rem; color: var(--text-dim); margin-right: 4px; }
 .tx-btn { padding: 4px 12px; font-size: 0.8rem; }
 .tx-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* 確認ダイアログ (components/ConfirmDialog.tsx) */
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.dialog {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px 22px; max-width: 440px; margin: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.dialog-title { margin-top: 0; }
+.dialog-title.danger { color: var(--warn); }
+.dialog-body { color: var(--text-dim); }
+.dialog-body p { margin: 8px 0; }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+/* Connect の分割ボタン (右端 ▾ でオプションのメニュー) */
+.split-button { position: relative; display: inline-flex; }
+.split-button > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-button-toggle { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; padding-left: 6px; padding-right: 6px; }
+.menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.split-button-menu {
+  position: absolute; top: 100%; right: 0; z-index: 1000; margin-top: 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); white-space: nowrap;
+}
+.split-button-menu button { display: block; width: 100%; text-align: left; border: none; background: none; }
+.split-button-menu button:hover { background: var(--border); }

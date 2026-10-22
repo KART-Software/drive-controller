@@ -7,11 +7,14 @@ interface SerialPort extends EventTarget {
   open(options: { baudRate: number }): Promise<void>;
   close(): Promise<void>;
   setSignals(signals: { dataTerminalReady?: boolean; requestToSend?: boolean; break?: boolean }): Promise<void>;
+  getInfo(): { usbVendorId?: number; usbProductId?: number };
   addEventListener(type: "disconnect", listener: () => void): void;
 }
 
 interface Serial extends EventTarget {
-  requestPort(): Promise<SerialPort>;
+  addEventListener(type: "connect" | "disconnect", listener: (e: Event) => void): void;
+  requestPort(options?: { filters?: { usbVendorId?: number; usbProductId?: number }[] }): Promise<SerialPort>;
+  getPorts(): Promise<SerialPort[]>;
 }
 
 interface Navigator {
