@@ -8,7 +8,7 @@
 
 ディレクトリを渡すと、中の NNNN.bin を file_index の順につないで 1 つの CSV にする (1 回の起動分)。
 
-フォーマット (firmware: dc-firmware/src/util/log/log_record.hpp、docs/loop_nonblocking_spec.md §7.2 が一次ソース。
+フォーマット (firmware: dc-firmware/dc-main/src/util/log/log_record.hpp、docs/loop_nonblocking_spec.md §7.2 が一次ソース。
 開発中は version = 0 のまま):
   Header (32 B, little-endian, packed):
     char magic[8]="KARTLOG1"; u16 version; u16 record_size; u16 log_hz; u16 dir_number; u16 file_index;

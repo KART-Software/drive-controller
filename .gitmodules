@@ -1,3 +1,3 @@
 [submodule "dc-firmware/lib/kart-can"]
-	path = dc-firmware/lib/kart-can
+	path = dc-firmware/dc-main/lib/kart-can
 	url = https://github.com/KART-Software/kart-can.git

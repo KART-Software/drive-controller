@@ -3,7 +3,7 @@
 # requires-python = ">=3.8"
 # dependencies = ["pyserial>=3.5"]
 # ///
-"""dc-boot + dc-firmware + dc-sd-reader を 1 つの hex にして Teensy 4.1 に書く (docs/loop_nonblocking_spec.md §7.11)。Linux / Windows / macOS。
+"""dc-boot + dc-main + dc-sd-reader を 1 つの hex にして Teensy 4.1 に書く (docs/loop_nonblocking_spec.md §7.11)。Linux / Windows / macOS。
 
     uv run tools/flash_all.py            # 3 つをビルド → 合成 → 書く (Linux / macOS: teensy_loader_cli、Windows: GUI の Teensy Loader)
     uv run tools/flash_all.py --no-flash # 合成した hex を作るだけ (Teensy Loader の GUI で書くとき)
@@ -11,10 +11,10 @@
 ブートローダへは、KART のシリアルポートに 134 baud を当てて入れる (Teensy の CDC の決まり。teensy_loader_cli の -s は環境によって
 失敗して Teensy をブートローダに残したまま止まるので使わない)。pyserial が無ければ -s にフォールバックする。
 
-dc-sd-reader を書くとき / 初めて書くときに使う。dc-firmware だけ更新するなら `pio run -d dc-firmware -e teensy41 -t upload` でよい
-(dc-firmware の firmware.hex には post_build.py が dc-boot を合成している。dc-sd-reader は残る)。
+dc-sd-reader を書くとき / 初めて書くときに使う。dc-main だけ更新するなら `pio run -d dc-firmware/dc-main -e teensy41 -t upload` でよい
+(dc-main の firmware.hex には post_build.py が dc-boot を合成している。dc-sd-reader は残る)。
 dc-sd-reader の hex だけを書かないこと (ローダが先頭 1 KB を 0xFF で書いて dc-boot が消え、起動しなくなる)。
-dc-firmware (KART Drive Controller) が動いている状態で実行する (-s のソフトリブート)。dc-sd-reader のときは console の Reboot で戻してから。
+dc-main (KART Drive Controller) が動いている状態で実行する (-s のソフトリブート)。dc-sd-reader のときは console の Reboot で戻してから。
 """
 import os
 import shutil
@@ -66,11 +66,12 @@ def enter_bootloader():
 
 def main(argv):
     no_flash = "--no-flash" in argv
-    for proj in ("dc-firmware", "dc-sd-reader"):  # dc-boot は dc-firmware の post_build が一緒にビルド・合成する
-        subprocess.run(pio() + ["run", "-d", os.path.join(ROOT, proj), "-e", "teensy41"], check=True)
-    main_hex = os.path.join(ROOT, "dc-firmware", ".pio", "build", "teensy41", "firmware.hex")
-    sd_hex = os.path.join(ROOT, "dc-sd-reader", ".pio", "build", "teensy41", "firmware.hex")
-    out = os.path.join(ROOT, "dc-firmware", ".pio", "build", "teensy41", "dc_all.hex")
+    fw = os.path.join(ROOT, "dc-firmware")
+    for proj in ("dc-main", "dc-sd-reader"):  # dc-boot は dc-main の post_build が一緒にビルド・合成する
+        subprocess.run(pio() + ["run", "-d", os.path.join(fw, proj), "-e", "teensy41"], check=True)
+    main_hex = os.path.join(fw, "dc-main", ".pio", "build", "teensy41", "firmware.hex")
+    sd_hex = os.path.join(fw, "dc-sd-reader", ".pio", "build", "teensy41", "firmware.hex")
+    out = os.path.join(fw, "dc-main", ".pio", "build", "teensy41", "dc_all.hex")
     merge_hex.main(["merge_hex", main_hex, sd_hex, out])
     if no_flash:
         print(f"合成した hex: {out} (Teensy Loader で書く)")

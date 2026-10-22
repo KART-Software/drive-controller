@@ -14,7 +14,7 @@
     uv run tools/dcmon.py --list               # ポート一覧
 
 ポートは自動 (Teensy の VID 0x16C0、PID 0x0483 = KART Drive Controller / 0x04D5 = KART SD Reader)。複数あれば -p で指定。
-ワイヤフォーマットは dc-firmware/src/serial と同じ: COBS( protobuf ‖ crc16_le ) 0x00。
+ワイヤフォーマットは dc-firmware/dc-main/src/serial と同じ: COBS( protobuf ‖ crc16_le ) 0x00。
 proto の descriptor は dc-console の buf で spec/proto から作る (dc-console で pnpm install 済みが前提)。--desc で binpb を直接渡してもよい。
 """
 import argparse

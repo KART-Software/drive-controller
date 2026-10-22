@@ -4,15 +4,16 @@
 
 ## リポジトリ構成
 
-2 つの連携サブプロジェクトが `spec/proto/` の Protobuf スキーマを共有しています:
+ファームウェア (Teensy 4.1) と console が `spec/proto/` の Protobuf スキーマを共有しています:
 
-- `dc-firmware/` — Teensy 4.1 ファームウェア (PlatformIO + Arduino framework)。ETC (電子スロットル)、オートシフター、Launch Control (現在凍結)、センサーサンプリング、CAN、シリアルプロトコルを担当。
-- `dc-boot/` — 起動の選択だけをする薄いファーム (flash の先頭 0x60000000、ROM が飛んでくる唯一のイメージ)。`SRC_GPR10` のフラグで `dc-firmware` か `dc-sd-reader` へジャンプ。`dc-firmware` のビルド時に自動で合成される。
-- `dc-sd-reader/` — SD リーダーファーム (別イメージ、flash の 0x60080000)。SD カードを USB の MTP で PC に見せるだけ。3 つの配置とフラグの約束は `dc-firmware/src/util/boot_layout.hpp` (`docs/loop_nonblocking_spec.md` §7.11)。予定: `dc-firmware` → `dc-main` に改名し、`dc-firmware/` の下に 3 つを入れる。
+- `dc-firmware/` — Teensy 4.1 のファームウェア 3 つ (PlatformIO + Arduino framework。1 枚の flash に 3 つのイメージを置く。`docs/loop_nonblocking_spec.md` §7.11):
+  - `dc-main/` — drive-controller 本体 (flash の 0x60010000〜)。ETC (電子スロットル)、オートシフター、Launch Control (現在凍結)、センサーサンプリング、CAN、シリアルプロトコル。このファイルの「アーキテクチャ」以降は主にこれの話。
+  - `dc-boot/` — 起動の選択だけをする薄いファーム (flash の先頭 0x60000000、ROM が飛んでくる唯一のイメージ)。`SRC_GPR10` のフラグで `dc-main` か `dc-sd-reader` へジャンプ。`dc-main` のビルド時に自動で合成される。
+  - `dc-sd-reader/` — SD リーダー (flash の 0x60080000〜)。SD カードを USB の MTP で PC に見せるだけ。3 つの配置とフラグの約束は `dc-main/src/util/boot_layout.hpp`。
 - `dc-console/` — Preact + Vite の Web アプリ。Web Serial API 経由でファームウェアと USB シリアル通信し、ライブモニタリング・キャリブレーションを行う。
 - `spec/proto/drive_controller.proto` — ホスト ↔ デバイス間ワイヤフォーマットおよび永続化 `Config` の単一ソース。
 
-proto のワイヤフォーマットは `COBS( protobuf_bytes ‖ crc16_le ) 0x00` — `dc-firmware/src/serial/` および `dc-console/src/protocol.ts` を参照。
+proto のワイヤフォーマットは `COBS( protobuf_bytes ‖ crc16_le ) 0x00` — `dc-firmware/dc-main/src/serial/` および `dc-console/src/protocol.ts` を参照。
 
 ## ビルド / 開発コマンド
 
@@ -20,12 +21,12 @@ proto のワイヤフォーマットは `COBS( protobuf_bytes ‖ crc16_le ) 0x0
 
 ```bash
 # ビルド
-pio run -d dc-firmware -e teensy41
+pio run -d dc-firmware/dc-main -e teensy41
 
 # Teensy にアップロード (firmware.hex には post_build.py が dc-boot を合成済み。dc-sd-reader は残る)
-pio run -d dc-firmware -e teensy41 -t upload
+pio run -d dc-firmware/dc-main -e teensy41 -t upload
 
-# dc-sd-reader も書く / 初めて書く: dc-boot + dc-firmware + dc-sd-reader を 1 つの hex にして書く
+# dc-sd-reader も書く / 初めて書く: dc-boot + dc-main + dc-sd-reader を 1 つの hex にして書く
 # (dc-sd-reader の hex だけを書くと先頭の dc-boot が消えて起動しなくなる)。Windows / macOS でも可
 python3 tools/flash_all.py
 
@@ -33,20 +34,20 @@ python3 tools/flash_all.py
 #   sudo cp ~/.platformio/packages/tool-teensy/00-teensy.rules /etc/udev/rules.d/ && sudo udevadm control --reload
 #   console (ブラウザ) が COM を掴んでいると 134 baud を当てられないので Disconnect しておく
 uv run tools/flash_all.py                      # 3 つまとめて (134 baud でブートローダに入れて -w、3 回まで再試行)
-stty -F /dev/serial/by-id/usb-Teensyduino_KART_Drive_Controller_*-if00 134; sleep 3   # dc-firmware だけ手で書くとき
-~/.platformio/packages/tool-teensy/teensy_loader_cli -mmcu=TEENSY41 -w -v dc-firmware/.pio/build/teensy41/firmware.hex
+stty -F /dev/serial/by-id/usb-Teensyduino_KART_Drive_Controller_*-if00 134; sleep 3   # dc-main だけ手で書くとき
+~/.platformio/packages/tool-teensy/teensy_loader_cli -mmcu=TEENSY41 -w -v dc-firmware/dc-main/.pio/build/teensy41/firmware.hex
 
 # 端末からのモニタ / コマンド送信 (console の代わり。Linux / Windows / macOS、ポートは自動)
 uv run tools/dcmon.py -t 5 --can --control     # debug 行 + 1 s ごとの sys / can / control
 uv run tools/dcmon.py --send reboot mode=1     # コマンド (例: SD リーダーへ)
 
 # シリアルモニター (115200 baud)
-pio device monitor -d dc-firmware
+pio device monitor -d dc-firmware/dc-main
 ```
 
 初回 clone 後は `git submodule update --init --recursive` で `lib/kart-can` (CAN 定義) を取得すること。
 
-`dc-firmware/pre_build.py` がビルド前に自動で動き、(1) clangd 用の `compile_commands.json` を再生成、(2) nanopb 経由で `spec/proto/` から `dc-firmware/src/proto/drive_controller.pb.{c,h}` を再生成する。**生成された `.pb.{c,h}` を手で編集しないこと。**
+`dc-firmware/dc-main/pre_build.py` がビルド前に自動で動き、(1) clangd 用の `compile_commands.json` を再生成、(2) nanopb 経由で `spec/proto/` から `dc-firmware/dc-main/src/proto/drive_controller.pb.{c,h}` を再生成する。**生成された `.pb.{c,h}` を手で編集しないこと。**
 
 ### コンソール (pnpm)
 
@@ -62,18 +63,18 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 ### clangd
 
-ファームウェアは Arduino/Teensy ツールチェインを使うため、clangd には 2 つの補正が要る (`.clangd` + `dc-firmware/.vscode/settings.json`):
+ファームウェアは Arduino/Teensy ツールチェインを使うため、clangd には 2 つの補正が要る (`.clangd` + `dc-firmware/dc-main/.vscode/settings.json`):
 
 1. **システムインクルード**: `compile_commands.json` には newlib / libstdc++ の暗黙パスが入らないので、エディタ側から `--query-driver=${env:HOME}/.platformio/packages/toolchain-gccarmnoneeabi-teensy/bin/arm-none-eabi-*` を渡して g++ から取得する (VS Code 設定に記載済み。他エディタでも同じ引数が必須。無いと `<type_traits>` 等が見つからず大量の幻エラーになる)。
 2. **型マクロの差**: GCC (arm-none-eabi) は `int32_t`/`uint32_t` を `long`/`unsigned long` にするが clang は `int`/`unsigned`。そのままだと Teensy コアの `int32_t random(void)` と newlib の `long random(void)` が衝突するので、`.clangd` で `-D__INT32_TYPE__=long` 等を与えて GCC に合わせている。
 
-`-mcpu/-mfpu/-mfloat-abi/-mthumb` は clang がそのまま解釈できるので剥がさない (剥がすと multilib の選択がずれる)。`.clangd` に**絶対パスを書かないこと** (旧マシンのパスが残って preamble が壊れた前例あり)。ツールチェイン変更後に幻のエラーが出たら `compile_commands.json` を再生成 (`pio run` で自動) し、`clangd --query-driver=... --check=dc-firmware/src/main.cpp` で確認する。
+`-mcpu/-mfpu/-mfloat-abi/-mthumb` は clang がそのまま解釈できるので剥がさない (剥がすと multilib の選択がずれる)。`.clangd` に**絶対パスを書かないこと** (旧マシンのパスが残って preamble が壊れた前例あり)。ツールチェイン変更後に幻のエラーが出たら `compile_commands.json` を再生成 (`pio run` で自動) し、`clangd --query-driver=... --check=dc-firmware/dc-main/src/main.cpp` で確認する。
 
 ## アーキテクチャ
 
 ### ファームウェア並行性 (Teensy 4.1)
 
-`dc-firmware/src/main.cpp` は 4 つの並行コンテキストで動く (docs/loop_nonblocking_spec.md §3.1)。共有状態を触る前に自分のコードがどれに属するか把握すること。**時間の決まった処理はすべて割り込み、`loop()` には遅れてよい処理だけ**を置く:
+`dc-firmware/dc-main/src/main.cpp` は 4 つの並行コンテキストで動く (docs/loop_nonblocking_spec.md §3.1)。共有状態を触る前に自分のコードがどれに属するか把握すること。**時間の決まった処理はすべて割り込み、`loop()` には遅れてよい処理だけ**を置く:
 
 1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) → **SD ログ 1 レコードの採取** (`buildLogRecord()` → リング) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `tick_max_us` (約 20 µs)。
 2. **`canRxISR`** — FlexCAN3 の受信 (FIFO) 割り込み, 優先度 **64**。`CanRxData` に取り込み、0x741 のシフト入力はその場で `autoShifter.onPaddles()` に渡す。tick と同じ優先度なので互いに割り込まず、シフター・`CanRxData`・`ControlInput` はこの 2 つの間で排他不要。FlexCAN の `events()` は呼ばない (呼ぶとコールバックがキュー経由になる)。
@@ -116,8 +117,8 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### オートシフター
 
-`shift::AutoShifter` (`dc-firmware/src/shift/`) — クイックシフター/シーケンシャル
-ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/auto_shifter_spec.md` が一次ソース。
+`shift::AutoShifter` (`dc-firmware/dc-main/src/shift/`) — クイックシフター/シーケンシャル
+ミッションの UP/DOWN シフト信号を制御する。設計仕様は `dc-firmware/dc-main/auto_shifter_spec.md` が一次ソース。
 
 - ON/OFF とシフトパドルは `ControlInput` から `tick({.autoOn, .upPressed, .downPressed}, nowUs)` で渡される (入手元は CAN 0x740 byte2 / 0x741、または console の上書き)。0x741 は受信割り込みから `onPaddles()` で**即時**に渡され、その場でパルスを始める (開始時刻は受信した瞬間の `sysClock.nowUs()`、チャタリング除去は送信側の責務)。OFF=manual (ドライバー判断)、ON=auto (独自ロジック)。パドルは押下状態で渡され、立ち上がり検出は `AutoShifter` が行う。
 - 出力は **両モードとも「エッジ検出 → 整形パルス」** (`Idle → Pulsing → Cooldown`)。OFF はレベルミラーではない。パルスの開始から次の開始までは最短 0.5 s (`SHIFT_MIN_INTERVAL_MS`、config `cooldown_ms` が長ければそちら)。その間の要求は捨てる。
@@ -129,7 +130,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### セルモーターリレー
 
-`starter::StarterController` (`dc-firmware/src/starter/`、仕様は `docs/starter_spec.md`) — セルスイッチ (CAN 0x740 byte3、`ControlInput::starterPressed()`) でセルモーターのリレー (`STARTER_RELAY_PIN`、暫定ピン 6) を駆動する。`tickISR` から毎 ms `tick()`。
+`starter::StarterController` (`dc-firmware/dc-main/src/starter/`、仕様は `docs/starter_spec.md`) — セルスイッチ (CAN 0x740 byte3、`ControlInput::starterPressed()`) でセルモーターのリレー (`STARTER_RELAY_PIN`、暫定ピン 6) を駆動する。`tickISR` から毎 ms `tick()`。
 
 - 押した瞬間 (0 → 1) に ON。エンジン回転がしきい値を超えていれば ON にしない (押し直すまで待つ)。
 - 回転がしきい値を超えた状態が `running_confirm_ms` 続いたら OFF (エンジンがかかった)。
@@ -154,7 +155,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### SD ロギング
 
-`SensorLogger` (`dc-firmware/src/util/log/`) が Teensy 4.1 内蔵 SD (SDIO、FIFO モード) へセンサーデータを **1 kHz・固定長バイナリ**で記録する (`docs/loop_nonblocking_spec.md` §7 が一次ソース)。**Config の flash (LittleFS) とは別系統**。
+`SensorLogger` (`dc-firmware/dc-main/src/util/log/`) が Teensy 4.1 内蔵 SD (SDIO、FIFO モード) へセンサーデータを **1 kHz・固定長バイナリ**で記録する (`docs/loop_nonblocking_spec.md` §7 が一次ソース)。**Config の flash (LittleFS) とは別系統**。
 
 - 構成: `LogRing` (tick → loop の SPSC リング、2048 レコード ≈ 2 s、本体は `DMAMEM`) / `LogStore` (interface、`interfaces/util/log/`: 媒体とファイルの操作) ← `SdLogStore` (SdFat `SdFs` / `FsFile`) / `SensorLogger` (facade)。テキスト用の `LogWriter` ← `SerialDebugWriter` / `DebugLogger` と対になる。フォーマット (`LogHeader` 32 B / `LogRecord` 152 B。末尾に CAN の fault / TEC / REC) は `util/log/log_record.hpp`。
 - **採取は `tickISR` の最後** (`SensorLogger::capture()` に `buildLogRecord()` を呼ぶラムダを渡す → 有効なら組み立ててリングへ)。1 ms の等間隔で、loop が SD で止まっても欠けない。SD ログが無効 (カードなし / 失敗で停止 / フォーマット中) の間は組み立てずに数えるだけ。`log_drops` は「記録されなかったレコードの数」(無効な間 + リングの溢れ) で、telemetry の `SysStats` と LogRecord に載る。カードなしの運転は想定外なので、drops が増え続けて console が警告色になるのは意図どおり。
@@ -165,7 +166,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - レコード生成は**純粋関数** `buildLogRecord()` (`src/log_record_builder.{hpp,cpp}`) に集約 — 全入力を const 参照で受け、`SensorHub` 等の public const getter から読むだけで副作用なし。`SensorHub` はログ形式に依存しない。plausibility の valid/errors は `PlausibilityValidator::currentlyValid()` / `errorBits()` (副作用なし const) で読む。レコードの `loop_max_us` 等は loop が集計する値を tick が読む (診断用なので途中の値でもよい)。
 - フォーマット変更時は `tools/decode_log.py` (ディレクトリ → CSV。ファイルをつなぎ、ゼロのレコードか `t_us` の飛びで止める) を合わせること。開発中は `SENSOR_LOG_VERSION` を 0 のまま上げない (固まったら上げる)。
 - ホスト向けテレメトリの proto (`dc_Sensor`) とは別物: proto = 自己記述・可変長・50–60Hz、SD ログ = 高レート固定バイナリ (memcpy のみ)。
-- **SD リーダーと起動の選択** (`docs/loop_nonblocking_spec.md` §7.11): 3 つのファーム = `dc-boot` (flash 先頭、起動の選択だけ) / `dc-firmware` (0x60010000、448 KB 以内にリンク) / `dc-sd-reader` (0x60080000)。console の「SD Reader」(`RebootCmd { mode: SD_READER }`、ETC 動作中は拒否) → `util/boot_mode` が `SRC_GPR10` の下位 28 bit にフラグ → ソフトリセット → `dc-boot` の `startup_early_hook()` (FLASHMEM、RAM 初期化前) がフラグを消して `dc-sd-reader` の IVT entry へジャンプ。`dc-sd-reader` は SD を USB の **MTP** ("KART SD Reader" / "SD Card"、PID 0x04D5) で見せ、点火リレー LOW。**USB を抜くか console の Reboot で `dc-firmware` に戻る** (console は PID で相手を見分け、SD リーダーのときは「通常モードで再起動」だけを出す。電源の入れ直しでも `dc-firmware`)。`dc-firmware` の USB は `USB_SERIAL` (PID 0x0483、製品名 "KART Drive Controller"、`src/usb_names.c`)。**`SRC_GPR10` の上位 4 bit は ROM の persist ビットなので触らない** (bit 30 で起動不能になる)。**eFuse (OCOTP) には触らない**。配置とフラグは `src/util/boot_layout.hpp` だけで決め、各プロジェクトの `.ld` と一致させる。`dc-sd-reader` を書くときは `python3 tools/flash_all.py`。`dc-sd-reader` の hex 単体を書かないこと。起動時の debug `boot: SRC_GPR10=… SRSR=…` がリセットの理由、直前がクラッシュなら `CrashReport` も debug に出る。
+- **SD リーダーと起動の選択** (`docs/loop_nonblocking_spec.md` §7.11): 3 つのファーム = `dc-boot` (flash 先頭、起動の選択だけ) / `dc-main` (0x60010000、448 KB 以内にリンク) / `dc-sd-reader` (0x60080000)。console の「SD Reader」(`RebootCmd { mode: SD_READER }`、ETC 動作中は拒否) → `util/boot_mode` が `SRC_GPR10` の下位 28 bit にフラグ → ソフトリセット → `dc-boot` の `startup_early_hook()` (FLASHMEM、RAM 初期化前) がフラグを消して `dc-sd-reader` の IVT entry へジャンプ。`dc-sd-reader` は SD を USB の **MTP** ("KART SD Reader" / "SD Card"、PID 0x04D5) で見せ、点火リレー LOW。**USB を抜くか console の Reboot で `dc-main` に戻る** (console は PID で相手を見分け、SD リーダーのときは「通常モードで再起動」だけを出す。電源の入れ直しでも `dc-main`)。`dc-main` の USB は `USB_SERIAL` (PID 0x0483、製品名 "KART Drive Controller"、`src/usb_names.c`)。**`SRC_GPR10` の上位 4 bit は ROM の persist ビットなので触らない** (bit 30 で起動不能になる)。**eFuse (OCOTP) には触らない**。配置とフラグは `src/util/boot_layout.hpp` だけで決め、各プロジェクトの `.ld` と一致させる。`dc-sd-reader` を書くときは `python3 tools/flash_all.py`。`dc-sd-reader` の hex 単体を書かないこと。起動時の debug `boot: SRC_GPR10=… SRSR=…` がリセットの理由、直前がクラッシュなら `CrashReport` も debug に出る。
 - ベンチ: `-DSENSOR_LOG_FILE_BYTES=1000000` でファイルを 1 MB にして切り替えを試せる。`teensy41_bench` の `debug_stall` (最大 5 s) で loop を止めて drops を確かめる。カードの中身は `local/sd-reader` (MTP ファーム) で取り出す。
 
 ### コマンドルーティング
@@ -184,14 +185,14 @@ ETC 停止 = `setMotorOff()` (PWM=0 + モーター電源リレー OFF)、再開 
 
 ### ピンアサイン
 
-`dc-firmware/src/constants.hpp` で `#define` によりモータードライバを選択 (現在は `G2_18V17`)。主要ピンは実配線に合わせて確定済み: モーター(G2)=SLP21/PWM22/DIR23/FLT20、車輪速=24/25/28/36 (FlexPWM, 別サブモジュール)、RPM=Engine14/クラッチ後15 (QuadTimer)、オートシフター出力=UP_OUT4/DOWN_OUT5 (パドル入力は CAN 0x741)、CAN=CAN3(30/31)、ADC(SPI0)=10-13、IMU(SPI1)=0/1/26/27。パルスカウントのピンはペリフェラル制約あり (上記「パルスカウント」節)。ベンチテスト前に実配線と必ず照合すること。
+`dc-firmware/dc-main/src/constants.hpp` で `#define` によりモータードライバを選択 (現在は `G2_18V17`)。主要ピンは実配線に合わせて確定済み: モーター(G2)=SLP21/PWM22/DIR23/FLT20、車輪速=24/25/28/36 (FlexPWM, 別サブモジュール)、RPM=Engine14/クラッチ後15 (QuadTimer)、オートシフター出力=UP_OUT4/DOWN_OUT5 (パドル入力は CAN 0x741)、CAN=CAN3(30/31)、ADC(SPI0)=10-13、IMU(SPI1)=0/1/26/27。パルスカウントのピンはペリフェラル制約あり (上記「パルスカウント」節)。ベンチテスト前に実配線と必ず照合すること。
 
 ## 規約
 
 - C++ namespace はサブシステム単位: `etc::` (スロットル), `launch::` (Launch Control), `shift::` (オートシフター)。センサーと共通ユーティリティはグローバル。
 - コメントは日本語の箇所が多い。新規コードは英語でも可だが、修正時は周囲のファイルに合わせる。
 - debug メッセージは `DebugLogger::log` で出す (ISR からも同じ。出力先は登録した `LogWriter`。今は `SerialDebugWriter` が COBS フレームで送る)。`Serial` に直接出力しないこと (素の `Serial.printf` はワイヤフォーマットをフレーム途中で破壊する)。
-- `dc-firmware/test/` ディレクトリは存在するが現在空。テストランナーは未セットアップ。
+- `dc-firmware/dc-main/test/` ディレクトリは存在するが現在空。テストランナーは未セットアップ。
 
 ## 未対応項目
 

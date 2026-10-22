@@ -334,7 +334,7 @@ message Config {
 新規 namespace `shift::`（`etc::`, `launch::` と同方針）。
 
 ```
-dc-firmware/src/shift/
+dc-firmware/dc-main/src/shift/
   auto_shifter.hpp / .cpp
 ```
 

@@ -11,8 +11,8 @@ python_exe = env.subst("$PYTHONEXE")
 pioenv = env.subst("$PIOENV")
 libdeps_dir = env.subst("$PROJECT_LIBDEPS_DIR")
 
-# spec/proto/*.proto → src/proto/*.pb.{c,h} (dc-firmware/pre_build.py と同じ。RebootCmd の受付に使う)
-proto_src_dir = os.path.normpath(os.path.join(project_dir, "..", "spec", "proto"))
+# spec/proto/*.proto → src/proto/*.pb.{c,h} (dc-main/pre_build.py と同じ。RebootCmd の受付に使う)
+proto_src_dir = os.path.normpath(os.path.join(project_dir, "..", "..", "spec", "proto"))
 proto_out_dir = os.path.join(project_dir, "src", "proto")
 nanopb_generator = os.path.join(libdeps_dir, pioenv, "Nanopb", "generator", "nanopb_generator.py")
 

@@ -1,7 +1,7 @@
-# clangd 設定 (リポジトリルート)。VS Code 側は dc-firmware/.vscode/settings.json の
+# clangd 設定 (リポジトリルート)。VS Code 側は dc-firmware/dc-main/.vscode/settings.json の
 # --query-driver で arm-none-eabi-g++ のシステムインクルード (newlib / libstdc++) を取得する。
 CompileFlags:
-  CompilationDatabase: dc-firmware/
+  CompilationDatabase: dc-firmware/dc-main/
   Add:
     # GCC (arm-none-eabi) は int32_t/uint32_t を long/unsigned long にするが clang は int/unsigned。
     # そのままだと Teensy コアの int32_t random(void) と newlib の long random(void) が

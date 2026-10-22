@@ -38,7 +38,7 @@ ExperimentPanel.tsx / docs/)。
 ```bash
 # PlatformIO (未導入)。公式インストーラ or pipx
 pipx install platformio          # または https://platformio.org/install/cli
-pio run -d dc-firmware -e teensy41   # 初回はツールチェイン DL に数分
+pio run -d dc-firmware/dc-main -e teensy41   # 初回はツールチェイン DL に数分
 
 # Node 22 + pnpm (未導入)。旧 PC では ~/.local/opt に tarball 展開 + corepack を使用
 corepack enable && cd dc-console && pnpm install
