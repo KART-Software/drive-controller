@@ -36,6 +36,7 @@ class SensorLogger {
     // loop から
     void service(uint32_t nowMs);
     bool format();
+    void close();  // 再起動の前に: リングに残っている分を書いて sync し、閉じる (以後 tick は数えるだけ)
     uint32_t drops() const { return drops_; }  // 記録されなかったレコードの累計
 
    private:

@@ -1,4 +1,6 @@
 #include "command_controller.hpp"
+
+#include "util/boot_mode.hpp"
 #include "serial/serial_protocol.hpp"
 #include "util/log/debug_logger.hpp"
 
@@ -171,11 +173,21 @@ void setConfig(void* ctx, const dc_Command& cmd) {
     SerialProtocol::sendResponse(cmd.id, ok);
 }
 
+// 再起動。mode = SD_READER ならフラグを置き、dc-boot が次の起動で dc-sd-reader (SD を MTP で見せる別ファーム) へ飛ぶ
+// (util/boot_mode.hpp)。SD リーダーでは ETC が動かないので、動作中は拒否する (format_sd と同じ歯止め)
 void reboot(void* ctx, const dc_Command& cmd) {
-    (void)ctx;
+    auto* c = static_cast<CommandContainer*>(ctx);
+    const bool sdReader = cmd.body.reboot.mode == dc_RebootCmd_Mode_SD_READER;
+    if (sdReader && c->motorController.isOn()) {
+        DebugLogger::log("reboot: refused (ETC is on)");
+        SerialProtocol::sendResponse(cmd.id, false);
+        return;
+    }
+    c->sensorLogger.close();  // 残りを書いて sync し、閉じる
     SerialProtocol::sendResponse(cmd.id, true);
-    delay(100);
-    SCB_AIRCR = 0x05FA0004;  // Teensy software reset
+    DebugLogger::service();  // 「SD log: closed」など、積んである debug を送ってから
+    delay(100);              // 応答が USB に流れてから
+    boot_mode::rebootInto(sdReader ? BootMode::SdReader : BootMode::Normal, boot_mode::kReasonCommand);
 }
 
 void revert(void* ctx, const dc_Command& cmd) {
@@ -336,7 +348,7 @@ void CommandController::registerCommands(CommandRouter& router) {
     router.on(dc_Command_etc_manual_adjust_tag, etcManualAdjust, &container);
     router.on(dc_Command_get_config_tag, getConfig, &container);
     router.on(dc_Command_set_config_tag, setConfig, &container);
-    router.on(dc_Command_reboot_tag, reboot, nullptr);
+    router.on(dc_Command_reboot_tag, reboot, &container);
     router.on(dc_Command_revert_tag, revert, &container);
     router.on(dc_Command_set_rtc_tag, setRtc, nullptr);
     router.on(dc_Command_set_gps_gear_tag, setGpsGear, &container);
