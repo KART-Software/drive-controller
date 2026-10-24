@@ -1,6 +1,7 @@
 #include "wire.hpp"
 
 #include <Arduino.h>
+#include <Teensy4TinyUSB.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -16,8 +17,8 @@ size_t rxLen = 0;
 }  // namespace
 
 int wire::pollReboot() {
-    while (Serial.available() > 0) {
-        const int b = Serial.read();
+    while (SerialTinyUSB.available() > 0) {
+        const int b = SerialTinyUSB.read();
         if (b < 0)
             break;
         if (b != 0x00) {
@@ -73,6 +74,6 @@ void wire::sendResponse(uint32_t id, bool ok) {
     uint8_t frame[sizeof(body) + sizeof(body) / 254 + 2];
     const size_t n = cobs::encode(body, len + 2, frame);
     frame[n] = 0x00;
-    Serial.write(frame, n + 1);
-    Serial.flush();
+    SerialTinyUSB.write(frame, n + 1);
+    SerialTinyUSB.flush();  // 実際に送られるのは次の Teensy4USB::task() で
 }
