@@ -47,13 +47,13 @@ def loader():
 
 
 def enter_bootloader():
-    """KART のシリアルポート (VID 0x16C0、PID 0x0483 / 0x04D5) に 134 baud を当ててブートローダに入れる。見つからなければ False"""
+    """KART のシリアルポート (0x16C0:0x0483 = dc-main、0x1209:0x0001 = dc-sd-reader) に 134 baud を当ててブートローダに入れる。見つからなければ False"""
     try:
         import serial
         import serial.tools.list_ports
     except ImportError:
         return False
-    ports = [p for p in serial.tools.list_ports.comports() if p.vid == 0x16C0 and p.pid in (0x0483, 0x04D5)]
+    ports = [p for p in serial.tools.list_ports.comports() if (p.vid, p.pid) in ((0x16C0, 0x0483), (0x1209, 0x0001))]
     if not ports:
         return False
     try:

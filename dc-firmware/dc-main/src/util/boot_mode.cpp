@@ -18,6 +18,7 @@ void boot_mode::logAndClear() {
         switch ((uint8_t)v) {
             case kReasonHostGone:   why = " (sd-reader: USB host gone)"; break;
             case kReasonCommand:    why = " (reboot command)"; break;
+            case kReasonEject:      why = " (sd-reader: ejected by host)"; break;
             case kReasonNoSdReader: why = " (sd-reader requested but no image at 0x60080000)"; break;
             default:                why = " (reboot)"; break;
         }

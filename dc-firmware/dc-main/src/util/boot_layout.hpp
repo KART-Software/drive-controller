@@ -25,6 +25,7 @@ constexpr uint32_t kFlagMainMask = 0x0FFFFF00;
 // 理由コード (kFlagMain の下位 8 bit)
 constexpr uint8_t kReasonHostGone = 1;         // dc-sd-reader: USB ホストがいなくなった
 constexpr uint8_t kReasonCommand = 2;          // RebootCmd
+constexpr uint8_t kReasonEject = 3;            // dc-sd-reader: PC が「取り出し」をした
 constexpr uint8_t kReasonNoSdReader = 0xFE;    // dc-boot: dc-sd-reader が要求されたがイメージが無く、dc-firmware を起動した
 
 constexpr uint32_t kIvtOffset = 0x1000;        // IVT はイメージ先頭 + 4 KB (FlexSPI NOR、RM Table 9-36)

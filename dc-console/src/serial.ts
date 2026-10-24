@@ -9,12 +9,11 @@ let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
 let onBytes: ((chunk: Uint8Array) => void) | null = null;
 let onDisconnect: (() => void) | null = null;
 
-// 対象は Teensy (PJRC の VID 0x16C0) の drive-controller (PID 0x0483) と SD リーダー (0x04D5) だけ。
+// 対象は drive-controller (Teensy の VID 0x16C0 / PID 0x0483) と SD リーダー (pid.codes のテスト用 0x1209 / 0x0001、TinyUSB の CDC) だけ。
 // ポート選択ダイアログにも CANable などの別の COM は出ない
-const KART_PORTS = [
-  { usbVendorId: 0x16c0, usbProductId: 0x0483 },
-  { usbVendorId: 0x16c0, usbProductId: 0x04d5 },
-];
+export const DRIVE_CONTROLLER_PORT = { usbVendorId: 0x16c0, usbProductId: 0x0483 };
+export const SD_READER_PORT = { usbVendorId: 0x1209, usbProductId: 0x0001 };
+const KART_PORTS = [DRIVE_CONTROLLER_PORT, SD_READER_PORT];
 
 function isKartPort(p: SerialPort): boolean {
   try {
