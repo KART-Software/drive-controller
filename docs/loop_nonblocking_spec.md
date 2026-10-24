@@ -554,7 +554,7 @@ SD リーダーは別のファームにし、起動の選択も別の薄いフ�
 |---|---|---|
 | **dc-boot** | 0x60000000、64 KB (実体 21 KB) | ROM が飛んでくる唯一のイメージ。`startup_early_hook()` で `SRC_GPR10` のフラグを見て、どちらかの IVT の entry へジャンプするだけ。どちらも無ければ `setup()` まで落ちて LED を 3 回点滅 (USB は "KART Boot") |
 | **dc-main** | 0x60010000、448 KB (実体 177 KB) | drive-controller 本体。USB は `USB_SERIAL` (PID 0x0483、製品名 "KART Drive Controller") |
-| **dc-sd-reader** | 0x60080000、512 KB (実体 137 KB) | SD を USB の MTP で見せる。`USB_MTPDISK_SERIAL` (PID 0x04D5、"KART SD Reader") |
+| **dc-sd-reader** | 0x60080000、512 KB (実体 72 KB) | SD を **USB Mass Storage** (+ CDC) で見せる = 普通の USB メモリとして出る。TinyUSB、VID 0x1209 / PID 0x0001 (pid.codes のテスト用)、"KART SD Reader" |
 
 各プロジェクトのリンカスクリプト (`imxrt1062_t41_{boot,main,512k}.ld` = コアの `imxrt1062_t41.ld` の FLASH の ORIGIN / LENGTH だけ変えたもの) と
 `boot_layout.hpp` を一致させる。はみ出すとリンクで落ちる。コアのファイルのコピーなので Teensy コア (PlatformIO の framework) の更新で乖離しうる。
@@ -574,11 +574,27 @@ PlatformIO 同梱の `teensy_loader_cli` 2.2 が 1 MB より先のアドレス�
   飛び先の `ResetHandler` は FlexRAM / SP / RAM の初期化を自分でやり直すので、途中から飛んでよい。"SDR" 以外の値 (dc-main の再起動理由
   `004e4dNN`) は dc-boot は触らず、dc-main が debug に出して消す。
 - **dc-sd-reader の中身**: 出力を安全側に固定 (点火リレー LOW = エンジンは掛からない、モーター SLP / PWM / DIR / リレー / セル / シフト出力 LOW。
-  ピンは dc-main の `constants.hpp` を共有)、`MTP.begin()` + `SD.begin(BUILTIN_SDCARD)` + `addFilesystem(SD, "SD Card")`、LED 250 ms 点滅。
-  `wire.cpp` が dc-main と同じワイヤフォーマット (COBS + CRC16 + nanopb、`serial/cobs.cpp` と `crc16.hpp` を共有) で `RebootCmd` だけ受け、
-  ほかのコマンドには ok=false。MTP の URL は `mtp://Teensyduino_KART_SD_Reader_<serial>/`。
-- **戻り方**: **USB を抜くと dc-main に戻る** (ホストがいる間は SOF で `USB1_FRINDEX` が進む。3 s 進まなければソフトリセット →
-  フラグ無し = dc-main)。つないだままなら console の **Reboot** (console は `port.getInfo()` の PID で相手を見分け、dc-sd-reader (0x04D5) に
+  ピンは dc-main の `constants.hpp` を共有)、LED 250 ms 点滅 (カードが無ければ 2 回点滅して休む)。
+  **USB は Teensy4TinyUSB** (別リポジトリ github.com/ORyomei/Teensy4TinyUSB。PlatformIO Registry の `oryomei/Teensy4TinyUSB` を
+  `dc-sd-reader/platformio.ini` の `lib_deps` で取る。Teensy 4 で TinyUSB のデバイス側を動かす汎用ライブラリで、TinyUSB 0.18.0 をデバイス側 + ChipIdea ポートだけに絞って同梱、MIT。
+  `library.json` / `README.md` / `examples/` を備える。英語):
+  Teensy コアの USB は `-DUSB_DISABLED` で止め、`Teensy4USB::begin()` が PHY / クロック / 割り込みを用意して `tud_init()`。i.MX RT 向けポートが
+  要求する NXP SDK の `fsl_device_registers.h` はライブラリ内の小さな代替 (Teensy の `imxrt.h` で USB1 の先頭アドレスと IRQ 番号だけ) で満たす。
+  バッファは DTCM (キャッシュ外) に置くのでキャッシュ操作は無効 (`CFG_TUD_MEM_DCACHE_ENABLE 0`)。コア 1.59 以降は `USB_DISABLED` だと
+  `yield.cpp` の `serialEvent` と `startup.c` の `usb_isr` が未解決になる (PaulStoffregen/cores PR #735、2024 年から未マージ) ので、ライブラリの
+  `extra_script.py` が弱い宣言を `-include` で全翻訳単位 (コア含む) に補い、`usb_isr` は弱い空関数を定義する。`-DUSB_DISABLED` が無ければ
+  ビルドを止める。
+  - **MSC** (`Teensy4USBMsc` + `Teensy4USBMscSdFat`): LUN 1 つ。SdFat の `cardBegin()` だけ (ファイルシステムはマウントしない) で、read10 / write10 を
+    `readSectors` / `writeSectors` に直結 (1 回 16 KB = 32 セクタ)。PC が exFAT を直接マウントする。「取り出し」(START STOP UNIT の eject) で
+    `syncDevice()` して以後「メディア無し」と答え (`Teensy4USBMsc::ejected()`)、main が dc-main に戻す。
+  - **CDC** (`SerialTinyUSB`、`src/wire.cpp`): dc-main と同じワイヤフォーマット (COBS + CRC16 + nanopb、`serial/cobs.cpp` と `crc16.hpp` を共有) で
+    `RebootCmd` だけ受け、ほかのコマンドには ok=false。応答は `Teensy4USB::task()` を回して送り切ってからリセットする。
+  - USB の記述子はライブラリの既定 (CDC + MSC の複合、IAD、FS / HS 両方)。VID / PID / 名前は `Teensy4USBConfig` で渡す: 製造者 "KART"、
+    製品 "KART SD Reader"、シリアル番号は Teensy コアと同じく OCOTP の MAC0 から (読むだけ)。
+  - Linux は `tools/99-kart.rules` (一般ユーザーの権限と ModemManager の除外) を `/etc/udev/rules.d/` に。無いと dialout に入っていない
+    ユーザーは CDC を開けない。Windows / macOS は標準ドライバ (usbstor / usbser) で何も要らない。
+- **戻り方**: **PC で「取り出し」をすると dc-main に戻る** (理由 3)。**USB を抜いても戻る** (ホストがいる間は SOF で `USB1_FRINDEX` が進む。
+  3 s 進まなければソフトリセット → フラグ無し = dc-main。理由 1)。つないだままなら console の **Reboot** (理由 2) (console は `port.getInfo()` の PID で相手を見分け、dc-sd-reader (0x04D5) に
   つないだときは「通常モードで再起動」ボタンだけを出す)。電源の入れ直しでも dc-main。`MTP.loop()` はファイル転送中に数秒戻ってこないので、
   時刻は転送の後に読む (前に読んだ時刻で判定すると転送後に「3 s 不在」と誤判定する。同居版のベンチで実際に起きた)。
 - **書き込み**: `teensy_loader_cli` は先頭 1 KB (アドレス 0) を必ず書く (hex に無ければ 0xFF) ので、dc-main (0x60010000〜) だけの hex を書くと
@@ -602,6 +618,12 @@ PlatformIO 同梱の `teensy_loader_cli` 2.2 が 1 MB より先のアドレス�
   (boot 込みの hex) だけ書き直しても dc-sd-reader は残り、再び入れる。dc-main の通常動作は変化なし (telemetry 50 Hz、tick 19〜20 µs)。
   Linux の autosuspend は gvfs 等が 2 s ごとに起こすのでホスト不在の模擬には使えない。dc-main に MTP を同居させる案は動いたが、
   同居させない方針で廃止。`local/sd-reader` (旧専用ファーム) も不要。
+- **ベンチ (2026-10-23、MTP → USB Mass Storage)**: Linux で `/dev/sda` (15.9 GB、`sda1` exFAT) と `/dev/ttyACM1` (CDC) が出る。生の読み出し
+  **15.1 MB/s** (`dd iflag=direct`、MTP は 12.8)、マウントしてコピー 13.7 MB/s、コピーしたログを `decode_log.py` で読んで欠け 0、書き込み / 削除 OK。
+  `eject` → 300 ms 後に dc-main (理由 3)、CDC の `RebootCmd` → dc-main (理由 2)、USB ポート無効化 → 3 s で dc-main (理由 1)。
+  MTP (Windows は読めるが Mac は不可、Chrome 直読み不可) をやめた理由は「普通の USB メモリとして出る」こと: Windows / Mac / Linux で
+  何も入れずにマウントでき、ブラウザのファイルピッカーからも読める。
+  Windows と macOS でもマウントと取り出しを確認した (2026-10-24)。
 - 2026-10-23: `dc-firmware` を `dc-main` に改名し、`dc-firmware/` の下に `dc-boot` / `dc-main` / `dc-sd-reader` を入れた (PR #22 の後)。
 
 ## 8. 検証用デバッグコマンド (ベンチ専用)
