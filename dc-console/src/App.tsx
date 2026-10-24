@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "preact/hooks";
-import { serial } from "./serial";
+import { serial, SD_READER_PORT } from "./serial";
 import { mockSerial } from "./mock-serial";
 import { protocol } from "./protocol";
 import type { Transport } from "./transport";
@@ -35,7 +35,7 @@ function pathForRoute(r: Route): string {
 export function App() {
   const transportRef = useRef<Transport>(isMock ? mockSerial : serial);
   const [connected, setConnected] = useState(false);
-  // つないだ相手: drive-controller (PID 0x0483) か SD リーダー (別ファーム、PID 0x04D5)。SD リーダーのときは通常モードへ戻すボタンだけ出す
+  // つないだ相手: drive-controller (0x16C0 / 0x0483) か SD リーダー (別ファーム、0x1209 / 0x0001)。SD リーダーのときは通常モードへ戻すボタンだけ出す
   const [sdReader, setSdReader] = useState(false);
   const [config, setConfig] = useState<DeviceConfig | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -122,13 +122,13 @@ export function App() {
       .catch((err: Error) => addLog("SD format error: " + err.message));
   }
 
-  // SD リーダー (別ファーム dc-sd-reader) で再起動: SD カードが USB の MTP ("KART SD Reader" / SD Card) で読める。ETC 動作中なら拒否。
+  // SD リーダー (別ファーム dc-sd-reader) で再起動: SD カードが USB ドライブ "KART SD Reader" (Mass Storage) として出る。ETC 動作中なら拒否。
   // 応答のあと装置がリセットされるので切断になる。USB を抜くか Reboot で drive-controller に戻る
   function handleSdReader() {
     setConfirm(null);
     addLog("Rebooting into SD reader mode...");
     protocol.sendCommand("reboot", { sdReader: true })
-      .then((resp) => addLog(resp.ok ? "SD card will be mounted on the PC as 'KART SD Reader'" : "SD reader refused (ETC on?)"))
+      .then((resp) => addLog(resp.ok ? "SD card will appear as USB drive 'KART SD Reader'. Eject it to return" : "SD reader refused (ETC on?)"))
       .catch((err: Error) => addLog("SD reader error: " + err.message));
   }
 
@@ -180,7 +180,7 @@ export function App() {
     try {
       if (!(await transportRef.current.connect({ chooser, auto }))) return;
       const info = transportRef.current.deviceInfo();
-      const isSdReader = info?.usbProductId === 0x04d5;
+      const isSdReader = info?.usbVendorId === SD_READER_PORT.usbVendorId && info?.usbProductId === SD_READER_PORT.usbProductId;
       setSdReader(isSdReader);
       if (!isSdReader) {  // SD リーダーには telemetry が無いのでセッションを作らない
         sensorStore.startSession();
@@ -188,7 +188,7 @@ export function App() {
       }
       setConnected(true);
       fsDismissed.current = false;  // 新規接続ごとに FS フル警告を再評価
-      addLog((isSdReader ? "Connected: SD card is mounted on the PC (KART SD Reader)" : "Connected") + (auto ? " (auto)" : ""));
+      addLog((isSdReader ? "Connected: SD card is mounted on the PC as USB drive 'KART SD Reader'" : "Connected") + (auto ? " (auto)" : ""));
       if (isSdReader) return;
       setTimeout(async () => {
         try {
@@ -297,7 +297,7 @@ export function App() {
         <section style={{ margin: "24px", maxWidth: "520px" }}>
           <h2>SD カードを PC にマウント中</h2>
           <p style={{ color: "var(--text-dim)" }}>
-            エクスプローラー / Files の「KART SD Reader」から読み書きできます。制御は止まっています。
+            USB ドライブ「KART SD Reader」として読み書きできます。制御は止まっています。PC で取り出し (Eject) をすると通常モードに戻ります。
           </p>
           <button class="danger" onClick={handleRebootToNormal}>通常モードで再起動</button>
         </section>
@@ -327,7 +327,7 @@ export function App() {
       <ConfirmDialog open={confirm === "sd_reader"} title="SD カードを PC にマウント" confirmLabel="マウント"
         onConfirm={handleSdReader} onCancel={() => setConfirm(null)}>
         <p>別のファームで再起動し、制御は止まります。</p>
-        <p>戻すときは「通常モードで再起動」を押すか、USB を抜いてください。</p>
+        <p>戻すときは PC で取り出し (Eject) をするか、「通常モードで再起動」を押すか、USB を抜いてください。</p>
       </ConfirmDialog>
     </div>
   );

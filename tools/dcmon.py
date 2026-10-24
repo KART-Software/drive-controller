@@ -13,7 +13,7 @@
     uv run tools/dcmon.py --send set_control_override etc_mode=2
     uv run tools/dcmon.py --list               # ポート一覧
 
-ポートは自動 (Teensy の VID 0x16C0、PID 0x0483 = KART Drive Controller / 0x04D5 = KART SD Reader)。複数あれば -p で指定。
+ポートは自動 (0x16C0:0x0483 = KART Drive Controller / 0x1209:0x0001 = KART SD Reader)。複数あれば -p で指定。
 ワイヤフォーマットは dc-firmware/dc-main/src/serial と同じ: COBS( protobuf ‖ crc16_le ) 0x00。
 proto の descriptor は dc-console の buf で spec/proto から作る (dc-console で pnpm install 済みが前提)。--desc で binpb を直接渡してもよい。
 """
@@ -31,8 +31,7 @@ import serial.tools.list_ports
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory, text_format
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-KART_VID = 0x16C0
-KART_PIDS = {0x0483: "KART Drive Controller", 0x04D5: "KART SD Reader"}
+KART_DEVICES = {(0x16C0, 0x0483): "KART Drive Controller", (0x1209, 0x0001): "KART SD Reader"}  # (VID, PID)
 
 
 # ---- wire: CRC16-CCITT-FALSE + COBS ----
@@ -121,7 +120,7 @@ def load_messages(desc_path: Optional[str]):
 
 # ---- ports ----
 def kart_ports():
-    return [p for p in serial.tools.list_ports.comports() if p.vid == KART_VID and p.pid in KART_PIDS]
+    return [p for p in serial.tools.list_ports.comports() if (p.vid, p.pid) in KART_DEVICES]
 
 
 def pick_port(explicit: Optional[str]) -> str:
@@ -131,7 +130,7 @@ def pick_port(explicit: Optional[str]) -> str:
     if not ports:
         raise SystemExit("KART デバイスが見つかりません (--list で確認)")
     if len(ports) > 1:
-        raise SystemExit("KART デバイスが複数あります。-p で指定してください:\n" + "\n".join(f"  {p.device}  {KART_PIDS[p.pid]}" for p in ports))
+        raise SystemExit("KART デバイスが複数あります。-p で指定してください:\n" + "\n".join(f"  {p.device}  {KART_DEVICES[(p.vid, p.pid)]}" for p in ports))
     return ports[0].device
 
 
@@ -160,7 +159,7 @@ def main():
 
     if args.list:
         for p in serial.tools.list_ports.comports():
-            mark = KART_PIDS.get(p.pid, "") if p.vid == KART_VID else ""
+            mark = KART_DEVICES.get((p.vid, p.pid), "")
             print(f"{p.device:14s} {p.description:40s} {mark}")
         return
 
