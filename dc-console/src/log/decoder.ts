@@ -23,7 +23,7 @@ export function recordCount(file: File): number {
   return Math.max(0, Math.floor((file.size - HEADER_SIZE) / RECORD_SIZE));
 }
 
-async function tUsAt(file: File, i: number): Promise<number> {
+export async function tUsAt(file: File, i: number): Promise<number> {
   const off = HEADER_SIZE + i * RECORD_SIZE;
   return recordTUs(new DataView(await file.slice(off, off + 8).arrayBuffer()), 0);
 }

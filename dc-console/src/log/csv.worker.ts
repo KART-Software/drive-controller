@@ -1,7 +1,7 @@
 // CSV 書き出しの Worker。中身は csv-encode.ts。行は main に渡して書き終わりの ack を待つ。
-import { encodeRun } from "./csv-encode";
+import { encodeRun, type TimeRange } from "./csv-encode";
 
-export type CsvWorkerIn = { type: "start"; files: File[]; decimate: number } | { type: "ack" } | { type: "cancel" };
+export type CsvWorkerIn = { type: "start"; files: File[]; decimate: number; range?: TimeRange } | { type: "ack" } | { type: "cancel" };
 export type CsvWorkerOut =
   | { type: "rows"; text: string }
   | { type: "progress"; bytes: number; records: number }
@@ -22,7 +22,7 @@ self.onmessage = (e: MessageEvent<CsvWorkerIn>) => {
       rows: (text) => { post({ type: "rows", text }); return new Promise((resolve) => { ackResolve = resolve; }); },
       progress: (bytes, records) => post({ type: "progress", bytes, records }),
       isCancelled: () => cancelled,
-    })
+    }, m.range)
       .then((r) => post(r.cancelled ? { type: "error", message: "cancelled" } : { type: "done", records: r.records, gaps: r.gaps, skipped: r.skipped }))
       .catch((err) => post({ type: "error", message: String((err as Error).message ?? err) }));
   } else if (m.type === "cancel") {

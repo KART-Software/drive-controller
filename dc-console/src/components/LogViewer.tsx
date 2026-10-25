@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { scanRuns, type RunSummary } from "../log/decoder";
 import { ensureReadPermission, loadDirHandle, saveDirHandle } from "../log/dir-handle";
 import type { CsvWorkerIn, CsvWorkerOut } from "../log/csv.worker";
+import type { TimeRange } from "../log/csv-encode";
+import { RECORD_SIZE } from "../log/log_record";
+import { LogChart } from "./LogChart";
 
 // SD ログ (USB ドライブ "KART SD Reader" か、コピーしたフォルダ) の run 一覧と CSV 書き出し (docs/log_viewer_spec.md)。
 // シリアル接続は要らない。Chrome / Edge の File System Access API を使う。
@@ -43,6 +46,7 @@ export function LogViewer({ addLog, openRequest }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [decimate, setDecimate] = useState(1);
   const [job, setJob] = useState<Job | null>(null);
+  const [openRun, setOpenRun] = useState<RunSummary | null>(null); // チャートで開いている run
   const workerRef = useRef<Worker | null>(null);
   const lastOpenRequest = useRef(openRequest);
 
@@ -59,6 +63,7 @@ export function LogViewer({ addLog, openRequest }: Props) {
     setDir(h);
     setError(null);
     setRuns([]);
+    setOpenRun(null);
     setScan("読み込み中…");
     try {
       const list = await scanRuns(h, (done, total) => setScan(`読み込み中… ${done} / ${total}`));
@@ -93,11 +98,12 @@ export function LogViewer({ addLog, openRequest }: Props) {
     }
   }
 
-  async function exportCsv(run: RunSummary) {
+  async function exportCsv(run: RunSummary, range?: TimeRange, rangeLabel?: string) {
     let handle: FileSystemFileHandle;
+    const rangeName = range ? `_${rangeLabel}` : "";
     try {
       handle = await window.showSaveFilePicker({
-        suggestedName: `${run.name}.csv`,
+        suggestedName: `${run.name}${rangeName}.csv`,
         types: [{ description: "CSV", accept: { "text/csv": [".csv"] } }],
       });
     } catch (err) {
@@ -107,7 +113,8 @@ export function LogViewer({ addLog, openRequest }: Props) {
     const writable = await handle.createWritable();
     const worker = new Worker(new URL("../log/csv.worker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
-    setJob({ run: run.name, bytes: 0, total: run.validBytes, records: 0, state: "running" });
+    const total = range ? Math.min(run.validBytes, Math.ceil((range.t1Us - range.t0Us) / 1000) * RECORD_SIZE) : run.validBytes;
+    setJob({ run: run.name + rangeName, bytes: 0, total, records: 0, state: "running" });
     const send = (m: CsvWorkerIn) => worker.postMessage(m);
     const finish = async (state: Job["state"], extra: Partial<Job>) => {
       await writable.close(); // 途中で止めても書けた分は残す (書き直せる)
@@ -131,7 +138,7 @@ export function LogViewer({ addLog, openRequest }: Props) {
       }
     };
     worker.onerror = (e) => { finish("error", { message: e.message }); };
-    send({ type: "start", files: run.files, decimate });
+    send({ type: "start", files: run.files, decimate, range });
   }
 
   function cancel() {
@@ -170,7 +177,14 @@ export function LogViewer({ addLog, openRequest }: Props) {
       </div>
       {scan && <p>{scan}</p>}
       {error && <p style={{ color: "var(--err)" }}>{error}</p>}
-      {runs.length > 0 && (
+      {openRun && (
+        <div class="log-toolbar log-open-header">
+          <button onClick={() => setOpenRun(null)} disabled={busy}>← 一覧に戻る</button>
+          <strong>{openRun.name}</strong>
+          <span style={{ color: "var(--text-dim)" }}>{openRun.date ? openRun.date.toLocaleString() : "—"} · {fmtDuration(openRun.durationS)} · {fmtBytes(openRun.validBytes)}</span>
+        </div>
+      )}
+      {!openRun && runs.length > 0 && (
         <table class="log-runs">
           <thead>
             <tr><th>run</th><th>日時</th><th class="num">長さ</th><th class="num">ファイル</th><th class="num">サイズ</th><th class="num">drops</th><th>状態</th><th /></tr>
@@ -185,12 +199,16 @@ export function LogViewer({ addLog, openRequest }: Props) {
                 <td class="num">{fmtBytes(r.validBytes)}</td>
                 <td class="num">{r.drops ?? "—"}</td>
                 <td>{r.error ?? (r.durationS === null ? "空" : "")}</td>
-                <td><button disabled={busy || !!r.error || r.durationS === null} onClick={() => exportCsv(r)}>CSV</button></td>
+                <td>
+                  <button disabled={busy || !!r.error || r.durationS === null} onClick={() => setOpenRun(r)}>開く</button>{" "}
+                  <button disabled={busy || !!r.error || r.durationS === null} onClick={() => exportCsv(r)}>CSV</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {openRun && <LogChart run={openRun} busy={busy} onExportRange={(t0Us, t1Us, label) => exportCsv(openRun, { t0Us, t1Us }, label)} />}
       {job && (
         <div class="log-progress">
           <span>{job.run}</span>

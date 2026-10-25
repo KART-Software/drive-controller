@@ -772,3 +772,10 @@ button.danger:hover:not(:disabled) { background: var(--err); color: white; }
 .log-runs tr.error td { color: var(--err); }
 .log-progress { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .log-progress progress { width: 240px; }
+.log-open-header { margin: 8px 0 12px; }
+.log-chart { margin-top: 8px; }
+.log-chart-panel { margin: 4px 0 10px; }
+.log-chart .u-title { font-size: 0.85rem; color: var(--text-dim); text-align: left; padding-left: 8px; }
+.log-chart .u-legend { font-size: 0.75rem; }
+.log-chart .u-legend .u-minseries { display: none; }
+.log-panel-toggle { font-size: 0.85rem; color: var(--text-dim); cursor: pointer; }
