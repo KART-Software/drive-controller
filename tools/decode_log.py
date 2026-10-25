@@ -13,13 +13,14 @@
   Header (32 B, little-endian, packed):
     char magic[8]="KARTLOG1"; u16 version; u16 record_size; u16 log_hz; u16 dir_number; u16 file_index;
     u16 reserved; u32 rtc_epoch (0=RTC 未設定); u64 rtc_t_us (rtc_epoch を読んだ瞬間の t_us)
-  Record (152 B):
+  Record (176 B):
     u64 t_us; u16 adc[8]; f32 apps1 apps2 ittr tps1 tps2 bps clutch; f32 accel[3]; f32 gyro[3];
     f32 wheel_hz[4]; f32 engine_hz; f32 clutch_hz; u32 wheel_count[4]; f32 target_tp; f32 duty;
     u32 errors; u16 flags; i8 gear; u8 mode; u8 autoshift_state; u8 exp_type exp_index exp_phase;
-    u32 loop_max_us; u32 sd_max_us; u16 tick_max_us; u16 log_drops; u8 can_fault can_tec can_rec reserved
+    u32 loop_max_us; u32 sd_max_us; u16 tick_max_us; u16 log_drops; u8 can_fault can_tec can_rec reserved;
+    f32 wheel_kmh[4]; f32 engine_rpm; f32 clutch_rpm
   t_us は起動からの µs (PIT Lifetime Timer、割り込みが止まっても進む)。絶対時刻 = rtc_epoch + (t_us - rtc_t_us) / 1e6。
-  ADC は生値 (キャリブレーションは別途 config で換算)。IMU は mg / dps (平均後)。回転はパルスの Hz (rpm は歯数で換算)。
+  ADC は生値 (キャリブレーションは別途 config で換算)。IMU は mg / dps (平均後)。回転はパルスの Hz と、センサーが換算した km/h / rpm。
   mode: EtcTarget::Mode。exp_type: 0=none 1=dwell 2=release 3=step。exp_phase: 0=idle 1=settling 2=holding 3=coasting。
   loop_max_us / sd_max_us / tick_max_us / log_drops は直前の 1 s 窓と現在の窓のここまでの大きい方 (§5)。
   can_fault: 0=active 1=passive 2=bus-off。can_tec / can_rec はその tick のエラーカウンタ。
@@ -37,8 +38,8 @@ MAGIC = b"KARTLOG1"
 VERSION = 0
 HEADER_FMT = "<8sHHHHHHIQ"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 32
-RECORD_FMT = "<Q8H7f3f3f4fff4IffIHbBBBBBIIHHBBBB"
-RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 152
+RECORD_FMT = "<Q8H7f3f3f4fff4IffIHbBBBBBIIHHBBBB6f"
+RECORD_SIZE = struct.calcsize(RECORD_FMT)  # 176
 GAP_WARN_US = 1_500  # これより飛んだら欠けとして報告する (止めない)
 
 # flags ビット (firmware: log_record.hpp LOG_FLAG_*)
@@ -54,6 +55,7 @@ COLUMNS = (
     + ["apps1", "apps2", "ittr", "tps1", "tps2", "bps", "clutch"]
     + ["ax", "ay", "az", "gx", "gy", "gz"]
     + ["wheel_fl_hz", "wheel_fr_hz", "wheel_rl_hz", "wheel_rr_hz", "engine_hz", "clutch_hz"]
+    + ["wheel_fl_kmh", "wheel_fr_kmh", "wheel_rl_kmh", "wheel_rr_kmh", "engine_rpm", "clutch_rpm"]
     + ["wc_fl", "wc_fr", "wc_rl", "wc_rr"]
     + ["target_tp", "duty"]
     + ["errors", "flags"]
@@ -154,9 +156,10 @@ def main(argv):
                     exp_type, exp_index, exp_phase = v[39], v[40], v[41]
                     sysv = v[42:46]
                     canv = v[46:49]  # can_fault can_tec can_rec (v[49] は reserved)
+                    conv2 = v[50:56]  # wheel_kmh[4] engine_rpm clutch_rpm
                     flagbits = [(flags >> b) & 1 for _, b in FLAG_BITS]
                     w.writerow(
-                        [t_us, t_us / 1e6, abs_time, *adc, *conv, *acc, *gyr, *wheel, engine_hz, clutch_hz,
+                        [t_us, t_us / 1e6, abs_time, *adc, *conv, *acc, *gyr, *wheel, engine_hz, clutch_hz, *conv2,
                          *wc, target_tp, duty, errors, flags, *flagbits, gear, mode, ashift,
                          exp_type, exp_index, exp_phase, *sysv, *canv]
                     )

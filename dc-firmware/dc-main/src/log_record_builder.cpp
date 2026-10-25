@@ -62,6 +62,10 @@ LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, co
         .can_tec = can.txErrors,
         .can_rec = can.rxErrors,
         .reserved = 0,
+        .wheel_kmh = {hub.pulseWheelFL().kmh(), hub.pulseWheelFR().kmh(),
+                      hub.pulseWheelRL().kmh(), hub.pulseWheelRR().kmh()},
+        .engine_rpm = hub.pulseEngine().rpm(),
+        .clutch_rpm = hub.pulseClutchRpm().rpm(),
     };
     return rec;
 }
