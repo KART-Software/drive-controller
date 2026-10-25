@@ -11,7 +11,7 @@
   - `dc-boot/` — 起動の選択だけをする薄いファーム (flash の先頭 0x60000000、ROM が飛んでくる唯一のイメージ)。`SRC_GPR10` のフラグで `dc-main` か `dc-sd-reader` へジャンプ。`dc-main` のビルド時に自動で合成される。
   - `dc-sd-reader/` — SD リーダー (flash の 0x60080000〜)。SD カードを **USB Mass Storage** (TinyUSB、CDC も同居) で PC に見せるだけ = 普通の USB メモリとして出る。3 つの配置とフラグの約束は `dc-main/src/util/boot_layout.hpp`。
   - USB は**別リポジトリのライブラリ `Teensy4TinyUSB`** (Teensy 4 で TinyUSB のデバイス側を動かす汎用ライブラリ。USB Mass Storage + CDC、`-DUSB_DISABLED` 前提。英語、`library.json` / `README.md` / `examples/` 付き)。PlatformIO Registry の `oryomei/Teensy4TinyUSB` (github.com/ORyomei/Teensy4TinyUSB) を `dc-sd-reader/platformio.ini` の `lib_deps` で取る。ライブラリ側を直すときは、そちらで PR → 版を上げて publish → ここの `lib_deps` の版を上げる。
-- `dc-console/` — Preact + Vite の Web アプリ。Web Serial API 経由でファームウェアと USB シリアル通信し、ライブモニタリング・キャリブレーションを行う。**Logs** タブ (`/logs`、`components/LogViewer.tsx`、`src/log/`) は接続なしで使え、SD カード (USB ドライブ) かコピーしたフォルダを File System Access API で開いて run の一覧と CSV 書き出しをする (`docs/log_viewer_spec.md`)。
+- `dc-console/` — Preact + Vite の Web アプリ。Web Serial API 経由でファームウェアと USB シリアル通信し、ライブモニタリング・キャリブレーションを行う。**Logs** タブ (`/logs`、`components/LogViewer.tsx`、`src/log/`) は接続なしで使え、SD カード (USB ドライブ) かコピーしたフォルダを File System Access API で開いて run の一覧・CSV 書き出し・チャート (uPlot、Worker が概観 min / max を持ち、ズームで 1 kHz を読み直す) をする (`docs/log_viewer_spec.md`)。
 - `spec/proto/drive_controller.proto` — ホスト ↔ デバイス間ワイヤフォーマットおよび永続化 `Config` の単一ソース。
 
 proto のワイヤフォーマットは `COBS( protobuf_bytes ‖ crc16_le ) 0x00` — `dc-firmware/dc-main/src/serial/` および `dc-console/src/protocol.ts` を参照。
