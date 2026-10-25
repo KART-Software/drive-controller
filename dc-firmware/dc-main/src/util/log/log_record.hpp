@@ -37,7 +37,7 @@ struct __attribute__((packed)) LogHeader {
     uint64_t rtc_t_us;     // rtc_epoch を読んだ瞬間の t_us。絶対時刻 = rtc_epoch + (t_us - rtc_t_us) / 1e6
 };
 
-// 152 B 固定 (packed)。4 B の項目は 4 の倍数のオフセットに並べてある。
+// 176 B 固定 (packed)。4 B の項目は 4 の倍数のオフセットに並べてある。
 struct __attribute__((packed)) LogRecord {
     uint64_t t_us;            // tick の時刻 (Clock の µs、起動 = 0。割り込みが止まっても進む)  ※ caller
     uint16_t adc[8];          // ADC 生 ch0..7  (hub)
@@ -71,11 +71,15 @@ struct __attribute__((packed)) LogRecord {
     uint8_t can_tec;    // 送信エラーカウンタ (TEC)
     uint8_t can_rec;    // 受信エラーカウンタ (REC)
     uint8_t reserved;   // 0 (4 B 揃え)
+    // ── 回転の換算値 (センサーが CAN 0x607 / 0x609 向けに出しているもの。Hz は生の計測値として上に残す) (hub) ──
+    float wheel_kmh[4];  // FL,FR,RL,RR の車速 [km/h] (タイヤ径が未設定なら 0)
+    float engine_rpm;    // エンジン回転数 [rpm]
+    float clutch_rpm;    // クラッチ後 (出力軸) の回転数 [rpm]
 };
 
 // レイアウトを固定する (tools/decode_log.py の HEADER_FMT / RECORD_FMT と一致させる)
 static_assert(sizeof(LogHeader) == 32, "LogHeader は 32 B (decode_log.py HEADER_FMT)");
-static_assert(sizeof(LogRecord) == 152, "LogRecord は 152 B (decode_log.py RECORD_FMT)");
+static_assert(sizeof(LogRecord) == 176, "LogRecord は 176 B (decode_log.py RECORD_FMT)");
 static_assert(offsetof(LogRecord, wheel_count) == 100 && offsetof(LogRecord, loop_max_us) == 136 &&
-                  offsetof(LogRecord, can_fault) == 148,
+                  offsetof(LogRecord, can_fault) == 148 && offsetof(LogRecord, wheel_kmh) == 152,
               "4 B の項目は 4 の倍数のオフセットに置く");

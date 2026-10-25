@@ -10,12 +10,13 @@ import { DrivetrainView } from "./components/DrivetrainView";
 import { sensorStore } from "./sensor-store";
 import { drivetrainStore } from "./drivetrain-store";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { LogViewer } from "./components/LogViewer";
 
 const MAX_LOG_ENTRIES = 100;
 const REORDER_WINDOW_US = 1_000_000;
 const isMock = new URLSearchParams(window.location.search).has("mock");
 
-type Route = "etc" | "drivetrain";
+type Route = "etc" | "drivetrain" | "logs";
 
 // Vite の base ("/" or "/etc/dev/" 等)。末尾は必ず "/"。
 const BASE = import.meta.env.BASE_URL;
@@ -24,12 +25,12 @@ function routeFromPath(): Route {
   let p = window.location.pathname;
   if (p.startsWith(BASE)) p = p.slice(BASE.length);
   p = p.replace(/^\/+|\/+$/g, "");
-  return p === "drivetrain" ? "drivetrain" : "etc";
+  return p === "drivetrain" ? "drivetrain" : p === "logs" ? "logs" : "etc";
 }
 
 function pathForRoute(r: Route): string {
   // クエリ (?mock 等) は保持する
-  return BASE + (r === "drivetrain" ? "drivetrain" : "") + window.location.search;
+  return BASE + (r === "etc" ? "" : r) + window.location.search;
 }
 
 export function App() {
@@ -45,6 +46,7 @@ export function App() {
   const [fsDialogOpen, setFsDialogOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "format_sd" | "sd_reader">(null);  // 開いている確認ダイアログ
   const [connectMenuOpen, setConnectMenuOpen] = useState(false);  // Connect の右端 ▾ のメニュー
+  const [logsOpenRequest, setLogsOpenRequest] = useState(0);  // 増やすと Logs がフォルダ選択を開く (SD リーダー画面の「ログを開く」)
   const autoSuppressed = useRef(false);  // Disconnect を押した後は、USB を挿し直すまで自動接続しない
   const fsDismissed = useRef(false);
 
@@ -246,8 +248,14 @@ export function App() {
         <nav class="page-nav">
           <a class={`nav-tab${route === "etc" ? " active" : ""}`} href={pathForRoute("etc")} onClick={(e) => navTo(e, "etc")}>ETC</a>
           <a class={`nav-tab${route === "drivetrain" ? " active" : ""}`} href={pathForRoute("drivetrain")} onClick={(e) => navTo(e, "drivetrain")}>Drivetrain</a>
+          <a class={`nav-tab${route === "logs" ? " active" : ""}`} href={pathForRoute("logs")} onClick={(e) => navTo(e, "logs")}>Logs</a>
         </nav>
-        {!sdReader && <div class="header-actions">
+        {sdReader ? (
+          <div class="header-actions">
+            {/* SD リーダー接続中はどのタブからでも戻れるように (Logs でフォルダを開いた後も) */}
+            <button class="danger" onClick={handleRebootToNormal} title="dc-main で再起動する。PC 側の SD カードのマウントは外れる">通常モードで再起動</button>
+          </div>
+        ) : <div class="header-actions">
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("motor_off").catch((err: Error) => addLog("Command error: " + err.message))}>Motor OFF</button>
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("reboot").catch((err: Error) => addLog("Command error: " + err.message))}>Reboot</button>
           <button disabled={!connected} onClick={handleRtcSync} title="デバイスのRTCをこのPCの現在時刻に同期">RTC Sync</button>
@@ -293,13 +301,16 @@ export function App() {
         </div>
       )}
 
-      {sdReader ? (
+      {route === "logs" ? (
+        <LogViewer addLog={addLog} openRequest={logsOpenRequest} />
+      ) : sdReader ? (
         <section style={{ margin: "24px", maxWidth: "520px" }}>
           <h2>SD カードを PC にマウント中</h2>
           <p style={{ color: "var(--text-dim)" }}>
             USB ドライブ「KART SD Reader」として読み書きできます。制御は止まっています。PC で取り出し (Eject) をすると通常モードに戻ります。
           </p>
           <button class="danger" onClick={handleRebootToNormal}>通常モードで再起動</button>
+          <button onClick={(e) => { setLogsOpenRequest((n) => n + 1); navTo(e, "logs"); }} title="マウントされた SD カードを開いて run の一覧と CSV 書き出し">ログを開く</button>
         </section>
       ) : route === "drivetrain" ? (
         <DrivetrainView config={config} setConfig={setConfig} addLog={addLog} setDirty={setDirty} logs={logs} />
