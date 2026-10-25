@@ -46,7 +46,7 @@
 | `dc-firmware/dc-main/` | Teensy 4.1 ファームウェア本体 (PlatformIO + Arduino)。ETC、オートシフター、Launch Control (凍結中)、センサーサンプリング、CAN、シリアルプロトコル |
 | `dc-firmware/dc-boot/` | 起動の選択だけをする薄いファーム (flash の先頭)。`dc-main` か `dc-sd-reader` へジャンプ。`dc-main` のビルド時に自動で合成される |
 | `dc-firmware/dc-sd-reader/` | SD リーダー (別イメージ)。console の「SD Reader」で再起動すると SD カードが普通の USB メモリ (Mass Storage) として PC に出る。取り出し / Reboot / USB を抜く で戻る。USB は別リポジトリのライブラリ Teensy4TinyUSB |
-| `dc-console/` | Preact + Vite の Web アプリ。Web Serial API で USB シリアル通信し、ライブモニタ・キャリブレーション |
+| `dc-console/` | Preact + Vite の Web アプリ。Logs タブで SD ログの一覧と CSV 書き出し (接続不要)。Web Serial API で USB シリアル通信し、ライブモニタ・キャリブレーション |
 | `spec/proto/drive_controller.proto` | ホスト ↔ デバイス間ワイヤフォーマットと永続化 `Config` の単一ソース |
 
 ホスト ↔ デバイスのワイヤフォーマットは `COBS( protobuf_bytes ‖ crc16_le ) 0x00`。
