@@ -250,7 +250,12 @@ export function App() {
           <a class={`nav-tab${route === "drivetrain" ? " active" : ""}`} href={pathForRoute("drivetrain")} onClick={(e) => navTo(e, "drivetrain")}>Drivetrain</a>
           <a class={`nav-tab${route === "logs" ? " active" : ""}`} href={pathForRoute("logs")} onClick={(e) => navTo(e, "logs")}>Logs</a>
         </nav>
-        {!sdReader && <div class="header-actions">
+        {sdReader ? (
+          <div class="header-actions">
+            {/* SD リーダー接続中はどのタブからでも戻れるように (Logs でフォルダを開いた後も) */}
+            <button class="danger" onClick={handleRebootToNormal} title="dc-main で再起動する。PC 側の SD カードのマウントは外れる">通常モードで再起動</button>
+          </div>
+        ) : <div class="header-actions">
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("motor_off").catch((err: Error) => addLog("Command error: " + err.message))}>Motor OFF</button>
           <button class="danger" disabled={!connected} onClick={() => protocol.sendCommand("reboot").catch((err: Error) => addLog("Command error: " + err.message))}>Reboot</button>
           <button disabled={!connected} onClick={handleRtcSync} title="デバイスのRTCをこのPCの現在時刻に同期">RTC Sync</button>
