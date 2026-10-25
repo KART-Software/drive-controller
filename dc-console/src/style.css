@@ -762,3 +762,13 @@ button.danger:hover:not(:disabled) { background: var(--err); color: white; }
 }
 .split-button-menu button { display: block; width: 100%; text-align: left; border: none; background: none; }
 .split-button-menu button:hover { background: var(--border); }
+
+/* ── Logs (SD ログの一覧と CSV 書き出し) ── */
+.log-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.log-runs { border-collapse: collapse; font-size: 0.85rem; }
+.log-runs th, .log-runs td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #2a2a44; white-space: nowrap; }
+.log-runs th { color: var(--text-dim); font-weight: normal; }
+.log-runs th.num, .log-runs td.num { text-align: right; font-family: monospace; }
+.log-runs tr.error td { color: var(--err); }
+.log-progress { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.log-progress progress { width: 240px; }
