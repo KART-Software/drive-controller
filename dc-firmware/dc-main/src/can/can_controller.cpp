@@ -33,7 +33,7 @@ void CanController::sendImu() {
         data.accel[i] = accel[i];
     }
     for (const CanFrame& f : data.toFrames())
-        bus_.send(f);  // 空きがなければ捨てる (次の周期で送る)
+        bus_.send(f);
 }
 
 void CanController::sendSensors() {
@@ -52,7 +52,7 @@ void CanController::sendSensors() {
         .clutchRpm = v.pulseClutchRpm().rpm(),
     };
     for (const CanFrame& f : data.toFrames())
-        bus_.send(f);  // 空きがなければ捨てる (次の周期で送る)
+        bus_.send(f);
 }
 
 void CanController::sendStatus(const CanStatusData& status) {

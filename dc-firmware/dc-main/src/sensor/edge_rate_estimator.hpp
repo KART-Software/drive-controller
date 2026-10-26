@@ -45,9 +45,9 @@ class EdgeRateEstimator {
 
     RotationParams p_;
     Point hist_[kHistory] = {};
-    size_t head_ = 0;  // 次に書く位置
+    size_t head_ = 0;
     size_t size_ = 0;
-    RotationSample measured_;    // 最後にエッジから測った値
+    RotationSample measured_;    // 最後にエッジから測った値 (減衰前)
     double toothUs_ = 0.0;       // measured_ の 1 歯の時間
     uint32_t lastCount_ = 0;
     uint64_t lastCountChangeUs_ = 0;  // エッジ数が最後に増えた tick の時刻

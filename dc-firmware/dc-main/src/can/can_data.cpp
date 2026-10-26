@@ -3,7 +3,6 @@
 
 namespace {
 
-// kart-can の pack 関数でペイロードを詰めたフレームを返す
 template <typename Msg>
 CanFrame makeFrame(uint32_t id, uint8_t len, const Msg& m, int (*pack)(uint8_t*, const Msg*, size_t)) {
     CanFrame f = {.id = id, .len = len};
@@ -19,7 +18,7 @@ Msg unpackFrame(const CanFrame& f, int (*unpack)(Msg*, const uint8_t*, size_t)) 
     return m;
 }
 
-// kart-can の etc_mode の値 (1=CALIB 2=NORMAL 3=RESTRICTED 4=MOTOR_OFF、0=UNSPECIFIED)
+// kart-can の etc_mode の値 (生成ヘッダに enum は無い。0 = UNSPECIFIED)
 enum class CanEtcMode : uint8_t {
     CALIB = 1u,
     NORMAL = 2u,
@@ -59,17 +58,13 @@ CanEtcMode modeToCan(EtcTarget::Mode m) {
 
 std::array<CanFrame, CanImuData::FRAME_COUNT> CanImuData::toFrames() const {
     return {
-        // 0x600: gyro x/y (float32 LE)
         makeFrame(KART_CAN_DC_GYRO_XY_FRAME_ID, KART_CAN_DC_GYRO_XY_LENGTH,
                   kart_can_dc_gyro_xy_t{.gyro_x = gyro[0], .gyro_y = gyro[1]}, kart_can_dc_gyro_xy_pack),
-        // 0x601: gyro z (float32 LE) + gear (u8, -1=unknown → 0xFF)
         makeFrame(KART_CAN_DC_GYRO_Z_GEAR_FRAME_ID, KART_CAN_DC_GYRO_Z_GEAR_LENGTH,
-                  kart_can_dc_gyro_z_gear_t{.gyro_z = gyro[2], .gear = static_cast<uint8_t>(gear)},
+                  kart_can_dc_gyro_z_gear_t{.gyro_z = gyro[2], .gear = static_cast<uint8_t>(gear)},  // 不明 (-1) は 0xFF
                   kart_can_dc_gyro_z_gear_pack),
-        // 0x602: accel x/y (float32 LE)
         makeFrame(KART_CAN_DC_ACCEL_XY_FRAME_ID, KART_CAN_DC_ACCEL_XY_LENGTH,
                   kart_can_dc_accel_xy_t{.accel_x = accel[0], .accel_y = accel[1]}, kart_can_dc_accel_xy_pack),
-        // 0x603: accel z (float32 LE)
         makeFrame(KART_CAN_DC_ACCEL_Z_FRAME_ID, KART_CAN_DC_ACCEL_Z_LENGTH,
                   kart_can_dc_accel_z_t{.accel_z = accel[2]}, kart_can_dc_accel_z_pack),
     };
@@ -89,7 +84,6 @@ uint16_t scaled(float value, float scale) {
 
 std::array<CanFrame, CanSensorData::FRAME_COUNT> CanSensorData::toFrames() const {
     return {
-        // 0x604: ペダル・スロットル・クラッチ (0.01 %)、後ろブレーキ圧 (0.1 psi)
         makeFrame(KART_CAN_DC_PEDALS_FRAME_ID, KART_CAN_DC_PEDALS_LENGTH,
                   kart_can_dc_pedals_t{
                       .apps = scaled(appsPercent, 0.01f),
@@ -98,11 +92,10 @@ std::array<CanFrame, CanSensorData::FRAME_COUNT> CanSensorData::toFrames() const
                       .brake_press_rear = scaled(brakeRearPsi, 0.1f),
                   },
                   kart_can_dc_pedals_pack),
-        // 0x605: APPS / TPS の生値 (カウントそのまま。受け側が 7.8125e-5 V/count で換算)
+        // 生値はカウントのまま (受け側が 7.8125e-5 V/count で換算)
         makeFrame(KART_CAN_DC_ETC_RAW_FRAME_ID, KART_CAN_DC_ETC_RAW_LENGTH,
                   kart_can_dc_etc_raw_t{.apps_1 = appsRaw[0], .apps_2 = appsRaw[1], .tps_1 = tpsRaw[0], .tps_2 = tpsRaw[1]},
                   kart_can_dc_etc_raw_pack),
-        // 0x607: 車輪速 (0.01 km/h)
         makeFrame(KART_CAN_DC_WHEEL_SPEED_FRAME_ID, KART_CAN_DC_WHEEL_SPEED_LENGTH,
                   kart_can_dc_wheel_speed_t{
                       .wheel_fl = scaled(wheelKmh[0], 0.01f),
@@ -111,7 +104,7 @@ std::array<CanFrame, CanSensorData::FRAME_COUNT> CanSensorData::toFrames() const
                       .wheel_rr = scaled(wheelKmh[3], 0.01f),
                   },
                   kart_can_dc_wheel_speed_pack),
-        // 0x608: 車輪速パルスの累計 (uint16 でラップ)
+        // 累計は uint16 でラップして送る (受け側が差分を取る)
         makeFrame(KART_CAN_DC_WHEEL_PULSE_FRAME_ID, KART_CAN_DC_WHEEL_PULSE_LENGTH,
                   kart_can_dc_wheel_pulse_t{
                       .pulse_fl = (uint16_t)wheelPulses[0],
@@ -120,7 +113,6 @@ std::array<CanFrame, CanSensorData::FRAME_COUNT> CanSensorData::toFrames() const
                       .pulse_rr = (uint16_t)wheelPulses[3],
                   },
                   kart_can_dc_wheel_pulse_pack),
-        // 0x609: エンジン / クラッチ後の回転数 (rpm、整数)
         makeFrame(KART_CAN_DC_ENGINE_FRAME_ID, KART_CAN_DC_ENGINE_LENGTH,
                   kart_can_dc_engine_t{.engine_rpm = scaled(engineRpm, 1.0f), .clutch_rpm = scaled(clutchRpm, 1.0f)},
                   kart_can_dc_engine_pack),
@@ -152,7 +144,6 @@ void CanRxData::mergeFrame(const CanFrame& msg, uint32_t nowMs) {
         lastControlFrameMs = nowMs;
         return;
     }
-    // Shift (0x741): byte0 shift_up / byte1 shift_down (押下中 1)
     if (msg.id == KART_CAN_SHIFT_FRAME_ID && msg.len >= KART_CAN_SHIFT_LENGTH) {
         const auto sh = unpackFrame(msg, kart_can_shift_unpack);
         shiftUp = (sh.shift_up == 0x01);

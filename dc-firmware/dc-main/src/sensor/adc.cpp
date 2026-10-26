@@ -14,25 +14,22 @@ _adc<NUM_DEV>::_adc(const Clock& clock, uint8_t csPin, SPIClass& spi)
     }
 }
 
-// デイジーチェーン+HWCS対応 _adc<NUM_DEV> テンプレート実装
 template <size_t NUM_DEV>
 void _adc<NUM_DEV>::begin() {
     spi.begin();
     *(portConfigRegister(csPin)) = 3;
 
-    // 全チャンネル(0-7)を有効化
     for (uint8_t ch = 0; ch < ADC_NUM_CH; ++ch) {
         writeRegister(RANGE_SELECT_ADDR_0 + ch, RANGE_4);
     }
     writeRegister(CH_POWER_DOWN_ADDR, 0x00);  // 全ch有効
     writeRegister(AUTO_SEQ_EN_ADDR, 0xFF);    // 全ch自動シーケンス
     uint16_t dummy[NUM_DEV];
-    transferCommand(AUTO_RST, dummy);  // 初期化用ダミー
+    transferCommand(AUTO_RST, dummy);
     beginDma();
 }
 
-// DMA 経路: 16kHz ISR から startDma() を kick し、while ビジーウェイトなしで 8ch を取得。
-// CS フレーミングは 32bit フレーム/フレーム毎 (CONT=0)。
+// DMA 経路。CS は 32 bit フレームごと (CONT=0)
 template <size_t NUM_DEV>
 void _adc<NUM_DEV>::beginDma() {
     // 送信コマンド列: ch0..6=NO_OP, 末尾=AUTO_RST (ブロッキング read() と同じ並び)

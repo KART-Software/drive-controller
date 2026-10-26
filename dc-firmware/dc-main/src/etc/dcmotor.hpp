@@ -46,6 +46,8 @@ class DcMotor {
     void initialize();
     void write(double value);
     void on();
+    // PWM 0 と _isOn = false を割り込み禁止で行う。間に tickISR が入ると write(double) が非 0 の duty を書き戻し、
+    // それが残ったまま次の on() で最大 1 ms 駆動する。_isOn を先に false にすると write が no-op になり PWM が 0 にならない
     void off();
     bool isOn() const;
 

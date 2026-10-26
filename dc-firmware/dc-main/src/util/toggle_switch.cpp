@@ -1,7 +1,6 @@
 #include "toggle_switch.hpp"
 
 namespace {
-// InputMode (入力系限定) を Arduino の pinMode 定数へ解決する。
 uint8_t toPinMode(ToggleSwitch::InputMode m) {
     switch (m) {
         case ToggleSwitch::InputMode::PullDown:

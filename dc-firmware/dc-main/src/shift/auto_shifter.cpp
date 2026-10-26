@@ -58,7 +58,7 @@ bool AutoShifter::moving() const {
 
 AutoShifter::Dir AutoShifter::evaluate() const {
     int8_t gear = gps_.getGear();
-    if (gear < 0)  // ギア不明
+    if (gear < 0)
         return Dir::None;
 
     float rpm = engineRpm();
@@ -151,9 +151,8 @@ void AutoShifter::tick(const Inputs& in, uint32_t nowUs) {
             break;
     }
 
-    // オートシフト指令 (autoOn) の ON/OFF 遷移
     const bool autoOn = in.autoOn;
-    const bool autoRising = autoOn && !prevAutoOn_;  // 手動→auto
+    const bool autoRising = autoOn && !prevAutoOn_;
     const bool modeChanged = (autoOn != prevAutoOn_);
     prevAutoOn_ = autoOn;
     autoOn_ = autoOn;

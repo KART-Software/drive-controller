@@ -19,10 +19,6 @@ namespace etc {
 // リリース試験のコーストは自分でモーターを切らず wantsCoast() を立てるだけ。
 // 実際の停止/再開は main.cpp の ETC アーミング層 (SHUTDOWN 安全層) が行う —
 // ①プラウシビリティ ②SIG_IN ③MOTOR_OFF が常にコーストより優先される。
-//
-// フェーズ遷移の共通部品は「静止判定」(spec Q1/Q4/Q7):
-//   直近 EXPERIMENT_STATIONARY_WINDOW_MS の窓で |Δtps| と |Δduty| が閾値未満。
-//   タイムアウト (8s) 時は黙って次フェーズへ進み、件数のみ完了時に報告 (Q3)。
 class ExperimentRunner {
    public:
     enum class Type : uint8_t { None = 0, PointDwell = 1, Release = 2, Step = 3 };
@@ -41,8 +37,7 @@ class ExperimentRunner {
     bool requestStart(Type type);
     void requestStop();
 
-    // tickISR から。開始 / 停止の要求を取り込んでから FSM を進める
-    void tick(unsigned long now);
+    void tick(unsigned long now);  // tickISR から
 
     bool active() const { return type_ != Type::None; }
     // リリース試験のコースト区間。main の ETC アーミングが参照して stopEtc() する。
@@ -69,7 +64,7 @@ class ExperimentRunner {
     uint16_t totalSteps() const;
     void advance(unsigned long now);
     void enterPhase(Phase phase, unsigned long now);
-    bool stationaryOrTimeout(unsigned long now);  // 静止判定 + タイムアウト (共通部品)
+    bool stationaryOrTimeout(unsigned long now);
 
     const SensorView& hub_;
     const ControlInput& control_;

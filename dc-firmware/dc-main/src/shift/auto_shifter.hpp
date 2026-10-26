@@ -10,11 +10,8 @@
 
 namespace shift {
 
-// オートシフター。詳細仕様は dc-firmware/auto_shifter_spec.md。
-//
-// 出力は OFF/ON 両モードとも「シフト要求 (エッジ or 自動判断) → 整形パルス
-// (Idle→Pulsing→Cooldown)」で統一。パルス幅は transmission/ギア/方向/停車状態で決まる。
-// パルスの開始から次の開始までは最短 minIntervalMs_ (既定 0.5 s)。その間に来た要求は捨てる。
+// オートシフター。詳細仕様は dc-firmware/dc-main/auto_shifter_spec.md。
+// OFF (manual) でもパドルのレベルをそのまま出すのではなく、エッジを整形パルスにする (ON と同じ出力段)。
 //
 // 呼ばれる文脈 (docs/loop_nonblocking_spec.md §6.2 / §6.3): どちらも優先度 64 なので互いに割り込まない。
 //   onPaddles() : canRxISR。0x741 を受けたその場でエッジを処理し、パルスを始める
@@ -36,18 +33,15 @@ class AutoShifter {
                 const GearPositionSensor& gps,
                 const Apps& apps);
 
-    void begin();  // pinMode 設定、出力を非アサート初期化、入力ベースライン取得
+    void begin();
     void setConfig(const dc_AutoShiftConfig& cfg, dc_TransmissionType tx);
-    // tickISR から毎 ms。autoOn = オートシフト指令 (ON=auto / OFF=manual)。
-    // オートシフターは ETC プラウシビリティに依存しない (安全フォールバックは CAN 断→manual,
-    // ControlInput::update)。ETC の停止/安全は別系統 (main.cpp の ETC アーミング)。
-    // 入力はすべて呼び出し側から渡す (入手元 = ControlInput: CAN 0x740 / 0x741 または console override)。
-    // パドルは押下状態 (レベル) で渡し、立ち上がり検出はここで行う。0x741 の途絶で押下が false に
-    // 戻るのを追うためにも毎回渡す。
+    // tickISR から毎 ms。ETC プラウシビリティには依存しない (安全フォールバックは CAN 断 → manual、ControlInput)。
+    // ETC の停止は別系統 (main.cpp の ETC アーミング)。
+    // パドルは押下状態 (レベル) で渡し、立ち上がり検出はここで行う。0x741 の途絶で押下が false に戻るのを追うためにも毎回渡す
     struct Inputs {
-        bool autoOn;       // オートシフト ON
-        bool upPressed;    // シフトアップパドル押下中
-        bool downPressed;  // シフトダウンパドル押下中
+        bool autoOn;
+        bool upPressed;
+        bool downPressed;
     };
     // 時刻は µs (sysClock)。tick は tick の時刻、onPaddles は受信した瞬間の時刻 (sysClock.nowUs()) を渡す。
     // パルスの開始時刻が出力を立てた時刻と一致するので、幅は指定値〜指定値 + 1 ms (終端の判定が tick ごとのため)
@@ -68,10 +62,10 @@ class AutoShifter {
 
     // -- 入力 (SensorHub 全体ではなく必要分だけ const 参照) --
     const RotationSensor& engine_;
-    const WheelSpeedSensor& wheelFL_;  // 非駆動輪 = 真の車速 (ホイールスピン非依存)
+    const WheelSpeedSensor& wheelFL_;  // 前輪 = 非駆動輪なのでホイールスピンの影響を受けない
     const WheelSpeedSensor& wheelFR_;
     const GearPositionSensor& gps_;
-    const Apps& apps_;  // ドライバーのアクセル開度 (スロットルゲート)
+    const Apps& apps_;  // スロットルゲート (アクセルオンで UP / オフで DOWN)
 
     // -- config --
     float upshiftRpm_ = 0.0f;
@@ -105,7 +99,7 @@ class AutoShifter {
     Dir evaluate() const;  // ① 判断ロジック (純粋判断, 副作用なし)
     uint32_t pulseWidthFor(int8_t gear, Dir dir) const;
     void startPulse(Dir dir, int8_t gear, uint32_t nowUs);
-    void trackPaddles(bool up, bool down, uint32_t nowUs);  // エッジ検出 → onDriverEdge
+    void trackPaddles(bool up, bool down, uint32_t nowUs);
     void onDriverEdge(bool upEdge, bool downEdge, uint32_t nowUs);
 };
 

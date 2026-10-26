@@ -7,7 +7,6 @@
 // 短い区間の計測と待ちのタイムアウト。作った時点 (または restart / lapUs) からの経過を Clock で測る。
 // Clock::nowUs64() は tick が止まっていても進むので、「tick が止まったら諦める」待ちにも使える。
 // elapsedUs() / lapUs() は 32 bit (71.6 分) までの区間を返す。
-// ハードウェアタイマーではない (割り込みは出さない。経過を読むだけ)。
 // 1 つの StopWatch を複数の文脈 (ISR と loop など) で共有しないこと。
 class StopWatch {
    public:

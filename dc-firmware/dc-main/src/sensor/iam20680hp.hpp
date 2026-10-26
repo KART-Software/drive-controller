@@ -8,7 +8,6 @@
 #include "util/moving_average.hpp"
 
 // IAM-20680HP (TDK InvenSense, 車載 6 軸)。MPU-6500 / ICM-20680 系のレジスタ互換。
-// 旧 ICM-45686 とはレジスタ・感度・ODR 設定方法が全く異なる別系統。
 // https://product.tdk.com/system/files/dam/doc/product/sensor/mortion-inertial/imu/data_sheet/ds-000409-iam-20680hp.pdf
 
 // ── レジスタ (MPU-6500 ファミリ) ──
@@ -22,7 +21,7 @@
 #define IAM20680_PWR_MGMT_2 0x6C
 #define IAM20680_WHO_AM_I 0x75
 
-#define IAM20680_SPI_FREQUENCY 8000000  // datasheet 上限 8MHz (全レジスタ)。ICM45686 は 12MHz だった
+#define IAM20680_SPI_FREQUENCY 8000000  // datasheet の上限
 
 // 感度: ±2000dps → 16.4 LSB/dps、±16g → 2048 LSB/g。Imu は accel=mg, gyro=dps。
 #define IAM20680_GYR_DPS_PER_LSB (1.0f / 16.4f)
@@ -51,7 +50,7 @@ class Iam20680hp : public Imu {
 
     void beginDma();      // setup で begin() の後に一度だけ
     void sampleDmaIsr();  // サンプリング ISR から (8 kHz)
-    uint32_t dmaCount() const { return dmaCount_; }    // 取り込んだ回数
+    uint32_t dmaCount() const { return dmaCount_; }
     uint32_t dmaMissed() const { return dmaMissed_; }  // 前回の転送が終わっていなかった回数
 
    private:

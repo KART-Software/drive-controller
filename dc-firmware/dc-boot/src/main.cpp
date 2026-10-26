@@ -1,6 +1,6 @@
 // dc-boot: 起動の選択だけ (docs/loop_nonblocking_spec.md §7.11)。
 // Teensy コアの ResetHandler が FlexRAM と SP を設定した直後、RAM の初期化前に呼ぶ startup_early_hook() で、SRC_GPR10 のフラグを見て
-// dc-firmware か dc-sd-reader の IVT の entry へジャンプする。飛び先の ResetHandler は FlexRAM / SP / RAM の初期化を自分でやり直す。
+// dc-main か dc-sd-reader の IVT の entry へジャンプする。飛び先の ResetHandler は FlexRAM / SP / RAM の初期化を自分でやり直す。
 // どちらのイメージも無いときだけここの setup() / loop() まで落ち、LED を点滅させる (USB には "KART Boot" のシリアルが出る)。
 // eFuse (OCOTP) には触らない。
 #include <Arduino.h>
@@ -28,7 +28,7 @@ extern "C" FLASHMEM void startup_early_hook() {
     using namespace boot_layout;
     const bool wantSdReader = (BOOT_FLAG_REG & ~kFlagRomBitsMask) == kFlagSdReader;
     if (wantSdReader)
-        BOOT_FLAG_REG &= kFlagRomBitsMask;  // 読んだら消す (sd-reader で止まっても次は dc-firmware)。ほかの値は dc-firmware が debug に出して消す
+        BOOT_FLAG_REG &= kFlagRomBitsMask;  // 読んだら消す (sd-reader で止まっても次は dc-main)。ほかの値は dc-main が debug に出して消す
 
     // 望んだ方 → もう一方 → (無ければ LED へ)
     const uint32_t first = wantSdReader ? kSdReaderBase : kMainBase;
@@ -37,7 +37,7 @@ extern "C" FLASHMEM void startup_early_hook() {
     const uint32_t secondSize = wantSdReader ? kMainSize : kSdReaderSize;
     if (hasImage(first, firstSize))
         jumpTo(first);
-    if (wantSdReader)  // 望んだ dc-sd-reader が無い: 印を置いて dc-firmware へ (dc-firmware が debug に出す)
+    if (wantSdReader)  // 望んだ dc-sd-reader が無い: 印を置いて dc-main へ (dc-main が debug に出す)
         BOOT_FLAG_REG = (BOOT_FLAG_REG & kFlagRomBitsMask) | kFlagMain | kReasonNoSdReader;
     if (hasImage(second, secondSize))
         jumpTo(second);

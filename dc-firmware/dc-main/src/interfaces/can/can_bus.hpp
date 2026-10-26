@@ -10,14 +10,12 @@
 // CAN バスの読み書き口 (docs/can_bus_spec.md §3)。使う側 (CanController) はハードウェアもライブラリも知らない。
 // Zephyr の drivers/can.h の最小サブセット (can_frame / can_send / can_add_rx_filter / can_get_state) を手本にしている。
 
-// バスの設定
 struct CanConfig {
     uint32_t bitrate;      // アービトレーション相 (classic ではこれだけ) [bit/s]
     bool fd = false;       // CAN FD を使う (今の実装は非対応: begin() が false を返す)
     uint32_t dataBitrate = 0;  // FD のデータ相 [bit/s] (fd のときだけ)
 };
 
-// コントローラの状態 (どの文脈からでも読める)
 struct CanState {
     enum class Fault : uint8_t { Active, Passive, BusOff };
     Fault fault;       // エラー状態 (ESR1 FLTCONF)

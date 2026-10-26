@@ -173,8 +173,7 @@ void setConfig(void* ctx, const dc_Command& cmd) {
     SerialProtocol::sendResponse(cmd.id, ok);
 }
 
-// 再起動。mode = SD_READER ならフラグを置き、dc-boot が次の起動で dc-sd-reader (SD を MTP で見せる別ファーム) へ飛ぶ
-// (util/boot_mode.hpp)。SD リーダーでは ETC が動かないので、動作中は拒否する (format_sd と同じ歯止め)
+// SD リーダーでは ETC が動かないので、ETC 動作中は拒否する (format_sd と同じ歯止め)
 void reboot(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
     const bool sdReader = cmd.body.reboot.mode == dc_RebootCmd_Mode_SD_READER;
@@ -183,7 +182,7 @@ void reboot(void* ctx, const dc_Command& cmd) {
         SerialProtocol::sendResponse(cmd.id, false);
         return;
     }
-    c->sensorLogger.close();  // 残りを書いて sync し、閉じる
+    c->sensorLogger.close();
     SerialProtocol::sendResponse(cmd.id, true);
     DebugLogger::service();  // 「SD log: closed」など、積んである debug を送ってから
     delay(100);              // 応答が USB に流れてから
@@ -245,8 +244,8 @@ void setTransmissionType(void* ctx, const dc_Command& cmd) {
 
 void formatFs(void* ctx, const dc_Command& cmd) {
     auto* c = static_cast<CommandContainer*>(ctx);
-    bool ok = c->configurator.formatFs();  // FS 消去 → 現在の config を書き戻す
-    sendConfigResponse(c, cmd.id, ok);     // 更新後の fs_used/fs_total を返す
+    bool ok = c->configurator.formatFs();
+    sendConfigResponse(c, cmd.id, ok);  // 更新後の fs_used / fs_total を返す
 }
 
 // SD カードを exFAT でフォーマットし、新しいディレクトリでログを始め直す (docs/loop_nonblocking_spec.md §7.7)。

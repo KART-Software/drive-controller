@@ -33,7 +33,7 @@ class LaunchController {
     // どちらも複数回呼べる (例: SetConfigCmd で再適用)。
     void setConfig(const dc_LaunchConfig& cfg);  // 歯数は回転センサーが持つ (config RotationConfig)
     void begin();
-    void update(bool launchRequested, uint32_t nowMs);  // nowMs は sysClock の ms
+    void update(bool launchRequested, uint32_t nowMs);
 
     enum class State { Idle, Ready, Approach, EngageControl, FullEngage };
     State state() const { return state_; }
@@ -72,7 +72,7 @@ class LaunchController {
     float engineRps() const;
     float wheelRpsAtEngine() const;
     float clutchSlip() const;
-    float engagement() const;  // wheel_rps_at_engine / engine_rps (0-1)
+    float engagement() const;
     float engineRpm() const;
 
     void transitionTo(State next);

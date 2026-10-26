@@ -55,10 +55,10 @@ class _adc {
 
     // DMA 経路 (16kHz ISR から非ブロッキングで叩く)。NUM_DEV==1 (32bit フレーム) 専用。
     static_assert(NUM_DEV == 1, "DMA の読み出しは単一デバイス(32bit フレーム)のみ対応");
-    void beginDma();    // DMA チャネル + LPSPI DMA を一度だけ設定
-    void startDma();    // 前回完了分はそのまま、次の 8ch 転送を kick (非ブロッキング)
-    void latchDma();    // rxBuf_ -> value[] (averages 更新の直前に呼ぶ)
-    uint32_t dmaCount() const { return dmaCount_; }  // デバッグ: kick 回数
+    void beginDma();  // 一度だけ
+    void startDma();
+    void latchDma();  // rxBuf_ → value[] (移動平均の更新の直前に呼ぶ)
+    uint32_t dmaCount() const { return dmaCount_; }
 
    private:
     const Clock& clock_;

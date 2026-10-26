@@ -243,7 +243,7 @@ const char* EtcTarget::getModeString() const {
 
 bool EtcTarget::setManual() {
     if (!_isManual) {
-        manualTarget = ((int)(getTarget() * 10.0)) * 0.1;  // xx.x の値に丸める
+        manualTarget = ((int)(getTarget() * 10.0)) * 0.1;
     }
     _isManual = !_isManual;
     return _isManual;

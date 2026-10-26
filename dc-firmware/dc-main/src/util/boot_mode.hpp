@@ -15,5 +15,5 @@ namespace boot_mode {
 void logAndClear();
 using boot_layout::kReasonCommand;
 // reason: 次の起動の debug に出す理由 (boot_layout の kReason*。診断用)
-[[noreturn]] void rebootInto(BootMode mode, uint8_t reason = 0);  // フラグを書いてソフトリセット (戻らない)
+[[noreturn]] void rebootInto(BootMode mode, uint8_t reason = 0);
 }  // namespace boot_mode

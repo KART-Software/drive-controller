@@ -29,14 +29,12 @@ class BitePointEstimator {
     float bitePoint_ = 50.0f;
     bool detected_ = false;
 
-    // params
     float slipThreshold_ = 0.01f;
     uint32_t debounceTicks_ = 3;
     float emaAlpha_ = 0.3f;
 
-    // debounce state
     uint32_t consecutiveCount_ = 0;
-    float firstSlipPos_ = 0.0f;  // position when slip first started
+    float firstSlipPos_ = 0.0f;
 };
 
 }  // namespace launch

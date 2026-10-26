@@ -37,9 +37,6 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
-    // PWM 0 と _isOn=false を tickISR (モーター制御) に割り込まれずに行う。間に ISR が入ると write(double)
-    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
-    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
     noInterrupts();
     write(0, 0);
     _isOn = false;
@@ -89,9 +86,6 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
-    // PWM 0 と _isOn=false を tickISR (モーター制御) に割り込まれずに行う。間に ISR が入ると write(double)
-    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
-    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
     noInterrupts();
     write(0, LOW, LOW);
     _isOn = false;
@@ -135,9 +129,6 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
-    // PWM 0 と _isOn=false を tickISR (モーター制御) に割り込まれずに行う。間に ISR が入ると write(double)
-    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
-    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
     noInterrupts();
     write(0, LOW);
     _isOn = false;
@@ -199,9 +190,6 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
-    // PWM 0 と _isOn=false を tickISR (モーター制御) に割り込まれずに行う。間に ISR が入ると write(double)
-    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
-    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
     noInterrupts();
     write(0, 0);
     _isOn = false;
@@ -254,9 +242,6 @@ void DcMotor::on() {
 }
 
 void DcMotor::off() {
-    // PWM 0 と _isOn=false を tickISR (モーター制御) に割り込まれずに行う。間に ISR が入ると write(double)
-    // が非 0 duty を書き戻し、それが残ったまま次の on() で最大 1 ms 駆動していた。単に _isOn を先に
-    // false にすると、下の write も _isOn を見て no-op になり PWM が 0 にならないので不可
     noInterrupts();
     write(0, 0);
     _isOn = false;

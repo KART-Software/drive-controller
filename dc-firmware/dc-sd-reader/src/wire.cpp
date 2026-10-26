@@ -10,7 +10,7 @@
 #include "serial/crc16.hpp"
 
 namespace {
-constexpr size_t kMaxPayload = 768;  // dc-firmware の DC_MAX_PAYLOAD と同じ
+constexpr size_t kMaxPayload = 768;  // dc-main の DC_MAX_PAYLOAD と同じ
 constexpr size_t kMaxFrame = kMaxPayload + kMaxPayload / 254 + 2;
 uint8_t rxBuf[kMaxFrame];
 size_t rxLen = 0;

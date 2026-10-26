@@ -19,7 +19,6 @@ class EdgeWheelSpeedSensor final : public WheelSpeedSensor {
     RotationSample sample() const override { return core_.sample(); }
     uint32_t count() const override { return core_.count(); }
     uint32_t pulses() const override { return core_.pulses(); }
-    // rpm × 円周 [m] / 60
     float mps() const override { return core_.rpm() * 3.14159265f * diameterMm_ / 1000.0f / 60.0f; }
 
    private:

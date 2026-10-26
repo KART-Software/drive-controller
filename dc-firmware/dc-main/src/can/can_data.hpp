@@ -6,16 +6,11 @@
 #include "interfaces/can/can_frame.hpp"
 #include "sensor/sensors.hpp"
 
-// Data to transmit over CAN at each 60Hz tick
 struct CanImuData {
     int8_t gear;
-    float gyro[3];   // gx, gy, gz (dps)
-    float accel[3];  // ax, ay, az (m/s²)
+    float gyro[3];   // [dps]
+    float accel[3];  // [mg]
 
-    // 0x600: gx(float32) gy(float32)
-    // 0x601: gz(float32) gear(8)
-    // 0x602: ax(float32) ay(float32)
-    // 0x603: az(float32)
     static constexpr uint8_t FRAME_COUNT = 4;
     std::array<CanFrame, FRAME_COUNT> toFrames() const;
 };
@@ -24,28 +19,27 @@ struct CanImuData {
 // 0x606 DC_StrokeRear (後ろサスのストローク) は 2 台目の ADC が未接続なので送らない。
 // 値はドメインの単位で受け取り、kart-can のスケール (uint16) への変換は toFrames() の中で行う
 struct CanSensorData {
-    float appsPercent;      // 採用したアクセルペダル開度 (ETC が使う APPS1) [%]
-    float tpsPercent;       // スロットル開度 (ETC が使う TPS1) [%]
-    float clutchPercent;    // クラッチ位置 [%]
-    float brakeRearPsi;     // 後ろブレーキ圧 [psi]
-    uint16_t appsRaw[2];    // APPS 1 / 2 の生値 (ADS8688 カウント、0〜65535 = 0〜5.12 V)
-    uint16_t tpsRaw[2];     // TPS 1 / 2 の生値
-    float wheelKmh[4];      // FL, FR, RL, RR [km/h]
-    uint32_t wheelPulses[4];  // FL, FR, RL, RR の累計パルス数 (uint16 でラップして送る)
+    float appsPercent;  // ETC が使う APPS1
+    float tpsPercent;   // ETC が使う TPS1
+    float clutchPercent;
+    float brakeRearPsi;
+    uint16_t appsRaw[2];  // ADS8688 のカウント (0〜65535 = 0〜5.12 V)
+    uint16_t tpsRaw[2];
+    float wheelKmh[4];        // FL, FR, RL, RR
+    uint32_t wheelPulses[4];  // FL, FR, RL, RR
     float engineRpm;
-    float clutchRpm;        // クラッチ後 (出力軸)
+    float clutchRpm;  // クラッチ後 (出力軸)
 
     static constexpr uint8_t FRAME_COUNT = 5;
     std::array<CanFrame, FRAME_COUNT> toFrames() const;
 };
 
-// このノードの状態 (0x60A DC_Status, 33 ms)。0x740 送信の後継 (kart-can 307e038)。
-// ドメインの型で受け取り、CAN の表現への変換は toFrame() の中で行う
+// このノードの状態 (0x60A DC_Status, 33 ms)。ドメインの型で受け取り、CAN の表現への変換は toFrame() の中で行う
 struct CanStatusData {
-    EtcTarget::Mode etcMode;  // 適用中の ETC モード (EtcTarget)
-    bool launchActive;        // 凍結中 (常に false)
-    bool autoShift;           // 適用中のオートシフト ON/OFF
-    bool starterRelay;        // セルモーターリレー出力 (未実装、常に false)
+    EtcTarget::Mode etcMode;
+    bool launchActive;  // Launch Control は凍結中なので常に false
+    bool autoShift;
+    bool starterRelay;
     bool shutdownLoopClosed;  // Shutdown 回路 (AND) の出力 = SIG_IN
     CanFrame toFrame() const;
 };
@@ -57,8 +51,8 @@ struct CanRxData {
     // 0x740 Control
     std::optional<EtcTarget::Mode> etcMode;  // 最後のフレームの値。UNSPECIFIED (0) や未知値は nullopt
     bool launchActive = false;
-    bool autoShiftActive = false;  // true=ON(auto) / false=OFF(manual)
-    bool starter = false;          // セルスイッチ (受信のみ。セルモーター制御は別仕様)
+    bool autoShiftActive = false;
+    bool starter = false;
     uint32_t controlFrames = 0;    // 受信数 (新しいフレームの検出用。0 = 未受信)
     unsigned long lastControlFrameMs = 0;
     // 0x741 Shift (押下状態。立ち上がり検出は AutoShifter が行う)
