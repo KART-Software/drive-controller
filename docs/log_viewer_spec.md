@@ -1,9 +1,9 @@
 # SD ログビューア (console) 仕様
 
 SD カードのログ (`dc_NNNN[_YYYYMMDD_HHMMSS]/NNNN.bin`、docs/loop_nonblocking_spec.md §7) を console から開き、
-run の一覧を見て CSV に書き出す。チャート表示は次の段階 (§6)。
+run の一覧を見て CSV に書き出し、チャートで見る (§6)。
 
-- 状態: v1 (一覧 + CSV) と v2 (チャート、§6) 実装済み (2026-10-25、feature/log-viewer)。
+- 状態: 一覧 + CSV (§2〜5) とチャート (§6) を実装済み (2026-10-25、PR #25)。
 - 前提: SD カードは dc-sd-reader (USB Mass Storage) で PC にマウントされているか、ログをコピーしたフォルダがある。
   console は Chrome / Edge (Web Serial と同じ前提。File System Access API を使う)。
 
@@ -34,7 +34,7 @@ run の一覧を見て CSV に書き出す。チャート表示は次の段階 (
 - 3 つ目のタブ **Logs** (`/logs`)。シリアル接続は不要 (接続中でも使える)。
 - SD リーダー接続中の画面 (「SD カードを PC にマウント中」) に「ログを開く」ボタン。押すと `/logs` に移り、そのクリックを
   ユーザー操作としてディレクトリ選択を開く。
-- `showDirectoryPicker()` が無いブラウザでは、Chrome / Edge が要る旨を表示して終わり (v1 ではフォールバック無し)。
+- `showDirectoryPicker()` が無いブラウザでは、Chrome / Edge が要る旨を表示して終わり (フォールバック無し)。
 
 ## 3. ディレクトリと run の一覧
 
@@ -88,7 +88,7 @@ run の一覧を見て CSV に書き出す。チャート表示は次の段階 (
   (Playwright のヘッドレス Chrome。picker は OPFS で代替。使い方は冒頭のコメント)。
   2026-10-25 のベンチ: 42,274 レコードの run で Python / Node / ブラウザの 3 つが 65 列すべて一致。Node でのデコードは 0.1 s。
 
-## 6. チャート (v2)
+## 6. チャート
 
 run を開いて、チャネルを時系列で見る。1 run の全体から 1 kHz の生の値まで、同じ画面でズームして行き来できること。
 
