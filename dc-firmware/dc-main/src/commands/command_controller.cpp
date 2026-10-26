@@ -7,7 +7,7 @@
 #include <TimeLib.h>
 
 #if defined(BENCH_DEBUG)
-extern volatile uint32_t tickCount;  // main.cpp (tickISR の実行回数)。DebugStallCmd の確認用
+#include "isr/tick_isr.hpp"
 #endif
 
 namespace {
@@ -310,9 +310,9 @@ void debugStall(void* ctx, const dc_Command& cmd) {
     (void)ctx;
 #if defined(BENCH_DEBUG)
     const uint32_t ms = min(cmd.body.debug_stall.ms, (uint32_t)5000);
-    const uint32_t ticks0 = tickCount;
+    const uint32_t ticks0 = tickCount();
     delay(ms);
-    DebugLogger::log("stall %lu ms: tick ran %lu times", (unsigned long)ms, (unsigned long)(tickCount - ticks0));
+    DebugLogger::log("stall %lu ms: tick ran %lu times", (unsigned long)ms, (unsigned long)(tickCount() - ticks0));
     SerialProtocol::sendResponse(cmd.id, true);
 #else
     SerialProtocol::sendResponse(cmd.id, false);

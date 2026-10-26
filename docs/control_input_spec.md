@@ -56,7 +56,7 @@ Q7 で Shift を別仕様にし、Q10 で GPIO パドルを削除すると、そ
 | 途絶時フォールバック (受信コード内) | mode → NORMAL (**MOTOR_OFF はラッチ、CAN 断で自動復帰させない**)、auto-shift → OFF (手動)、launch → false。タイムアウト `CAN_CONTROL_TIMEOUT_MS` = 200 ms |
 | 起動後 未受信時 | mode = NORMAL、auto-shift = OFF (既定値のまま) |
 
-制御入力の消費側は 5 か所: `main.cpp` (モード反映とアーミング③)、`AutoShifter` への autoOn、`ExperimentRunner` (開始条件・ガードの MOTOR_OFF 判定)、`log_record_builder.cpp` (flags の auto-shift ビット)、`CanController::send` (0x740 送信)。
+制御入力の消費側は 5 か所: `app/tick.cpp` (モード反映とアーミング③)、`AutoShifter` への autoOn、`ExperimentRunner` (開始条件・ガードの MOTOR_OFF 判定)、`log_record_builder.cpp` (flags の auto-shift ビット)、`CanController::send` (0x740 送信)。
 
 フラグの外部からの直接書き込みは `ExperimentRunner` だけ (退避・復元)。これは PR #8 で一時停止 API に置き換え済み。読み手は外部に無い。
 

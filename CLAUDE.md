@@ -75,9 +75,9 @@ pnpm run gen:proto          # buf 経由で src/proto/drive_controller_pb.ts を
 
 ### ファームウェア並行性 (Teensy 4.1)
 
-`dc-firmware/dc-main/src/main.cpp` は 4 つの並行コンテキストで動く (docs/loop_nonblocking_spec.md §3.1)。共有状態を触る前に自分のコードがどれに属するか把握すること。**時間の決まった処理はすべて割り込み、`loop()` には遅れてよい処理だけ**を置く:
+`dc-main` は 4 つの並行コンテキストで動く (docs/loop_nonblocking_spec.md §3.1)。ファイルの分担は §3.3: `main.cpp` は部品をまとめた `Parts` と配線だけ、`src/isr/` は割り込みの入口 (依存の参照一覧を `set*Deps()` で受け取り、ロジックに渡すだけ)、`src/app/` が各文脈のロジック (`app::tick` / `app::onCanRx` / `app::loop`。依存はすべて引数で受け、static な状態を持たない)。共有状態を触る前に自分のコードがどれに属するか把握すること。**時間の決まった処理はすべて割り込み、`loop()` には遅れてよい処理だけ**を置く:
 
-1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) → **SD ログ 1 レコードの採取** (`buildLogRecord()` → リング) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `tick_max_us` (約 20 µs)。
+1. **`tickISR`** — GPT2, 周期 1 ms, NVIC 優先度 **64**。毎回、SIG_IN 読み → `ControlInput::update()` → モード反映 → プラウシビリティとアーミング (`armEtc()`、`src/app/tick.cpp`) → **モーター制御** (`motorController.cycle()`、ETC が ON のときだけ) → 同定実験 → オートシフター (`tick()`) → 回転計測 (毎 ms、エンジン / クラッチ後は直近 100 ms の窓) → CAN 送信 (0x600-0x603 は 16 ms、0x60A は 33 ms) → **SD ログ 1 レコードの採取** (`buildLogRecord()` → リング) の順。ETC の開始 / 停止 (`startEtc()` / `stopEtc()`) はここからのみ。所要は `LoopStats` の `tick_max_us` (約 20 µs)。
 2. **`canRxISR`** — FlexCAN3 の受信 (FIFO) 割り込み, 優先度 **64**。`CanRxData` に取り込み、0x741 のシフト入力はその場で `autoShifter.onPaddles()` に渡す。tick と同じ優先度なので互いに割り込まず、シフター・`CanRxData`・`ControlInput` はこの 2 つの間で排他不要。FlexCAN の `events()` は呼ばない (呼ぶとコールバックがキュー経由になる)。
 3. **センサーサンプリング ISR** — `IntervalTimer` (PIT のチャネル 2。0 / 1 は時刻の Lifetime Timer), 周期 62.5 µs, 優先度 **208** (USB より下)。ADS8688 を **DMA (非ブロッキング SPI)** で駆動し、ISR は前回 DMA 結果を移動平均に反映して次の転送を kick するだけ (`sensor_hub.sampleDmaIsr()`)。IMU (IAM-20680HP、SPI1 = LPSPI3) も同じ ISR の `IMU_SAMPLING_DIVIDER` (= 2) 回に 1 回 (8 kHz) で DMA (CS はハードウェア PCS0 = pin 0、120 bit の 1 フレーム)、移動平均 8 サンプル (1 ms)。**SPI1 は IMU 専用** (トランザクションを開いたまま CS をハードウェアにするので、ほかのデバイスはつなげない)。値は `Imu::accel()` / `gyro()` (`interfaces/sensor/imu.hpp`) で移動平均から読む。ブロッキングで読むのは setup の初期化だけ (DMA なしの経路は廃止した)。
 4. **`loop()`** — 非 ISR: telemetry (50 Hz)、コマンドディスパッチ、SD ログの書き出し (リングからまとめて。カード挿入時)、ISR が積んだ debug の送信、launch FSM tick (凍結時はビルドから除外)。シリアル送信は全フレームが TX リングの空きを確認し、足りなければ捨てる (loop をブロックさせない, `serial_protocol.cpp`)。50 Hz telemetry は TX バッファ 1 本分 (2 KB) を残して先に捨てるので、コマンド応答と debug は最後まで届く。
@@ -140,7 +140,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 
 ### Launch Control (現在凍結)
 
-**`-DLAUNCH_CONTROL_ENABLED` が未定義の通常ビルドでは凍結中。** `main.cpp` の `launchController.begin()` と FSM tick が `#if defined(LAUNCH_CONTROL_ENABLED)` でガードされ、`update()` が呼ばれないため FSM は Idle のまま (clutch motor 停止)。インスタンスと参照はビルドに残るので、フラグ ON ビルド (CI 等) で腐敗検知できる。制御フレーム `CONTROL (0x740)` の launch ビットは受信し続けるが何も起きない。
+**`-DLAUNCH_CONTROL_ENABLED` が未定義の通常ビルドでは凍結中。** `main.cpp` の `launchController.begin()` と `app::loop` の FSM tick が `#if defined(LAUNCH_CONTROL_ENABLED)` でガードされ、`update()` が呼ばれないため FSM は Idle のまま (clutch motor 停止)。インスタンスと参照はビルドに残るので、フラグ ON ビルド (CI 等) で腐敗検知できる。制御フレーム `CONTROL (0x740)` の launch ビットは受信し続けるが何も起きない。
 
 `launch::LaunchController` は FSM `Idle → Ready → Approach → EngageControl → FullEngage → Idle`。制御量は **エンゲージ率** (`wheel_rps_at_engine / engine_rps`) で、外側 PID がクラッチ位置指令を出す。内側 PID は `ClutchMotor` 内でクラッチセンサに対するクローズドループを構成する想定 — proto/config 上は配線済みだがアクチュエータ側はハード待ち (TODO.md A-2 参照)。
 
@@ -182,7 +182,7 @@ ISR と loop の間で共有される可変状態は **必ず保護する**。`M
 - **② `SHUTDOWN_SIG_IN_PIN`=LOW** (外部 AND 回路が開いた) → ETC 停止 (RELAY は HIGH 維持、SIG が HIGH に戻れば**自動再開**)。
 - **③ `MOTOR_OFF` モード** (CAN 0x740 由来、または 0x740 未受信の待機、または console の上書き) → ETC 停止 (RELAY 維持)。別モードを受信 / 上書きすれば再開。CAN 途絶時は MOTOR_OFF を保持する。
 
-ETC 停止 = `setMotorOff()` (PWM=0 + モーター電源リレー OFF)、再開 = `setMotorOn()` (内部で `pid.reset()`)。モーター制御は tick の中で「ON なら `cycle()`」なので、タイマーの開始・停止はない。① は復帰不可で電源再投入が必要。詳細ロジックは `main.cpp` の「ETC アーミング」コメントが一次ソース。**`SHUTDOWN_RELAY_PIN`(点火系) を落とすのは①だけ**で、`DcMotor` が持つモーター電源リレー `DC_MOTOR_RELAY_PIN` とは別系統。(燃料ポンプ制御は削除済み — 燃料カットはエンジン ECU 責務。)
+ETC 停止 = `setMotorOff()` (PWM=0 + モーター電源リレー OFF)、再開 = `setMotorOn()` (内部で `pid.reset()`)。モーター制御は tick の中で「ON なら `cycle()`」なので、タイマーの開始・停止はない。① は復帰不可で電源再投入が必要。詳細ロジックは `src/app/tick.cpp` の「ETC アーミング」コメントが一次ソース。**`SHUTDOWN_RELAY_PIN`(点火系) を落とすのは①だけ**で、`DcMotor` が持つモーター電源リレー `DC_MOTOR_RELAY_PIN` とは別系統。(燃料ポンプ制御は削除済み — 燃料カットはエンジン ECU 責務。)
 
 ### ピンアサイン
 

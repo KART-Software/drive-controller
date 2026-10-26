@@ -209,7 +209,7 @@ auto 実行中（`autoOn` かつ低速ハンドオフ帯でない = 走行中 or
 > **ETC プラウシビリティには依存しない**: オートシフターは UP/DOWN パルスを IST コント
 > ローラへ渡すだけでスロットルを動かさないため、ETC のプラウシビリティ違反で auto を
 > 止めない（`evaluate()` も plausibility を読まない）。ETC の停止・SHUTDOWN 等の安全は
-> 別系統（`main.cpp` の ETC アーミング）で一元管理する。launch control は自らスロットル/
+> 別系統（`app/tick.cpp` の ETC アーミング）で一元管理する。launch control は自らスロットル/
 > クラッチを動かすため plausibility に結合するが、オートシフターは切り離す。
 
 ### `evaluate()` が `None` を返す（自動シフトしない）条件
