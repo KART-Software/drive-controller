@@ -14,7 +14,7 @@ LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, co
         f |= LOG_FLAG_SHUTDOWN_SIG;
     if (plausibility.currentlyValid())
         f |= LOG_FLAG_VALID;
-    if (control.autoShiftOn(nowMs))  // 適用中のオートシフト (CAN 0x740 または console override)
+    if (control.autoShiftOn(nowMs))
         f |= LOG_FLAG_AUTOSHIFT;
     if (control.launchOn(nowMs))  // launch は凍結 (消費側なし)
         f |= LOG_FLAG_LAUNCH;
@@ -45,7 +45,7 @@ LogRecord buildLogRecord(uint64_t tUs, uint32_t nowMs, const LogSources& src, co
         .wheel_count = {hub.pulseWheelFL().count(), hub.pulseWheelFR().count(),
                         hub.pulseWheelRL().count(), hub.pulseWheelRR().count()},
         .target_tp = (float)hub.target().getTarget(),
-        .duty = motor.lastOutput(),  // 停止中は 0 (setMotorOff でクリア = 常に実印加値)
+        .duty = motor.lastOutput(),
         .errors = plausibility.errorBits(),
         .flags = f,
         .gear = hub.gps().getGear(),

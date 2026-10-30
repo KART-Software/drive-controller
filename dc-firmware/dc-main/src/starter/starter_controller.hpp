@@ -20,10 +20,9 @@ class StarterController {
    public:
     explicit StarterController(const RotationSensor& engine) : engine_(engine) {}
 
-    void begin();  // リレー出力を OFF で初期化
+    void begin();
     void setConfig(const dc_StarterConfig& cfg);
 
-    // switchPressed = セルスイッチ (ControlInput::starterPressed)、nowMs = tick の時刻
     void tick(bool switchPressed, uint32_t nowMs);
 
     bool relayOn() const { return state_ == State::Cranking; }
@@ -40,10 +39,10 @@ class StarterController {
     uint32_t minHoldMs_ = 5000;
 
     volatile State state_ = State::Off;  // loop (SD ログ) が relayOn() で読む
-    bool prevSwitch_ = false;   // 押した瞬間 (0 → 1) の検出用
+    bool prevSwitch_ = false;
     uint32_t crankStartMs_ = 0;
-    bool aboveRpm_ = false;     // しきい値を超えた状態が続いているか
-    uint32_t aboveSinceMs_ = 0; // 超え始めた時刻
+    bool aboveRpm_ = false;
+    uint32_t aboveSinceMs_ = 0;
 };
 
 }  // namespace starter

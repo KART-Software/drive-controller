@@ -33,7 +33,6 @@ double PID::compute(double setPoint, double position, uint32_t nowUs)
         differential = (error - lastError) / dtSec;
         errorSum += error * dtSec;
 
-        // Anti-windup: |kI * errorSum| を integralLimit 以下にクランプ
         if (integralLimit > 0.0 && kI != 0.0) {
             double maxSum = integralLimit / fabs(kI);
             if (errorSum >  maxSum) errorSum =  maxSum;

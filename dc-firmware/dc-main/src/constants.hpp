@@ -141,7 +141,7 @@
 #define GPS_NORMAL_GEARS \
     { 1, 0, 2, 3, 4, 5, 6 }
 
-#define GPS_MAX_GEARS 7  // max(IST=5, Normal=7)
+#define GPS_MAX_GEARS 7
 
 //////////////////////////
 /// IMU Settings (SPI1) //
@@ -166,7 +166,6 @@
 //   Engine=14(QuadTimer3_2)  ClutchRPM=15(QuadTimer3_3)
 #define PULSE_ENGINE_PIN 14
 #define PULSE_CLUTCH_RPM_PIN 15
-// 回転計測は tickISR が毎 ms 更新する。窓・歯数などは config RotationConfig (docs/loop_nonblocking_spec.md §6.7)
 
 ////////////////////
 /// CAN Settings ///
@@ -175,17 +174,8 @@
 #define CAN3_RX_PIN 30  // CRX3 (GPIO_EMC_37)。Flexcan3Bus が設定するパッドと一致すること (static_assert)
 #define CAN3_TX_PIN 31  // CTX3 (GPIO_EMC_36)
 #define CAN_BITRATE 1000000       // 1 Mbps。kart-can can.yaml の baudrate と同じ値にする (生成ヘッダにはマクロが出ない)
-// CAN ID / メッセージ定義は kart-can (submodule: dc-firmware/lib/kart-can, 生成 kart_can.h) を単一ソースとする:
-//   TX: 0x600-0x603 (IMU + ギア) / 0x60A DC_Status。tickISR から送る。周期は kart-can の
-//       KART_CAN_*_CYCLE_TIME_MS (can.yaml の cycle_ms) をそのまま使い、ここでは定義しない
-//   RX: 0x740 Control (data_logger → ETC モード / launch / auto-shift / starter, 33 ms)
-//       0x741 Shift   (data_logger → シフトパドル上下, 10 ms)
-// 制御入力は CAN のみ (GPIO のモードノブ / スイッチ / パドルは廃止, docs/control_input_spec.md)。
-
-// 途絶したら安全側へ戻す (kart-can docs/can-spec.md §4.1):
-//   Control: launch → false, mode → NORMAL (MOTOR_OFF はラッチ), auto-shift → OFF (manual), starter → 0
-//   Shift:   両パドル → 0
-// 起動後に一度も受信していない間は途絶扱いにしない (ETC モードは ControlInput が MOTOR_OFF で待たせる)。
+// CAN ID / メッセージ定義と送信周期は kart-can (submodule dc-firmware/dc-main/lib/kart-can、生成 kart_can.h) が単一ソース。
+// ここでは定義しない。途絶時の扱いは ControlInput (kart-can docs/can-spec.md §4.1)
 #define CAN_CONTROL_TIMEOUT_MS 200
 #define CAN_SHIFT_TIMEOUT_MS 100
 
@@ -197,7 +187,6 @@
 // モーター(20-23)・車輪速(24,25,28,36)・RPM(14,15) と被らない空きピンを使う。
 #define AUTO_SHIFT_UP_OUT_PIN 4
 #define AUTO_SHIFT_DOWN_OUT_PIN 5
-// シフト信号の出力 (パドル入力は CAN 0x741)。アサート=HIGH。
 #define AUTO_SHIFT_OUT_ACTIVE HIGH
 #define AUTO_SHIFT_OUT_INACTIVE LOW
 // パルスの開始から次の開始までの最短 (ms)。config の cooldown_ms がこれより短ければこちらを使う
@@ -217,20 +206,20 @@
 // docs/etc_experiment_mode_spec.md。シーケンス定義は experiment_runner.cpp。
 // ガード帯は拡張ストッパー (-15/115%) の内側かつ TPS_MARGIN(15) の内側 =
 // プラウシビリティ回路チェックより必ず先に効く。
-#define EXPERIMENT_TP_GUARD_LOW (-10.0)   // % 下限 (リリース試験中は不適用)
-#define EXPERIMENT_TP_GUARD_HIGH (110.0)  // % 上限
+#define EXPERIMENT_TP_GUARD_LOW (-10.0)  // リリース試験中は不適用
+#define EXPERIMENT_TP_GUARD_HIGH (110.0)
 // 静止判定 (全実験共通): 窓内で TPS と duty の変動幅が閾値未満なら静止。
 // duty も見る理由: 摩擦帯で θ 張り付き中は I 項がランプしている (真の平衡でない)。
-#define EXPERIMENT_STATIONARY_TP_TOL (0.2)    // % 窓内 |Δtps| 上限
-#define EXPERIMENT_STATIONARY_DUTY_TOL (0.5)  // % 窓内 |Δduty| 上限
-#define EXPERIMENT_STATIONARY_WINDOW_MS 500   // 判定窓
-#define EXPERIMENT_SETTLE_TIMEOUT_MS 8000     // 静止しない場合のタイムアウト (黙って続行, 件数のみ計上)
-#define EXPERIMENT_RECORD_HOLD_MS 1000        // ポイント滞在の記録窓 (静止後)
-#define EXPERIMENT_RELEASE_HOLD_MS 1000       // リリース前の静止保持
-// ストール: PID がほぼ飽和 + 目標乖離 + 不動が続いたら中断 (仮値、実測後調整)
-#define EXPERIMENT_STALL_DUTY (90.0)          // % |u| 閾値
-#define EXPERIMENT_STALL_TARGET_DEV (2.0)     // % |tps - target| 閾値
-#define EXPERIMENT_STALL_MS 1000              // 継続時間
+#define EXPERIMENT_STATIONARY_TP_TOL (0.2)
+#define EXPERIMENT_STATIONARY_DUTY_TOL (0.5)
+#define EXPERIMENT_STATIONARY_WINDOW_MS 500
+#define EXPERIMENT_SETTLE_TIMEOUT_MS 8000  // 静止しなくても黙って次へ進む (件数だけ数える)
+#define EXPERIMENT_RECORD_HOLD_MS 1000     // 静止してからの記録窓
+#define EXPERIMENT_RELEASE_HOLD_MS 1000
+// ストール (PID がほぼ飽和 + 目標乖離 + 不動が続く) で中断。仮値、実測後に調整
+#define EXPERIMENT_STALL_DUTY (90.0)
+#define EXPERIMENT_STALL_TARGET_DEV (2.0)
+#define EXPERIMENT_STALL_MS 1000
 
 /////////////////////////////////
 /// Other Output Pin Settings ///
@@ -246,7 +235,5 @@
 //       プラウシビリティ違反時のみ LOW に落とす (= 点火系遮断、復帰不可ラッチ)。
 //   - SHUTDOWN_SIG_IN_PIN: INPUT (外部で PULLDOWN 済みなので素の INPUT)。
 //       AND 回路の出力。HIGH=ETC 動作許可 / LOW=ETC 停止。ToggleSwitch でデバウンス。
-// 注意: ここで落とすのは点火系リレーであって、上の DC_MOTOR_RELAY_PIN(モーター電源)
-//       とは別系統。MOTOR_OFF モード等では SHUTDOWN_RELAY は落とさない。
 #define SHUTDOWN_RELAY_PIN 2
 #define SHUTDOWN_SIG_IN_PIN 16

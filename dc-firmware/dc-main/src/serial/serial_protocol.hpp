@@ -29,7 +29,6 @@ EtcTarget::Mode etcModeFromProto(dc_EtcMode m);  // 未指定・未知値は Mot
 // 起動時の debug は SerialDebugWriter がつながるまでためる。
 class SerialProtocol {
    public:
-    // Sensor data (50 Hz).
     static void sendSensorData(const SensorView& hub,
                                bool isValid,
                                const etc::ErrorHandler& errorHandler,
@@ -38,15 +37,13 @@ class SerialProtocol {
                                const ControlInput& control,
                                const CanState& canState,
                                const CanStats& canStats,
-                               uint32_t nowMs);  // telemetry の timestamp (loop の時刻)
+                               uint32_t nowMs);
 
-    // Debug log message. 直接呼ばず DebugLogger::log を使う (SerialDebugWriter がこれを呼ぶ)
+    // 直接呼ばず DebugLogger::log を使う (SerialDebugWriter がこれを呼ぶ)
     static void sendDebugv(uint64_t timestampUs, const char* fmt, va_list args);
 
-    // Response without payload data.
     static void sendResponse(uint32_t id, bool ok);
 
-    // Response with a typed oneof payload.
     static void sendResponseWithConfig(uint32_t id, bool ok, const dc_ConfigResponse& cfg);
     static void sendResponseWithAppsMin(uint32_t id, bool ok, const dc_AppsMinResponse& p);
     static void sendResponseWithAppsMax(uint32_t id, bool ok, const dc_AppsMaxResponse& p);
@@ -60,7 +57,5 @@ class SerialProtocol {
     static void sendResponseWithCurve(uint32_t id, bool ok, const dc_EtcTargetCurve& p);
     static void sendResponseWithGpsGear(uint32_t id, bool ok, const dc_GpsGearResponse& p);
 
-    // Drain Serial input, decoding any complete frames. If a Command was
-    // decoded this call, copies it into `out` and returns true.
-    static std::optional<dc_Command> readCommand();  // 1 フレーム揃えば返す (無ければ nullopt)
+    static std::optional<dc_Command> readCommand();  // 受信を進め、Command が 1 つ揃えば返す
 };

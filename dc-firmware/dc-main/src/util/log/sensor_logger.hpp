@@ -13,8 +13,8 @@
 // レコードの中身は buildLogRecord (log_record_builder) が組み立てる。
 // - tick (1 ms): capture() に「レコードの作り方」を渡す。有効なときだけ作ってリングへ積み、無効な間 (カードなし / 停止 /
 //   フォーマット中) とリングが満杯のときは作らずに数えるだけ (log_drops)。作るかどうかは呼ぶ側に見せない。
-// - loop: service() がリングに 4 KB 以上たまったら最大 8 KB をまとめて書き、100 MB ごとにファイルを切り替え、2 s ごとに sync する。
-//   失敗したらその起動では止める (通知はしない。drops が増え続けるので telemetry の SysStats で分かる)。
+// - loop: service() がリングからまとめて書く。失敗したらその起動では止める (通知はしない。drops が増え続けるので
+//   telemetry の SysStats で分かる)。
 // - format(): ログを止めて媒体をフォーマットし、新しいディレクトリで始め直す (コマンド用。loop から)。
 class SensorLogger {
    public:
@@ -36,11 +36,11 @@ class SensorLogger {
     // loop から
     void service(uint32_t nowMs);
     bool format();
-    void close();  // 再起動の前に: リングに残っている分を書いて sync し、閉じる (以後 tick は数えるだけ)
+    void close();  // 再起動の前に。以後 tick は数えるだけ
     uint32_t drops() const { return drops_; }  // 記録されなかったレコードの累計
 
    private:
-    bool openNextFile();  // 次のファイルを作ってヘッダを書く
+    bool openNextFile();
     void stop(const char* why);
 
     LogStore& store_;
@@ -59,7 +59,7 @@ class SensorLogger {
 #endif
     static constexpr uint64_t FILE_BYTES = SENSOR_LOG_FILE_BYTES;
     static constexpr uint32_t RECORDS_PER_FILE = (uint32_t)((FILE_BYTES - sizeof(LogHeader)) / sizeof(LogRecord));
-    static constexpr uint32_t WRITE_MIN_RECORDS = 4096 / sizeof(LogRecord);  // 4 KB たまったら書く
-    static constexpr uint32_t WRITE_MAX_RECORDS = 8192 / sizeof(LogRecord);  // 1 回に最大 8 KB
+    static constexpr uint32_t WRITE_MIN_RECORDS = 4096 / sizeof(LogRecord);
+    static constexpr uint32_t WRITE_MAX_RECORDS = 8192 / sizeof(LogRecord);
     static constexpr uint32_t SYNC_INTERVAL_MS = 2000;
 };

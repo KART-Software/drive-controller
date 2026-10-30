@@ -122,6 +122,33 @@ NVIC の優先度は上位 4 bit のみ有効 (0, 16, … 240 の 16 段階)。�
 
 各フェーズは独立にコミット・検証する。Phase 2 以降は CLAUDE.md の並行性節を更新する。
 
+### 3.3 ファイルの分担 (main.cpp の分割、2026-10-27)
+
+`main.cpp` は部品の生成と配線だけにし、割り込みの入口 (糊) と各文脈のロジックを別のファイルに分ける。
+
+| 場所 | 役割 | 公開するもの |
+|---|---|---|
+| `src/main.cpp` | 部品をすべて持つ `struct Parts` (無名 namespace の `parts`。メンバーの定義順 = 生成順で、既定メンバー初期化子で前のメンバーを参照する)、`setup()` (先頭で各 ISR に依存を渡し、以降は今の初期化の順序)、`loop()` (`app::loop()` を呼ぶだけ) | `setup` / `loop` |
+| `src/isr/tick_isr.{hpp,cpp}` | 糊。依存の参照一覧 `const TickDeps*` と tick の回数だけを持ち、ISR は `app::tick(*deps, ++count)` を呼ぶだけ | `setTickDeps()`、`tickISR()` (GPT2 に登録する入口)、`tickCount()` (bench の `debug_stall` 用。旧 `extern tickCount` の代わり) |
+| `src/isr/can_isr.{hpp,cpp}` | 同上 | `setCanRxDeps()`、`canRxISR()` |
+| `src/isr/sensor_sampling_isr.{hpp,cpp}` | 同上。ロジックは `SensorHub::sampleDmaIsr()` そのものなので `app/` 側のファイルは持たず、`SensorSamplingDeps` もここに置く | `SensorSamplingDeps`、`setSensorSamplingDeps()`、`sensorSamplingISR()` |
+| `src/app/tick.{hpp,cpp}` | `TickDeps` と `app::tick(const TickDeps&, uint32_t n)` (§6.2 の実行順)。アーミング ①〜⑤ (`armEtc`、`startEtc` / `stopEtc`) はここのローカル関数で、設計コメントもここに置く | `TickDeps`、`app::tick` |
+| `src/app/can.{hpp,cpp}` | `CanRxDeps` と `app::onCanRx(const CanRxDeps&, const CanFrame&)` (§6.3) | `CanRxDeps`、`app::onCanRx` |
+| `src/app/loop.{hpp,cpp}` | `LoopDeps` と `app::loop(const LoopDeps&)` (§3.1 の loop の内容。launch FSM の `#if` もここ。`Every` は状態なので `Parts` が持ち、`LoopDeps` から参照する) | `LoopDeps`、`app::loop` |
+
+規則:
+
+- 糊 (`isr/`) は依存を取り出して渡すだけで、判断も繰り返しもしない。依存は `set*Deps()` で `setup()` の先頭に 1 回渡す
+  (参照の束は `Parts` のメンバーなので static 寿命)。渡される前に割り込みが来たら何もしない (タイマーと CAN は `setup()` の中で、渡した後に始める)。
+- ロジック (`app/`) は引数で受けた依存だけを使い、static な状態を持たない。tick の回数は糊が数えて `n` で渡す
+  (CAN 送信の周期判定に使う)。時刻は `deps.clock` から関数の先頭で 1 回読む (§7.2)。loop も同じ (`app::loop` は時刻を引数に取らない)。
+- 依存の型 (`*Deps`) はロジック側のヘッダに置き、糊がそれを include する (依存の向きは 糊 → ロジック だけ)。
+- `Parts` の外に出るのは `DMAMEM` のリング本体だけ (section 属性は構造体のメンバーに付けられない)。
+  `LogSources` (`buildLogRecord` の入力) と `SerialDebugWriter` (今は `setup()` の static) も `Parts` のメンバーにし、`TickDeps` から `LogSources` を参照する。
+- `sysClock` は `Parts` の先頭 (static 初期化の順序、§7.2)。`Parts` の生成は今のグローバルと同じ static 初期化で、生成順も変わらない。
+- 動作は変えない。検証は 5 通りのビルド (dc-main `teensy41` / `teensy41_bench` / `-DLAUNCH_CONTROL_ENABLED`、dc-boot、dc-sd-reader) と、
+  ベンチで `tick_max_us` と `log_drops` が変わらないこと。
+
 ## 4. A: USB 送信ガード
 
 - `SerialProtocol::encodeAndWrite()` で **全フレーム (telemetry / 応答 / debug)** に
@@ -190,7 +217,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 - `tickISR`: GPT2 (優先度 64)、`setup()` の最後で開始し、以後止めない。
 - `sensorSamplingISR`: PIT のまま (チャネル 2。PIT の割り込みはこれだけなので優先度 208 が効く。チャネル 0 / 1 は時計の Lifetime Timer が割り込みなしで使う)。
 
-### 6.2 `tickISR` (1 ms) — 実行順
+### 6.2 `tickISR` (1 ms) — 実行順 (`app::tick`、§3.3)
 
 | 順 | 処理 | 周期 | 旧所在 |
 |---|---|---|---|
@@ -214,7 +241,7 @@ ISR 側は `volatile uint32_t` に max を書くだけ。
 - 同定実験の開始 / 停止は loop (コマンド) からの**要求フラグ**にし、tick が取り込んで状態を変える
   (実験の状態遷移の書き手を tick だけにする)。
 
-### 6.3 `canRxISR` — CAN 受信
+### 6.3 `canRxISR` — CAN 受信 (`app::onCanRx`、§3.3)
 
 - 受信は自前の FlexCAN3 ドライバ (`Flexcan3Bus`、[can_bus_spec.md](can_bus_spec.md)) の割り込みで、Rx FIFO から 1 フレーム読んで
   コールバック (`canRxISR`) を割り込みの文脈で呼ぶ。NVIC 優先度は `begin()` の引数 (64)。ハードウェアの ID フィルタで 0x740 / 0x741
@@ -665,6 +692,7 @@ PlatformIO 同梱の `teensy_loader_cli` 2.2 が 1 MB より先のアドレス�
 | `src/configurator.{hpp,cpp}`、`src/util/flash.{hpp,cpp}` | 2a | flash 書き込みの前後で要求 / 準備完了の受け渡し (§6.8) |
 | `dc-console/` | 2a | SysStats の表示項目追加 |
 | `CLAUDE.md` | 2 / 3 | 並行性節 (コンテキストと優先度の表)、CAN 節 (受信割り込み・送信周期)、SD ロギング節 |
+| `src/main.cpp`、`src/isr/`、`src/app/` | 分割 (2026-10-27) | §3.3: `Parts` と配線だけを main に残し、ISR の入口を `isr/`、ロジックを `app/` へ。`command_controller.cpp` の `extern tickCount` は `tickCount()` に |
 
 ## 10. 決定事項
 
@@ -727,6 +755,17 @@ Q13 (#5 からの stacked ブランチ) は 2026-10-11 の改訂で置き換え�
 | カードなしの drops | 起動時にカードがなくても `log_drops` を数え続ける (console が警告色になる)。カードを挿さない運用は想定外なので、警告が出るのは意図どおり (2026-10-20 レビュー) |
 | 採取の呼び方 | tick は `SensorLogger::capture()` にレコードの作り方 (ラムダ) を渡すだけ。有効なときだけ組み立てる判断はロガーの中 (2026-10-20 レビュー) |
 
+### 10.4 2026-10-27 (main.cpp の分割、§3.3)
+
+| 項目 | 決定 |
+|---|---|
+| 糊が持つもの | 「参照一覧を返す関数」ではなく参照一覧そのもの (`const TickDeps*`)。実行中に変わらないので関数を挟む意味がない。差し替えるなら `set` し直す |
+| `Parts` の置き場所 | `main.cpp` のファイルスコープ (無名 namespace)。`setup()` のローカルでは `loop()` から見えない。「main.cpp の外に見せない」は無名 namespace で満たす |
+| ISR の入口関数 | 公開する (GPT2 / `IntervalTimer` / `CanBus::begin` に関数ポインタで渡すため)。糊が持つのはそれと `set*Deps()` だけ |
+| loop | 同じ形 (`app::loop`)。割り込みではないので set は要らず、`parts` から直接渡す。main.cpp からロジックがなくなる |
+| アーミング | `app/tick.cpp` のローカル関数のまま。テストを置くときに `etc::EtcArming` に切り出せる (この形はそれを妨げない) |
+| センサーサンプリング | ロジックが `hub.sampleDmaIsr()` の 1 行なので糊が直接呼ぶ |
+
 ## 11. 未決事項
 
-なし (2026-10-20 時点)。
+なし (2026-10-27 時点)。

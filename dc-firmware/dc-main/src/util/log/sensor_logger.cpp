@@ -109,7 +109,7 @@ void SensorLogger::close() {
         ring_.pop(n);
         fileRemaining_ -= n;
     }
-    store_.closeFile();  // sync して閉じる
+    store_.closeFile();
     ring_.clear();
     DebugLogger::log("SD log: closed");
 }

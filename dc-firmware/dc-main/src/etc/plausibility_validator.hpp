@@ -36,8 +36,7 @@ class PlausibilityValidator {
                        bool bps,
                        bool bpsTps);
     ErrorHandler& getErrorHandler() { return errorHandler; }
-    // 副作用なしの const 読み取り (ログ生成等の純粋関数用)。
-    // errorBits = ETC エラービットマスク、currentlyValid = 直近に評価した瞬時 plausibility。
+    // 副作用なしの読み取り (ログ生成などの純粋関数用)
     uint16_t errorBits() const { return errorHandler.bits(); }
     bool currentlyValid() const { return lastCurrentlyValid_; }
     // ① ラッチ状態 (一度でも違反すると false。isValid() と違い評価しない = 副作用なし)
@@ -68,7 +67,6 @@ class PlausibilityValidator {
         lastBpsTpsPlausibleTime;
 
     void initParameters(uint32_t now);
-    // 各チェック。now = 評価中の時刻 (isCurrentlyValid の引数)
     bool isAppsPlausible(uint32_t now);
     bool isTpsPlausible(uint32_t now);
     bool isApps1CircuitValid(uint32_t now);

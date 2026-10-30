@@ -15,7 +15,7 @@ struct CommandContainer {
     EtcTarget& target;
     etc::ExperimentRunner& experimentRunner;
     ControlInput& controlInput;
-    SensorLogger& sensorLogger;  // format_sd
+    SensorLogger& sensorLogger;
     const Clock& clock;  // 時刻で判定するコマンド (上書きの受け付け) が読む
 };
 

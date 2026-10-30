@@ -12,7 +12,6 @@ class PID {
     double compute(double setPoint, double position, uint32_t nowUs);
     void setDirection(int8_t direction);
     void setGains(double kP, double kI, double kD);
-    // errorSum / lastError を初期化。状態遷移などで仕切り直す時に呼ぶ。
     void reset();
     // 積分項の出力寄与 |kI * errorSum| を limit 以下にクランプ (anti-windup)。
     // limit <= 0 で無効化 (デフォルト無効)。

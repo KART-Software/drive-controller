@@ -20,6 +20,5 @@ void CommandRouter::poll() {
         }
     }
 
-    // No route matched
     SerialProtocol::sendResponse(cmd.id, false);
 }

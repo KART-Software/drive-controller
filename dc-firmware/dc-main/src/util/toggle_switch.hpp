@@ -15,11 +15,9 @@ public:
 
     // プルアップ前提 (通常HIGH、押下=GND=LOW): onState=LOW, INPUT_PULLUP。
     ToggleSwitch(uint8_t pin);
-    // 極性/入力モード明示。例: アクティブHIGH+外部PULLDOWN
-    //   → ToggleSwitch(pin, HIGH, InputMode::External)。
     ToggleSwitch(uint8_t pin, uint8_t onState, InputMode inputMode);
     void initialize();
-    void read(uint32_t nowMs);  // nowMs は sysClock の ms
+    void read(uint32_t nowMs);
     bool isOn() const;
     bool switched() const;
     bool switchedToOff() const;
@@ -32,11 +30,11 @@ private:
     const uint8_t mode;           // initialize() で設定する pinMode
     bool _isOn = false;
     bool _switched = false;
-    uint8_t state = 0;            // current button state (initialize() で実値に上書き)
-    uint8_t lastState = 0;        // previous button state
-    uint32_t time = 0;            // time of current state (all times are in ms)
-    uint32_t lastTime = 0;        // time of previous state
-    uint32_t lastChange = 0;      // time of last state change
+    uint8_t state = 0;  // initialize() で実値に上書き
+    uint8_t lastState = 0;
+    uint32_t time = 0;  // ms
+    uint32_t lastTime = 0;
+    uint32_t lastChange = 0;
 };
 
 class SelectSwitch3Pin
@@ -52,7 +50,7 @@ public:
     SelectSwitch3Pin(uint8_t pin1, uint8_t pin2, uint8_t pin3);
     void initialize();
     void read(uint32_t nowMs);
-    bool changed() const;      // 読み取り専用 (const 参照から呼べる)
+    bool changed() const;
     Status getStatus() const;
 
 private:

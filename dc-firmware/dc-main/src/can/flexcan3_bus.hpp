@@ -5,12 +5,8 @@
 #include "interfaces/can/can_bus.hpp"
 
 // Teensy 4.1 の CAN3 (FlexCAN3、pin 30 = CRX3 / pin 31 = CTX3) の CanBus 実装 (docs/can_bus_spec.md §4)。
-// レジスタは RM (i.MX RT1060) Chapter 45 の定義を自前で持ち、ライブラリは使わない。
-// - 受信: ID ごとに受信メールボックスを 1 本 (個別マスクで一致)。割り込みはそのメールボックスのフラグだけ。
-//   ISR は届いたメールボックスを読んでコールバックを呼び、末尾で ESR1 のフラグを消す。
-//   (Rx FIFO は CAN FD で使えないので使わない。§4.8)
-// - 送信: 受信の後ろのメールボックスの空きに書く。送信完了の割り込みもキューも持たない。
-// - エラー: 割り込みは使わず state() で読む。バスオフは FlexCAN の自動復帰に任せる。
+// レジスタは RM (i.MX RT1060) Chapter 45 の定義を自前で持ち、ライブラリは使わない。受信は ID ごとのメールボックス
+// (Rx FIFO は CAN FD で使えないので使わない、§4.8)、送信はキューなし、エラー割り込みなし (バスオフは自動復帰に任せる)。
 // 単一インスタンス (ISR から届くための静的ポインタは .cpp の中)。
 class Flexcan3Bus final : public CanBus {
    public:

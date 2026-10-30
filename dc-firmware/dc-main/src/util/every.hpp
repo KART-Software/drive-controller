@@ -2,9 +2,7 @@
 
 #include <stdint.h>
 
-// loop() の「N ms ごとに」を表す。due(now) は前回成立から periodMs 経っていれば true を返し、起点を now に進める。
-//   Every telemetry{SENSOR_SEND_INTERVAL};
-//   if (telemetry.due(now)) SerialProtocol::sendSensorData(...);
+// loop() の「N ms ごとに」。due(now) は前回成立から periodMs 経っていれば true を返し、起点を now に進める
 class Every {
    public:
     explicit constexpr Every(uint32_t periodMs) : periodMs_(periodMs) {}

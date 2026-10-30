@@ -25,12 +25,11 @@ bool BitePointEstimator::detect(float clutchPosition, float slip) {
 
     if (slip > slipThreshold_) {
         if (consecutiveCount_ == 0) {
-            firstSlipPos_ = clutchPosition;  // remember where slip started
+            firstSlipPos_ = clutchPosition;
         }
         consecutiveCount_++;
 
         if (consecutiveCount_ >= debounceTicks_) {
-            // EMA: blend new observation with stored value
             bitePoint_ = emaAlpha_ * firstSlipPos_ + (1.0f - emaAlpha_) * bitePoint_;
             detected_ = true;
             file_.save(bitePoint_);

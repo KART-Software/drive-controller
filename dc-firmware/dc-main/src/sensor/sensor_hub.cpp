@@ -18,7 +18,7 @@ static_assert(SENSOR_SAMPLING_RATE_US * IMU_SAMPLING_DIVIDER * IAM20680_AVG_WIND
               "IMU_SAMPLING_DIVIDER を変えたら IAM20680_AVG_WINDOW を 1 ms 分に合わせること");
 
 void SensorHub::sampleDmaIsr() {
-    adc_.latchDma();  // 前回 kick した DMA の結果 (value[]) を確定
+    adc_.latchDma();
     apps1_.update(adc_.value[APPS_1_CH]);
     apps2_.update(adc_.value[APPS_2_CH]);
     ittr_.update(adc_.value[ITTR_CH]);
@@ -27,10 +27,10 @@ void SensorHub::sampleDmaIsr() {
     bps_.update(adc_.value[BPS_CH]);
     gps_.update(adc_.value[GPS_CH]);
     clutch_.update(adc_.value[CLUTCH_CH]);
-    adc_.startDma();  // 次の 8ch 転送を kick (非ブロッキング)
+    adc_.startDma();
     if (++imuDivCount_ >= IMU_SAMPLING_DIVIDER) {
         imuDivCount_ = 0;
-        imu_.sampleDmaIsr();  // 16 kHz / IMU_SAMPLING_DIVIDER = 8 kHz
+        imu_.sampleDmaIsr();
     }
 }
 

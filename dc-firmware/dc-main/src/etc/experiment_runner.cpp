@@ -83,15 +83,15 @@ double ExperimentRunner::currentTargetTp() const {
 
 bool ExperimentRunner::preconditionsOk() const {
     if (active())
-        return false;  // 二重開始拒否
+        return false;
     // MOTOR_OFF はアーミング③が ETC を止めるため実験が進行できない (spec Q11)。
     if (control_.etcMode() == EtcTarget::Mode::MotorOff)
         return false;
-    if (hub_.pulseEngine().hz() > 0.5f)  // エンジン停止
+    if (hub_.pulseEngine().hz() > 0.5f)
         return false;
     if (hub_.pulseWheelFL().hz() > 0.5f || hub_.pulseWheelFR().hz() > 0.5f ||
         hub_.pulseWheelRL().hz() > 0.5f || hub_.pulseWheelRR().hz() > 0.5f)
-        return false;  // 車両静止
+        return false;
     if (!validator_.currentlyValid() || !validator_.validLatched())
         return false;
     // ETC が実際に稼働していること: ② SIG_IN=HIGH かつモーター ON。止まったまま開始すると

@@ -63,7 +63,7 @@ void setup() {
 }
 
 void loop() {
-    Teensy4USB::task();  // USB の処理。MSC の read / write もこの中のコールバックで行う
+    Teensy4USB::task();  // MSC の read / write もこの中のコールバックで行う
     const uint32_t nowMs = millis();
     // LED: 速い点滅 (250 ms) = SD リーダー。カードが無い / 読めないときは 2 回点滅して休む
     const uint32_t t = nowMs % 1500;
@@ -84,6 +84,6 @@ void loop() {
         lastFrindex = fr;
         lastHostMs = nowMs;
     } else if (nowMs - lastHostMs > kHostGoneMs) {
-        rebootInto(false, boot_layout::kReasonHostGone);  // USB が抜かれた → dc-main
+        rebootInto(false, boot_layout::kReasonHostGone);
     }
 }

@@ -84,8 +84,6 @@ void Flash::remove(const char* fileName) {
 }
 
 bool Flash::format() {
-    // LittleFS を消去。保持したいデータ (config 等) は呼び出し側が事前に RAM 保持し、
-    // フォーマット後に書き戻すこと。
     if (!beginWrite())
         return false;
     bool ok = fs.quickFormat();

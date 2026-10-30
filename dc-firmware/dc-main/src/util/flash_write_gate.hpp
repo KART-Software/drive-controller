@@ -11,7 +11,6 @@
 // tick が動き出す前 (setup 中) は待たずに書く。
 class FlashWriteGate {
    public:
-    // clock: 許可待ちのタイムアウトを測る (tick が止まっていても進む)
     explicit FlashWriteGate(const Clock& clock) : clock_(clock) {}
 
     // tick が動き出したら呼ぶ (以後の書き込みは tick の許可を待つ)

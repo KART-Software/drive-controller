@@ -18,16 +18,14 @@ class SensorHub {
     explicit SensorHub(const Clock& clock) : adc_(clock) {}
 
     void begin();
-    void updatePulse(uint64_t nowUs);  // tickISR (1 ms): 車輪速 x4 + エンジン / クラッチ後回転 (docs/loop_nonblocking_spec.md §6.7)
-    void readShutdownSig(uint32_t nowMs);              // tickISR (1 ms): SHUTDOWN 回路出力をデバウンス更新
-    // サンプリング ISR (16 kHz): ADC は毎回、IMU は IMU_SAMPLING_DIVIDER 回に 1 回 (8 kHz)。前回の DMA の結果を反映して次を開始する (非ブロッキング)
-    void sampleDmaIsr();
+    void updatePulse(uint64_t nowUs);      // tickISR から毎 ms
+    void readShutdownSig(uint32_t nowMs);  // tickISR から毎 ms
+    void sampleDmaIsr();                   // サンプリング ISR (16 kHz) から。IMU は IMU_SAMPLING_DIVIDER 回に 1 回
     uint32_t adcDmaCount() const { return adc_.dmaCount(); }
     uint32_t imuDmaCount() const { return imu_.dmaCount(); }
     uint32_t imuDmaMissed() const { return imu_.dmaMissed(); }
 
-    // 見るだけの口 (const 参照の束。見るだけの部品にはこれを渡す)
-    const SensorView& view() const { return view_; }
+    const SensorView& view() const { return view_; }  // 見るだけの部品にはこれを渡す
 
     // ── 書き換え可の参照 (SensorHub を持つ main.cpp と Configurator だけが使う: 校正の適用、モード反映、設定) ──
     Apps& apps1() { return apps1_; }
@@ -60,10 +58,8 @@ class SensorHub {
     ClutchSensor clutch_;
 
     Iam20680hp imu_{IMU_CS_PIN};
-    uint8_t imuDivCount_ = 0;  // サンプリング ISR の IMU_SAMPLING_DIVIDER 回に 1 回 IMU
+    uint8_t imuDivCount_ = 0;
 
-    // 回転センサー: ハードウェア (EdgeSource) + 計算 (EdgeRotationSensor)。車輪はタイヤ直径を持つ EdgeWheelSpeedSensor (車速も出す)。
-    // 車輪速は FlexPWM (FreqMeasureMulti)、エンジン / クラッチ後は QuadTimer3 (エッジ数 + キャプチャ)
     FreqMeasureEdgeSource wheelFLSource_{PULSE_WHEEL_FL_PIN};
     FreqMeasureEdgeSource wheelFRSource_{PULSE_WHEEL_FR_PIN};
     FreqMeasureEdgeSource wheelRLSource_{PULSE_WHEEL_RL_PIN};

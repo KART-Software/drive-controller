@@ -12,9 +12,6 @@
 // Buffer sizing rule: encoded length is at most `src_len + (src_len / 254) + 1`.
 namespace cobs {
 
-// Returns the number of bytes written into `dst` (excluding the terminating
-// 0x00 byte, which the caller appends). `dst` must have at least
-// `src_len + (src_len / 254) + 1` bytes of capacity.
 size_t encode(const uint8_t *src, size_t src_len, uint8_t *dst);
 
 // Decodes `src` (without the trailing 0x00) of length `src_len` into `dst`,

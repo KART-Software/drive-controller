@@ -24,11 +24,7 @@ dc_ControlStatus_Source controlSourceToProto(ControlInput::Source src) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Fused CRC16 + COBS encoder.
-// Streams protobuf bytes directly into a COBS-framed output buffer while
-// computing CRC16, eliminating the intermediate plain-protobuf buffer.
-// ---------------------------------------------------------------------------
+// CRC16 と COBS を 1 パスで: nanopb の出力をそのまま COBS 済みのバッファに書き、素の protobuf バッファを持たない
 struct CobsCrcWriter {
     uint8_t* buf;
     size_t capacity;
@@ -48,13 +44,11 @@ struct CobsCrcWriter {
         overflow = false;
     }
 
-    // Feed one payload byte: updates CRC and COBS-encodes.
     inline void feedByte(uint8_t b) {
         crc = crc16_update(crc, b);
         cobsByte(b);
     }
 
-    // COBS-encode one byte (no CRC update).
     inline void cobsByte(uint8_t b) {
         if (writeIdx >= capacity) {
             overflow = true;
@@ -75,8 +69,7 @@ struct CobsCrcWriter {
         }
     }
 
-    // Append CRC (LE) via COBS, close the COBS block, write 0x00 delimiter.
-    // Returns total frame length including delimiter, or 0 on overflow.
+    // 0 = overflow
     size_t finalize() {
         cobsByte((uint8_t)(crc & 0xFF));
         cobsByte((uint8_t)((crc >> 8) & 0xFF));
@@ -88,7 +81,6 @@ struct CobsCrcWriter {
     }
 };
 
-// nanopb output-stream callback: feeds bytes into CobsCrcWriter.
 static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t count) {
     auto* w = static_cast<CobsCrcWriter*>(stream->state);
     for (size_t i = 0; i < count; i++) {
@@ -102,9 +94,7 @@ static bool cobsCrcWriteCb(pb_ostream_t* stream, const pb_byte_t* buf, size_t co
 // 止まる (ホストがポートを閉じた / 読み出しが詰まった / ケーブル抜去)。バッファはリング順に空き、
 // availableForWrite() は先頭以外の空きバッファ (2048 B 単位) の合計を返す。フレーム最大 DC_MAX_FRAME は
 // TX_SIZE (2048) 未満なので、availableForWrite() >= len なら write は決して待たない。
-// 旧実装はこの判定を droppable=true のフレームにだけ掛けていたが、telemetry を含め誰も true を渡して
-// おらず判定は死んでいた (docs/loop_nonblocking_spec.md §4)。ホスト不在中に溜まった分 (起動時の debug 等) は
-// リングに残り、後からポートを開いたホストに届く。
+// ホスト不在中に溜まった分 (起動時の debug 等) はリングに残り、後からポートを開いたホストに届く。
 // 優先度: 応答と debug (Important) は最後まで送る。telemetry (Bulk) は TX バッファ 1 本分
 // (TX_RESERVE) を応答用に残して先に捨てる。これが無いと 50 Hz telemetry がリングを埋め、応答が捨てられて
 // console が 3 s タイムアウトする (コマンド自体は実行済みなのに失敗表示 → 再送の危険)。
@@ -237,7 +227,7 @@ void SerialProtocol::sendSensorData(const SensorView& hub,
                 .valid = isValid,
                 .errors = errorHandler.bits(),
                 .ittr = hub.target().isIttr(),
-                .duty = duty,  // 実印加 duty (MotorController::lastOutput, ±100 飽和済み)
+                .duty = duty,
             },
             .has_sys = true,
             .sys = {
@@ -276,13 +266,13 @@ void SerialProtocol::sendSensorData(const SensorView& hub,
 
 void SerialProtocol::sendDebugv(uint64_t timestampUs, const char* fmt, va_list args) {
     dc_DeviceToHost env = {.which_payload = dc_DeviceToHost_debug_tag, .payload = {.debug = {.timestamp_us = timestampUs}}};
-    vsnprintf(env.payload.debug.msg, sizeof(env.payload.debug.msg), fmt, args);  // 文字列は書式化で埋める
+    vsnprintf(env.payload.debug.msg, sizeof(env.payload.debug.msg), fmt, args);
 
     sendDeviceMessage(env, TxClass::Important);
 }
 
 void SerialProtocol::sendResponse(uint32_t id, bool ok) {
-    sendResponseInternal({.id = id, .ok = ok, .which_data = 0});  // ペイロードなし
+    sendResponseInternal({.id = id, .ok = ok, .which_data = 0});
 }
 
 #define DEFINE_RESP_HELPER(NAME, TAG, FIELD, TYPE)                   \
@@ -318,12 +308,11 @@ std::optional<dc_Command> SerialProtocol::readCommand() {
             if (rxLen < sizeof(rxBuf)) {
                 rxBuf[rxLen++] = (uint8_t)b;
             } else {
-                rxLen = 0;  // overflow: discard frame
+                rxLen = 0;
             }
             continue;
         }
 
-        // 0x00 boundary -> attempt to decode current buffer as one frame.
         if (rxLen == 0)
             continue;
         size_t cur_len = rxLen;
@@ -332,7 +321,7 @@ std::optional<dc_Command> SerialProtocol::readCommand() {
         uint8_t decoded[DC_MAX_PAYLOAD + 4];
         size_t n = cobs::decode(rxBuf, cur_len, decoded);
         if (n < 2)
-            continue;  // need CRC
+            continue;  // CRC の 2 B にも足りない
 
         size_t payload_len = n - 2;
         uint16_t recv_crc = (uint16_t)decoded[payload_len] | ((uint16_t)decoded[payload_len + 1] << 8);

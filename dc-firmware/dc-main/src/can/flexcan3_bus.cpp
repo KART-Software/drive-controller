@@ -125,7 +125,6 @@ bool Flexcan3Bus::begin(const CanConfig& config, const CanRxFilters& filters, Rx
         reg(rximr(n)) = RX_MASK_STD;
         reg(mbWord(n, 0)) = CODE_RX_EMPTY << CS_CODE_SHIFT;
     }
-    // 送信メールボックス 8〜15
     for (uint8_t n = kFirstTxMb; n <= kLastTxMb; n++)
         reg(mbWord(n, 0)) = CODE_TX_INACTIVE << CS_CODE_SHIFT;
 
@@ -193,7 +192,7 @@ void Flexcan3Bus::handleInterrupt() {
         // フラグは**ロックを解除する前に**消す。解除の瞬間にロック中に届いた次のフレームが移ってきてフラグが立つので、
         // 解除後に消すとそのフラグを消してしまい、次が来るまで読まれないフレームが残る
         reg(IFLAG1) = bit;  // このビットだけ消す (読んで書き戻すと、入ってから立った別のフラグを消してしまう)
-        reg(mbWord(n, 0)) = CODE_RX_EMPTY << CS_CODE_SHIFT;  // 次のフレームを受けられるようにする
+        reg(mbWord(n, 0)) = CODE_RX_EMPTY << CS_CODE_SHIFT;
         const uint32_t unlock = reg(TIMER);                   // ロックを解除 (読むだけ)
         (void)unlock;
         if (code == CODE_RX_OVERRUN)

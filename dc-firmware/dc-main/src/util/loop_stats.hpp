@@ -4,25 +4,19 @@
 
 #include "util/stop_watch.hpp"
 
-// loop() / SD / tickISR の所要時間を 1 s 窓で集計する (docs/loop_nonblocking_spec.md §5)。
-//   tick()          : loop() 先頭で毎回。前回からの経過 = 1 周の所要として max/mean を更新
-//   noteSdUs()      : SD write/flush 1 回の所要 (SensorLogger が呼び出しごとに直接報告)
-//   noteTickUs()    : tickISR 1 回の所要 (安全層・モーター制御などを含む。ISR から呼ぶので volatile)
-//   rollover()      : 1 s ごとに loop 先頭 (tick の直後) から。窓を確定して直前の窓として保持し初期化。
-//                     窓境界を loop 先頭に置くことで、同じ周の loop 所要と SD 所要が同じ窓に入る
-// live() (直前の窓と現在の窓のここまでの大きい方) を telemetry (SysStats) と SD ログ (LogRecord v4) に載せる。
+// loop() / SD / tickISR の所要時間を 1 s 窓で集計する (docs/loop_nonblocking_spec.md §5)。tick() は loop() の先頭、
+// rollover() はその直後から 1 s ごと。窓境界を loop 先頭に置くことで、同じ周の loop 所要と SD 所要が同じ窓に入る。
 class LoopStats {
    public:
     struct Snapshot {
-        uint32_t loopMaxUs = 0;      // 窓内の loop 1 周の最大
-        uint32_t loopMeanUs = 0;     // 窓内の平均
-        uint32_t sdMaxUs = 0;        // 窓内の SD write/flush 1 回の最大
-        uint32_t tickMaxUs = 0;      // 窓内の tickISR 1 回の最大
-        uint32_t logDrops = 0;       // リング溢れ累積 (Phase 3 以降、それまで 0)
-        uint32_t loopMaxUsBoot = 0;  // 起動以来の loop 1 周の最大 (窓でリセットしない)
+        uint32_t loopMaxUs = 0;
+        uint32_t loopMeanUs = 0;
+        uint32_t sdMaxUs = 0;
+        uint32_t tickMaxUs = 0;
+        uint32_t logDrops = 0;       // SensorLogger::drops() の累計
+        uint32_t loopMaxUsBoot = 0;  // 起動以来 (窓でリセットしない)
     };
 
-    // clock: loop 1 周の所要を測る
     explicit LoopStats(const Clock& clock) : loopWatch_(clock) {}
 
     void tick() {
